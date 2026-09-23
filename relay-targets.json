@@ -1,0 +1,7 @@
+{
+  "adsb-lol": "https://api.adsb.lol",
+  "adsb-fi": "https://opendata.adsb.fi",
+  "airplanes-live": "https://api.airplanes.live",
+  "opensky": "https://opensky-network.org",
+  "planespotters": "https://api.planespotters.net"
+}

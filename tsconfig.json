@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": ["vite/client", "node"],
+
+    "strict": true,
+    // Deliberately off: the terrain/geometry kernels index Float32Array and
+    // Uint8Array in tight loops, where `number | undefined` adds noise without
+    // adding safety. Everything else runs under full `strict`.
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    // On, so that dead imports and abandoned locals fail the build instead of
+    // accumulating. This is the cheapest anomaly detector the project has.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "useUnknownInCatchVariables": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

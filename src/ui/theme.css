@@ -1,0 +1,233 @@
+/*
+ * Cockpit projection.
+ *
+ * ## The look
+ *
+ * A holographic instrument panel: cold cyan for structure, amber for anything
+ * the viewer is meant to act on, black behind all of it, and hard angular
+ * corners instead of rounded ones. That reads as a ship's console rather than
+ * as a web page.
+ *
+ * It is not only a mood. The chrome sits over live satellite imagery — noon
+ * Mediterranean haze one second, night ocean the next — and a hue has to be
+ * either very cold or very warm to stay distinguishable against both. The two
+ * accents here are the two ends of that axis, which is why a "sci-fi" palette
+ * and the *legible* palette turn out to be the same palette.
+ *
+ * ## The rules that keep it readable
+ *
+ *  - Glow is on borders and rules, never behind body text. A glow under a
+ *    glyph is exactly the halo that destroys small-text contrast.
+ *  - Scanlines are decoration on panel *backgrounds* only, at an opacity that
+ *    survives being zoomed to 200%, and they are switched off entirely under
+ *    `prefers-reduced-motion` along with everything else that moves.
+ *  - Type stays in the system UI stack. A downloaded display face would mean a
+ *    network request this app does not otherwise need, and the brief is that
+ *    nothing is mandatory.
+ *
+ * Colours here are mirrored in `palette.ts`, which the WebGL and MapLibre
+ * layers read. Change one, change both.
+ */
+:root {
+  /* Structure */
+  --bg: #03060c;
+  --bg-panel: rgba(6, 13, 22, 0.82);
+  --bg-panel-solid: #060d16;
+  --bg-elevated: rgba(10, 22, 36, 0.92);
+  --border: rgba(127, 223, 255, 0.22);
+  --border-strong: rgba(127, 223, 255, 0.5);
+
+  /* Text */
+  --text: #e9f4ff;
+  --text-dim: #9dbdd4;
+  --text-faint: #5d7186;
+
+  /* Accents — mirrored in palette.ts */
+  --accent: #7fdfff;
+  --accent-dim: #3d7f9c;
+  --accent-warm: #ffb02e;
+  --ok: #43f0a0;
+  --warn: #ffb02e;
+  --error: #ff3b4e;
+
+  /* Angular, not rounded: this is the single biggest cue in the whole theme. */
+  --radius: 2px;
+  --radius-sm: 2px;
+  /* Size of the clipped corner on a console panel. */
+  --notch: 12px;
+
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --glow: 0 0 12px rgba(127, 223, 255, 0.18);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Numeric readouts must not reflow as digits change. */
+.tabular {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A console panel.
+ *
+ * The notched corner is `clip-path`, not a rotated pseudo-element, so it clips
+ * the backdrop filter and the scanlines with it. A border cannot follow a
+ * clip, which is why the outline is drawn as an inset shadow instead.
+ */
+.panel {
+  position: relative;
+  background: var(--bg-panel);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    var(--shadow),
+    var(--glow);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch))
+  );
+}
+
+/*
+ * Scanlines. Decoration only, and deliberately weak: at this opacity they
+ * read as a projection at a glance and are invisible under text.
+ */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(127, 223, 255, 0.035) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* A panel whose corner notch would collide with its content. */
+.panel.flat { clip-path: none; }
+
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-dim);
+  font-weight: 600;
+}
+
+/*
+ * A control: angular, cyan, and lit rather than filled.
+ *
+ * Used for every button that is not the primary action, so the amber of an
+ * actual action stays rare enough to mean something.
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.chip:hover {
+  color: var(--accent);
+  border-color: var(--border-strong);
+  background: rgba(127, 223, 255, 0.08);
+}
+.chip.active {
+  color: #03121b;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.chip.primary {
+  color: var(--accent-warm);
+  border-color: rgba(255, 176, 46, 0.45);
+  background: rgba(255, 176, 46, 0.1);
+}
+.chip.primary:hover { background: rgba(255, 176, 46, 0.2); color: #ffd79a; }
+
+/* MapLibre's own chrome, dragged into the same theme. */
+.maplibregl-ctrl-attrib {
+  background: rgba(3, 6, 12, 0.82) !important;
+  color: var(--text-faint) !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a { color: var(--text-faint) !important; }
+.maplibregl-ctrl-group {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--glow) !important;
+}
+.maplibregl-ctrl-group button { border-radius: 0 !important; }
+.maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(160deg); }
+.maplibregl-ctrl-scale {
+  background: rgba(3, 6, 12, 0.7) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-dim) !important;
+  border-radius: 0 !important;
+}
+
+/*
+ * Reduced motion switches off the scanlines as well as the animations.
+ *
+ * A static repeating gradient is not an animation, but it is the same class of
+ * visual noise this setting exists to suppress, and for a user who set it
+ * because fine high-contrast patterns make them ill, "it does not technically
+ * move" is not an answer.
+ */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .panel::before { display: none; }
+}
