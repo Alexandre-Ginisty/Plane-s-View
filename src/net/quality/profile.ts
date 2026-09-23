@@ -103,7 +103,13 @@ export interface StreamingProfile {
 const PROFILES: Record<NetworkGrade, Omit<StreamingProfile, 'grade'>> = {
   fast: {
     concurrency: 32,
-    maxZoom: 18,
+    // 19 is Esri's own ceiling, and the ceiling only ever binds near the
+    // ground: the screen-space error stops refining as soon as the imagery
+    // reaches one pixel per texel, which at cruise happens around zoom 13.
+    // Capping at 18 therefore cost nothing in the air and left the last
+    // visible level blurry on approach and on the ground, which is where the
+    // detail is being looked at hardest.
+    maxZoom: 19,
     screenSpaceError: 1,
     prefetchSeconds: 120,
     timeoutMs: 12_000,
@@ -112,7 +118,7 @@ const PROFILES: Record<NetworkGrade, Omit<StreamingProfile, 'grade'>> = {
   },
   good: {
     concurrency: 20,
-    maxZoom: 17,
+    maxZoom: 18,
     screenSpaceError: 1.15,
     prefetchSeconds: 90,
     timeoutMs: 14_000,

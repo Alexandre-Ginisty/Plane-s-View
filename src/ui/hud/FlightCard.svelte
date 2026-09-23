@@ -34,11 +34,20 @@
 
   {#if app.showFlightCard}
     <div class="panel card-body">
-      <DossierBody {sample} dense />
+      <div class="scroller">
+        <DossierBody {sample} dense />
+      </div>
 
-      <button class="chip primary back" onclick={() => orchestrator.exitPov()}>
-        Pick another aircraft
-      </button>
+      <div class="actions">
+        <button
+          class="chip primary shuffle"
+          disabled={app.shuffling}
+          onclick={() => void orchestrator.shuffleAircraft()}
+        >
+          {app.shuffling ? 'Finding one…' : 'Take me somewhere else'}
+        </button>
+        <button class="chip back" onclick={() => orchestrator.exitPov()}>Back to map</button>
+      </div>
     </div>
   {/if}
 </aside>
@@ -59,14 +68,40 @@
   }
   .flight-card.collapsed { width: auto; }
 
+  /*
+   * The two actions are pinned; only the figures scroll.
+   *
+   * The card used to scroll as one block with the button last, so in the
+   * cockpit — where the card is already short to leave the view room — the
+   * way out was reliably below the fold.
+   */
   .card-body {
     width: 100%;
+    min-height: 0;
     padding: 14px;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     pointer-events: auto;
   }
 
-  .back { width: 100%; margin-top: 13px; justify-content: center; }
+  .scroller {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .actions button { width: 100%; justify-content: center; }
+  .shuffle:disabled { opacity: 0.6; cursor: progress; }
+  .back { font-size: 11px; padding: 6px; }
 
   /*
    * Narrow screens keep the toggle and lose the panel's default.

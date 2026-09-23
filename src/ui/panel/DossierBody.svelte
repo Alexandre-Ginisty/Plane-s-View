@@ -68,6 +68,25 @@
 
   {#if route && (route.origin || route.destination)}
     <RouteStrip {route} />
+  {:else}
+    <!--
+      The slot is never left empty.
+
+      A route that is merely absent looks identical to a route that has been
+      removed, and the honest answers here are all different: the lookup is
+      still running, the callsign is not in the route database, or nothing was
+      broadcast to look up. Showing which one keeps the panel the same height
+      either way, so nothing jumps when the answer lands.
+    -->
+    <p class="route-pending">
+      {#if app.dossierLoading}
+        Looking up the route…
+      {:else if latest.callsign}
+        No filed route for {latest.callsign}
+      {:else}
+        No callsign broadcast — nothing to look up
+      {/if}
+    </p>
   {/if}
 
   <dl class="stats">
@@ -162,6 +181,15 @@
     font-weight: 600;
   }
 
+  .route-pending {
+    margin: 14px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
   .stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -208,6 +236,7 @@
    */
   .dense h2 { font-size: 15px; }
   .dense .subtitle { font-size: 11px; }
+  .dense .route-pending { margin-top: 11px; padding-top: 11px; font-size: 10.5px; }
   .dense .stats { gap: 7px 10px; margin-top: 12px; }
   .dense dt { font-size: 9.5px; letter-spacing: 0.1em; color: var(--accent-dim); }
   .dense dd { font-family: var(--mono); font-size: 12.5px; }

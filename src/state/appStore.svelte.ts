@@ -93,6 +93,9 @@ class AppStore {
   /** Non-fatal problems worth telling the user about, newest first. */
   notices = $state<{ id: number; text: string; level: 'info' | 'warn' | 'error' }[]>([]);
 
+  /** True while "take me somewhere else" is searching the world. */
+  shuffling = $state(false);
+
   showDiagnostics = $state(false);
   /** The key-and-controls panel. Opened once on a first visit; see `App`. */
   showLegend = $state(false);

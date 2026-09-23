@@ -66,7 +66,7 @@ export function createAircraftGeometry(shape: AirframeShape, detail: 'high' | 'l
     );
 
     // --- engines ------------------------------------------------------------
-    if (shape.engines > 0 && !shape.tTail) {
+    if (shape.engines > 0 && shape.engineMount === 'wing') {
       const count = shape.engines / 2;
       for (let e = 0; e < count; e++) {
         // Inboard pylon first, outboard second on a four-engine aircraft.
@@ -103,6 +103,39 @@ export function createAircraftGeometry(shape: AirframeShape, detail: 'high' | 'l
           r * 0.16,
           side === -1,
         );
+      }
+    }
+  }
+
+  // --- rear-fuselage engines ------------------------------------------------
+  //
+  // Regional jets and almost every business jet. This used to be keyed off
+  // `tTail`, which meant two different families both came out wrong: nothing
+  // was ever drawn here, so a CRJ had no engines at all, and an ATR — a T-tail
+  // aircraft with underwing turboprops — was excluded from the wing pods above
+  // and so had none either. `engineMount` says where they go; `tTail` now says
+  // only where the stabiliser goes.
+  if (shape.engines > 0 && shape.engineMount === 'tail') {
+    const half = 0.06;
+    const nacelleR = r * 0.72;
+    const ey = tailY + 0.25;
+    const ez = r * 0.4;
+
+    for (const side of [1, -1] as const) {
+      const ex = side * r * 1.6;
+      const saved = b.positions.length;
+      b.tube(
+        [
+          [ey + half, nacelleR * 0.78],
+          [ey + half * 0.6, nacelleR],
+          [ey - half * 0.8, nacelleR],
+          [ey - half, nacelleR * 0.7],
+        ],
+        detail === 'high' ? 12 : 5,
+      );
+      for (let i = saved; i < b.positions.length; i += 3) {
+        b.positions[i] = b.positions[i]! + ex;
+        b.positions[i + 2] = b.positions[i + 2]! + ez;
       }
     }
   }

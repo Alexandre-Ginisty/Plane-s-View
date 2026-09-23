@@ -16,7 +16,12 @@ import { Frustum, Matrix4, PerspectiveCamera, Sphere } from 'three';
 
 import { geodeticToEcef, lonToMercatorX, latToMercatorY, type Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
-import { MIN_OBLIQUITY, REFINE_TEXELS } from './constants';
+import {
+  DESCENT_PRIORITY,
+  MIN_OBLIQUITY,
+  PREFETCH_PRIORITY,
+  REFINE_TEXELS,
+} from './constants';
 import { profileFor } from '@/net/quality';
 import { distanceTo, elevationRequest, isTileVisible, priorityOf, screenSpaceError } from './metrics';
 import { TileNode } from './tileNode';
@@ -183,29 +188,84 @@ describe('elevationRequest', () => {
 });
 
 describe('priorityOf', () => {
-  it('funds breadth before depth', () => {
-    // A z14 tile cannot be drawn until its z13 ancestor exists to inherit a
-    // texture from, so funding depth first fills the queue with tiles that
-    // cannot be used yet.
-    const shallow = new TileNode(10, 0, 0, null);
-    const deep = new TileNode(16, 0, 0, null);
+  /** The tile at `z` containing a point, scored against a real camera. */
+  function scored(
+    z: number,
+    lat: number,
+    lon: number,
+    camEcef: Vec3,
+    frame: number,
+    onScreen = true,
+  ): TileNode {
+    const n = 1 << z;
+    const node = new TileNode(
+      z,
+      Math.floor(lonToMercatorX(lon) * n),
+      Math.floor(latToMercatorY(lat) * n),
+      null,
+    );
+    // 900 px tall viewport at 50 degrees vertical, the app's own framing.
+    const sseScale = 900 / (2 * Math.tan((50 * Math.PI) / 180 / 2));
+    node.screenError = screenSpaceError(node, camEcef, sseScale, REFINE_TEXELS);
+    if (onScreen) node.onScreenFrame = frame;
+    return node;
+  }
+
+  it('still funds breadth before depth in the column under the camera', () => {
+    // The property the old `z * 1000` ordering existed to guarantee, now
+    // arising from the error instead of being decreed: a coarse tile covering
+    // nearby ground looks far worse than the fine one inside it, because its
+    // texels are metres wide a few hundred metres from the eye.
+    const camEcef = geodeticToEcef(51.47, -0.45, 300);
+    const shallow = scored(10, 51.47, -0.45, camEcef, 1);
+    const deep = scored(16, 51.47, -0.45, camEcef, 1);
+
+    expect(shallow.screenError).toBeGreaterThan(deep.screenError);
     expect(priorityOf(shallow, 1)).toBeLessThan(priorityOf(deep, 1));
   });
 
-  it('prefers a tile wanted this frame over one merely queued', () => {
-    const live = new TileNode(14, 0, 0, null);
-    const speculative = new TileNode(14, 1, 0, null);
-    live.lastUsedFrame = 42;
-    expect(priorityOf(live, 42)).toBeLessThan(priorityOf(speculative, 42));
+  it('puts the deep tile underfoot ahead of the shallow one at the horizon', () => {
+    // The inversion this replaced. Ranked by zoom, a z12 tile 150 km away
+    // scored 12 000 and the z18 tile under the aircraft scored 18 000, so the
+    // whole breadth of the distant view was served first — at every level, for
+    // as long as the horizon kept producing work, which it always does.
+    const camEcef = geodeticToEcef(51.47, -0.45, 300);
+    const near = scored(18, 51.47, -0.45, camEcef, 1);
+    const horizon = scored(12, 52.8, -0.45, camEcef, 1);
+
+    expect(priorityOf(near, 1)).toBeLessThan(priorityOf(horizon, 1));
   });
 
-  it('keeps a live deep tile behind a live shallow one', () => {
-    // The "wanted now" bonus must not be large enough to invert the level
-    // ordering, or a z16 tile on screen outranks the z13 it depends on.
-    const shallow = new TileNode(13, 0, 0, null);
-    const deep = new TileNode(14, 0, 0, null);
-    deep.lastUsedFrame = 7;
-    expect(priorityOf(shallow, 7)).toBeLessThan(priorityOf(deep, 7));
+  it('prefers a tile wanted this frame over one merely queued', () => {
+    const camEcef = geodeticToEcef(51.47, -0.45, 300);
+    const live = scored(14, 51.47, -0.45, camEcef, 42);
+    const stale = scored(14, 51.47, -0.45, camEcef, 42, false);
+
+    expect(priorityOf(live, 42)).toBeLessThan(priorityOf(stale, 42));
+  });
+
+  it('ranks every off-screen tile behind every on-screen one', () => {
+    // The bands must not overlap. A tile the camera turned away from is not
+    // urgent however wrong it looks — but an almost-perfect tile still on
+    // screen is still worth more than the best off-screen one.
+    const camEcef = geodeticToEcef(51.47, -0.45, 300);
+    const worstOffScreen = scored(2, 51.47, -0.45, camEcef, 5, false);
+    const bestOnScreen = scored(19, 51.47, -0.45, camEcef, 5);
+
+    expect(priorityOf(bestOnScreen, 5)).toBeLessThan(priorityOf(worstOffScreen, 5));
+  });
+
+  it('leaves the speculative bands clear', () => {
+    // `prefetchDescent` and `prefetchAlongPath` rank themselves at fixed
+    // numbers chosen to sit behind anything the quadtree actually wants. If a
+    // live tile could reach them, a guess about airspace a minute ahead would
+    // be served before the ground being looked at — which is the bug
+    // PREFETCH_PRIORITY was introduced to fix, and it would come straight back.
+    const camEcef = geodeticToEcef(51.47, -0.45, 300);
+    const worst = scored(2, 51.47, -0.45, camEcef, 3, false);
+
+    expect(priorityOf(worst, 3)).toBeLessThan(DESCENT_PRIORITY);
+    expect(DESCENT_PRIORITY).toBeLessThan(PREFETCH_PRIORITY);
   });
 });
 

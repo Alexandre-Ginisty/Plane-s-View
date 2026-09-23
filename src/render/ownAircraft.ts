@@ -26,6 +26,7 @@ import { FEET_TO_METRES, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { buildAircraftModel, type AirframeShape } from './aircraft';
+import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 
 export class OwnAircraft {
@@ -91,19 +92,32 @@ export class OwnAircraft {
    *
    * `visible` is false in cockpit view: drawing the fuselage the camera sits
    * inside fills the screen with the inside of a hull.
+   *
+   * `terrainHeightAt` puts the model on the ground rather than through it when
+   * the aircraft is taxiing or parked — see `@/render/ground`.
    */
   update(
     sample: SampledAircraft,
     typeCode: string | null,
     visible: boolean,
+    terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
     this.scene.visible = visible;
     if (!visible) return;
 
     this.ensureModel(typeCode, sample.latest.category);
 
-    const frame = aircraftFrame(sample);
-    const altM = sample.altFt * FEET_TO_METRES;
+    let altM = sample.altFt * FEET_TO_METRES;
+    if (this.shape && terrainHeightAt && (sample.latest.onGround || altM < GROUND_CHECK_CEILING_M)) {
+      altM = surfaceAltitudeM(
+        altM,
+        sample.latest.onGround,
+        terrainHeightAt(sample.lat, sample.lon),
+        clearanceFor(this.shape),
+      );
+    }
+
+    const frame = aircraftFrame(sample, altM);
     const ecef = geodeticToEcef(sample.lat, sample.lon, altM);
 
     this.group.position.set(

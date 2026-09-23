@@ -41,6 +41,18 @@ export interface EvictionContext {
   onEvict(node: TileNode): void;
 }
 
+/**
+ * Fraction of the cap the sweep trims down to once it runs.
+ *
+ * Without headroom the sweep trims to exactly the cap, so the very next tile
+ * to arrive puts the tree over again and the whole thing runs afresh — a full
+ * sort of several thousand nodes, every frame, for as long as the globe is at
+ * its resident limit. Which is to say: permanently, near the ground, where
+ * zoom-19 tiles fill the cap in seconds. Taking a tenth off instead means the
+ * sweep runs once per few hundred new tiles and is invisible in the frame time.
+ */
+const EVICT_TARGET_FRACTION = 0.9;
+
 export function evictDistantTiles(ctx: EvictionContext): void {
   if (ctx.nodes.size <= ctx.maxResidentTiles) return;
 
@@ -55,12 +67,18 @@ export function evictDistantTiles(ctx: EvictionContext): void {
     }
   }
 
-  const candidates: TileNode[] = [];
+  // Distance is measured once per node, not once per comparison.
+  //
+  // `sort` calls its comparator O(n log n) times, so computing `distanceTo`
+  // inside it did two square roots per comparison — around 150 000 of them per
+  // sweep at the six-thousand-tile cap, on the main thread, in a routine whose
+  // whole purpose is to keep the frame cheap.
+  const candidates: { node: TileNode; distance: number }[] = [];
   for (const node of ctx.nodes.values()) {
     if (node.z <= ROOT_ZOOM) continue; // roots are the fallback of last resort
     if (protectedNodes.has(node)) continue;
     if (node.children?.some((c) => protectedNodes.has(c))) continue;
-    candidates.push(node);
+    candidates.push({ node, distance: distanceTo(node, ctx.camEcef) });
   }
 
   // Farthest first, not least-recently-used.
@@ -70,12 +88,16 @@ export function evictDistantTiles(ctx: EvictionContext): void {
   // starts discarding tiles just off the wingtip while keeping ones left
   // behind an hour ago. Distance is what the viewer can actually perceive,
   // so terrain only ever dissolves far away, where nothing shows it.
-  candidates.sort((a, b) => distanceTo(b, ctx.camEcef) - distanceTo(a, ctx.camEcef));
+  candidates.sort((a, b) => b.distance - a.distance);
 
-  const target = ctx.nodes.size - ctx.maxResidentTiles;
+  // `max(1, ...)` so a very small cap — which only a test sets, but which the
+  // arithmetic still has to survive — cannot round its way down to evicting
+  // everything.
+  const keep = Math.max(1, Math.round(ctx.maxResidentTiles * EVICT_TARGET_FRACTION));
+  const target = ctx.nodes.size - keep;
   let removed = 0;
 
-  for (const node of candidates) {
+  for (const { node } of candidates) {
     if (removed >= target) break;
     // Leaves only.
     //

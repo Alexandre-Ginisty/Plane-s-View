@@ -27,8 +27,8 @@ import { wrapTileX } from '@/core/math/geo';
 import type { TileLoader } from '@/tiles/loader';
 import { IMAGERY_FALLBACK_ORDER, TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import type { TerrainWorkerPool } from '@/workers/pool';
-import { MIN_SKIRT_M } from './constants';
-import { elevationRequest, priorityOf } from './metrics';
+import { skirtFloorFor } from './constants';
+import { elevationRequest } from './metrics';
 import type { TileNode } from './tileNode';
 
 /** Mesh-building settings the loaders need from the globe's options. */
@@ -74,7 +74,7 @@ export async function loadGeometry(node: TileNode, ctx: LoadContext): Promise<vo
     const result = await ctx.loader.request(
       key,
       [TERRARIUM.url(req.z, wrappedX, req.y)],
-      priorityOf(node, ctx.frame),
+      node.priority,
     );
     // Copied, not used directly.
     //
@@ -126,7 +126,7 @@ export async function loadGeometry(node: TileNode, ctx: LoadContext): Promise<vo
         resolution,
         sampleRect: req.rect,
         exaggeration: ctx.options.exaggeration,
-        skirtDepth: MIN_SKIRT_M,
+        skirtDepth: skirtFloorFor(node.spanMetres),
       },
       signal,
     );
@@ -183,7 +183,7 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
   let bitmap: ImageBitmap | null = null;
 
   try {
-    const result = await ctx.loader.request(key, urls, priorityOf(node, ctx.frame));
+    const result = await ctx.loader.request(key, urls, node.priority);
     if (node.textureRequestKey === key) node.textureRequestKey = null;
 
     if (signal.aborted || node.textureGen !== gen) {

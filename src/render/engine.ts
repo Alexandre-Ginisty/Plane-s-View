@@ -62,6 +62,10 @@ export class Engine {
   private running = false;
 
   private pixelRatio: number;
+  /** Set by `resize`, consumed at the top of the next frame. */
+  private resizeDirty = true;
+  /** A pixel ratio `adaptQuality` chose, not yet committed. See `resize`. */
+  private nextPixelRatio: number | null = null;
   private readonly minPixelRatio: number;
   private readonly maxPixelRatio: number;
   private readonly targetFrameMs: number;
@@ -135,14 +139,46 @@ export class Engine {
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
-    this.resize();
+    this.applyResize();
   }
 
   get webgl2(): boolean {
     return this.renderer.capabilities.isWebGL2;
   }
 
+  /**
+   * Ask for a resize. It happens at the top of the next frame, never now.
+   *
+   * Reallocating the drawing buffer clears it, so a `setSize` issued *after*
+   * `render` hands the compositor a blank canvas for that frame — and behind
+   * this canvas, at a lower stacking level, sits the live 2D map. The symptom
+   * is the map flashing through the cockpit for exactly one frame and then
+   * vanishing, which is precisely what it looks like: a canvas with nothing
+   * drawn in it yet.
+   *
+   * Two callers could do it. `adaptQuality` runs after the draw by
+   * construction — it is measuring the draw — and it fires whenever the
+   * adaptive pixel ratio crosses its threshold, which is exactly when a frame
+   * cost more than usual: a burst of tiles landing, or the view being swung
+   * round. The `ResizeObserver` is worse still, firing outside the loop
+   * entirely. Deferring both to the top of a frame means the buffer is never
+   * presented before something has been drawn into it.
+   */
   resize(): void {
+    this.resizeDirty = true;
+  }
+
+  /** Commit a pending pixel-ratio change and/or size. Frame top only. */
+  private applyResize(): void {
+    if (this.nextPixelRatio !== null) {
+      this.pixelRatio = this.nextPixelRatio;
+      this.nextPixelRatio = null;
+      this.renderer.setPixelRatio(this.pixelRatio);
+      this.resizeDirty = true;
+    }
+    if (!this.resizeDirty) return;
+    this.resizeDirty = false;
+
     const width = this.canvas.clientWidth || window.innerWidth;
     const height = this.canvas.clientHeight || window.innerHeight;
 
@@ -226,6 +262,9 @@ export class Engine {
 
     const frameStart = performance.now();
 
+    // Before anything is drawn: see `resize`.
+    this.applyResize();
+
     this.skyMesh.position.copy(this.camera.position);
     this.skyMesh.scale.setScalar(this.camera.far * 0.5);
     this.skyMesh.updateMatrix();
@@ -262,11 +301,9 @@ export class Engine {
     }
 
     next = Math.max(this.minPixelRatio, Math.min(this.maxPixelRatio, next));
-    if (Math.abs(next - this.pixelRatio) > 0.01) {
-      this.pixelRatio = next;
-      this.renderer.setPixelRatio(next);
-      this.resize();
-    }
+    // Queued, not applied: this runs after `render`, and resizing the buffer
+    // there is what makes the map flash through for a frame. See `resize`.
+    if (Math.abs(next - this.pixelRatio) > 0.01) this.nextPixelRatio = next;
   }
 
   get currentPixelRatio(): number {

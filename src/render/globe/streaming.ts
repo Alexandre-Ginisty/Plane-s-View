@@ -36,6 +36,7 @@ import {
   MAX_LOAD_ATTEMPTS,
   RETRY_BASE_FRAMES,
 } from './constants';
+import { priorityOf } from './metrics';
 import { loadGeometry, loadTexture, type LoadContext, type StreamerOptions } from './tileFetch';
 import type { TileNode } from './tileNode';
 
@@ -149,8 +150,18 @@ export class TileStreamer {
     void this.loader
       .request(`${this.imagery.id}/${z}/${x}/${y}`, [this.imagery.url(z, x, y)], priority)
       .catch(() => undefined);
+
+    // Terrarium stops at zoom 15, so a deeper tile wants its z15 ancestor —
+    // the same heightmap `elevationRequest` will ask for when the tile is
+    // really built. Asking for `terrarium/17/...` instead just 404s, and
+    // before the descent prefetch existed nothing ever called this past z12
+    // so the ceiling was never hit.
+    const ez = Math.min(z, TERRARIUM.maxZoom);
+    const shift = z - ez;
+    const ex = x >> shift;
+    const ey = y >> shift;
     void this.loader
-      .request(`terrarium/${z}/${x}/${y}`, [TERRARIUM.url(z, x, y)], priority)
+      .request(`terrarium/${ez}/${ex}/${ey}`, [TERRARIUM.url(ez, ex, ey)], priority)
       .catch(() => undefined);
   }
 
@@ -198,6 +209,38 @@ export class TileStreamer {
       budget -= this.loading.size - before;
 
       if (budget <= 0) return;
+    }
+  }
+
+  /**
+   * Re-rank every outstanding request against where the camera is *now*.
+   *
+   * `TileLoader` has always documented this — "the quadtree updates priorities
+   * every frame it re-evaluates" — and nothing ever called `setPriority`. A
+   * request was ranked once, by the view at the instant the tile was first
+   * wanted, and kept that rank until it was served. At 250 m/s the ordering is
+   * stale within a couple of seconds, so the queue steadily fills with tiles
+   * ranked for airspace already behind the aircraft, served ahead of the ground
+   * coming up.
+   *
+   * Bounded by the frontier, not by the tree: only nodes with a load actually
+   * in flight are here, and a queue entry the loader has already started is
+   * left alone because it cannot be re-ordered anyway.
+   */
+  reprioritise(): void {
+    if (this.loading.size === 0) return;
+    for (const node of this.loading) {
+      // Nodes selection did not look at this frame keep the error they last
+      // scored, and `priorityOf` drops them into the off-screen band on the
+      // strength of `onScreenFrame`.
+      const priority = priorityOf(node, this.frame);
+      node.priority = priority;
+      if (node.geometryRequestKey !== null) {
+        this.loader.setPriority(node.geometryRequestKey, priority);
+      }
+      if (node.textureRequestKey !== null) {
+        this.loader.setPriority(node.textureRequestKey, priority);
+      }
     }
   }
 

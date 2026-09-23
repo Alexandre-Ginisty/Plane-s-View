@@ -108,9 +108,20 @@ export class SceneSynchroniser {
     }
 
     // Detach everything that dropped out of the set this frame.
+    //
+    // The fade is *not* reset here, and that one line was a flicker generator.
+    // Leaving the set is routine: a tile crosses the frustum edge as the
+    // aircraft yaws, a parent steps aside for its children and is wanted again
+    // a moment later when one child is evicted. Resetting the fade meant every
+    // one of those re-entries started from fully transparent and spent 0.3 s
+    // getting back — so the globe went momentarily see-through at the edges
+    // whenever the camera moved, which is the opposite of what the fade is for.
+    //
+    // A tile that already has its imagery has nothing to fade in. The fade
+    // exists to cover content *arriving*, and re-entering the render set is
+    // not content arriving.
     for (const node of this.nodes.values()) {
       if (selected.has(node) || !node.attached) continue;
-      node.opacity = 0;
       if (node.mesh) this.scene.remove(node.mesh);
       node.attached = false;
     }

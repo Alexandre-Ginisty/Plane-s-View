@@ -34,7 +34,8 @@ import {
   createAircraftMarkerGeometry,
   createRotorcraftMarkerGeometry,
 } from './traffic/markers';
-import { isRotorcraftType } from './aircraft';
+import { isSurfaceVehicle, shapeFor } from './aircraft';
+import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 
 const MAX_INSTANCES = 2000;
@@ -56,6 +57,15 @@ const MAX_RANGE_M = 120_000;
  * readable mark without ever making a nearby aircraft look wrong.
  */
 const MIN_SCREEN_PX = 11;
+
+/** What one aircraft looks like: which instance layer, and how long it is. */
+interface Airframe {
+  rotor: boolean;
+  /** Overall length in metres, from the type's own shape. */
+  size: number;
+  /** How far the model's origin sits above the ground when parked, metres. */
+  clearance: number;
+}
 
 export interface TrafficRenderStats {
   drawn: number;
@@ -116,8 +126,8 @@ export class Traffic3D {
    */
   private readonly basis = new Matrix4();
 
-  /** Settled rotorcraft verdicts, keyed by hex. See `isRotorcraft`. */
-  private readonly rotorcraftByHex = new Map<string, boolean>();
+  /** Settled silhouette verdicts, keyed by hex. See `classify`. */
+  private readonly airframes = new Map<string, Airframe>();
 
   private stats: TrafficRenderStats = { drawn: 0, culled: 0 };
 
@@ -144,12 +154,17 @@ export class Traffic3D {
    * `cameraEcef` is used for range culling and for the apparent-size ramp;
    * `excludeHex` drops the aircraft the camera is riding in, which would
    * otherwise fill the cockpit view with its own fuselage.
+   *
+   * `terrainHeightAt` is what stops the aircraft on the ground being drawn
+   * *under* it — see `@/render/ground`. It is optional so the layer still
+   * works before the globe exists.
    */
   update(
     samples: readonly SampledAircraft[],
     cameraEcef: Vector3,
     radiansPerPixel: number,
     excludeHex: string | null,
+    terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
     this.fixedWing.count = 0;
     this.rotorcraft.count = 0;
@@ -157,12 +172,27 @@ export class Traffic3D {
 
     for (const sample of samples) {
       if (sample.hex === excludeHex) continue;
+      // Ground vehicles and fixed obstacles share the feed with the traffic.
+      // They are not aircraft and drawing them put a 40 m airliner on every
+      // taxiway of every field the camera passed.
+      if (isSurfaceVehicle(sample.latest.category)) continue;
 
-      const rotor = this.isRotorcraft(sample);
-      const layer = rotor ? this.rotorcraft : this.fixedWing;
+      const airframe = this.classify(sample);
+      const layer = airframe.rotor ? this.rotorcraft : this.fixedWing;
       if (layer.count >= layer.mesh.instanceMatrix.count) continue;
 
-      const altM = sample.altFt * FEET_TO_METRES;
+      let altM = sample.altFt * FEET_TO_METRES;
+      // Only the aircraft that could possibly be inside the terrain pay for a
+      // terrain sample; the quadtree walk is not free and a cruising airliner
+      // can never change its own answer.
+      if (terrainHeightAt && (sample.latest.onGround || altM < GROUND_CHECK_CEILING_M)) {
+        altM = surfaceAltitudeM(
+          altM,
+          sample.latest.onGround,
+          terrainHeightAt(sample.lat, sample.lon),
+          airframe.clearance,
+        );
+      }
       const ecef = geodeticToEcef(sample.lat, sample.lon, altM);
 
       this.position.set(
@@ -179,7 +209,7 @@ export class Traffic3D {
 
       // Orientation from the same body frame the camera uses, so a banking
       // aircraft seen from outside banks correctly.
-      const frame = aircraftFrame(sample);
+      const frame = aircraftFrame(sample, altM);
       this.dummy.position.copy(this.position);
 
       // Model is nose-along-+Y, up-along-+Z: map to forward/up/right.
@@ -192,7 +222,7 @@ export class Traffic3D {
       // MIN_SCREEN_PX pixels needs L >= MIN_SCREEN_PX * radiansPerPixel * d.
       // Taking the max with true size means close aircraft are never inflated,
       // and the two regimes meet continuously — no visible pop as you close in.
-      const trueSize = this.sizeOf(sample);
+      const trueSize = airframe.size;
       const floorSize = MIN_SCREEN_PX * radiansPerPixel * distance;
       const size = Math.max(trueSize, Math.min(floorSize, trueSize * 80));
 
@@ -211,64 +241,54 @@ export class Traffic3D {
   }
 
   /**
-   * Helicopter or not.
+   * Which silhouette, and how big.
    *
-   * The emitter category leads because the aircraft broadcasts it itself; the
-   * type code is a registry lookup that is frequently missing. Neither is
-   * always present, which is why both are consulted.
+   * Both answers come from the same place — `shapeFor` — so a helicopter is
+   * never drawn with an airliner's length, and this layer can never disagree
+   * with the detailed model `OwnAircraft` builds for the very same type. The
+   * old code answered the two questions separately and sized every aircraft
+   * from the emitter category alone, which is a five-bucket guess: a Phenom
+   * 300 and a Cessna 152 are both `A1`.
    *
-   * Memoised per hex, and only once a verdict can be reached. A thousand
-   * aircraft at 60 fps is 120 000 registry lookups a second otherwise — each
-   * cheap, all of them pointless, since an airframe does not become a
-   * helicopter mid-flight. Caching the *absence* of an answer would be the
-   * bug: the registry fills in asynchronously, so a hex looked up before its
-   * dossier arrived would stay classified as fixed-wing for the whole session.
+   * ## What is cached and what is not
+   *
+   * A verdict reached from a **type code** is final and memoised: an airframe
+   * does not change type mid-flight, and a thousand aircraft at 60 fps is
+   * otherwise 120 000 registry lookups a second.
+   *
+   * A verdict reached from the **category alone** is deliberately *not*
+   * cached. The registry fills in asynchronously, so remembering the
+   * provisional answer is what froze an aircraft into the wrong shape for the
+   * rest of the session — and the previous code did exactly that for any
+   * aircraft whose category was present and not `A7`, which is nearly all of
+   * them, so a helicopter broadcasting `A1` stayed a jet for ever. Re-deriving
+   * costs one allocation for the few per cent of traffic with no type code
+   * yet, and it upgrades the instant the lookup lands.
    */
-  private isRotorcraft(sample: SampledAircraft): boolean {
-    const memo = this.rotorcraftByHex.get(sample.hex);
-    if (memo !== undefined) return memo;
-
-    if (sample.latest.category === 'A7') {
-      this.rotorcraftByHex.set(sample.hex, true);
-      return true;
-    }
+  private classify(sample: SampledAircraft): Airframe {
+    const memo = this.airframes.get(sample.hex);
+    if (memo) return memo;
 
     const type = registry.knownTypeCode(sample.hex);
+    const shape = shapeFor(type, sample.latest.category ?? null);
+    const airframe: Airframe = {
+      rotor: shape.kind === 'rotorcraft',
+      size: shape.length,
+      clearance: clearanceFor(shape),
+    };
+
     if (type) {
-      const verdict = isRotorcraftType(type.toUpperCase());
-      this.rotorcraftByHex.set(sample.hex, verdict);
-      return verdict;
+      // Traffic churns over a long session and nothing here ever expires, so
+      // the map is bounded rather than pruned: re-deriving a few hundred
+      // verdicts costs one frame's worth of lookups, once.
+      if (this.airframes.size > 20_000) this.airframes.clear();
+      this.airframes.set(sample.hex, airframe);
     }
-
-    // Category present and not A7 settles it too; an absent category does not.
-    if (sample.latest.category) this.rotorcraftByHex.set(sample.hex, false);
-    // Traffic churns over a long session and nothing here ever expires, so the
-    // map is bounded rather than pruned: re-deriving a few hundred verdicts
-    // costs one frame's worth of map lookups, once.
-    if (this.rotorcraftByHex.size > 20_000) this.rotorcraftByHex.clear();
-    return false;
-  }
-
-  /** Physical length in metres, from the ADS-B emitter category. */
-  private sizeOf(sample: SampledAircraft): number {
-    switch (sample.latest.category) {
-      case 'A1': return 10;
-      case 'A2': return 20;
-      case 'A3': return 40;
-      case 'A4': return 55;
-      case 'A5': return 70;
-      // Rotorcraft. Read as the rotor diameter rather than the fuselage
-      // length, because that is what the silhouette above actually spans.
-      case 'A7': return 14;
-      case 'B1': return 15;
-      case 'B4': return 8;
-      case 'B6': return 6;
-      default: return 35;
-    }
+    return airframe;
   }
 
   dispose(): void {
-    this.rotorcraftByHex.clear();
+    this.airframes.clear();
     this.fixedWing.dispose();
     this.rotorcraft.dispose();
     this.material.dispose();

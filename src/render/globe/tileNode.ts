@@ -96,6 +96,26 @@ export class TileNode {
   geometryRetryFrame = 0;
   textureRetryFrame = 0;
 
+  /**
+   * Screen-space error recorded the last time selection looked at this node.
+   *
+   * Stored rather than recomputed because it has two consumers a frame apart:
+   * selection decides whether to refine with it, and the loader ranks its
+   * queue by it — including on later frames, when the node is still waiting
+   * on the network and the camera has moved. See `priorityOf`.
+   */
+  screenError = 0;
+
+  /**
+   * Loader priority for this node's outstanding requests.
+   *
+   * Written by selection, read when a request is issued and every frame it is
+   * still queued. A request whose priority is fixed at issue time is ranked by
+   * where the camera was when the tile was first wanted, which under a moving
+   * aircraft is wrong within a second or two.
+   */
+  priority = 0;
+
   /** Fade-in progress once selected for rendering. */
   opacity = 0;
   /** Set each frame the node is selected; drives eviction. */

@@ -12,7 +12,15 @@
  *    into a partially loaded quad is what produces the classic flickering
  *    checkerboard. Waiting costs a moment of blur and buys continuity.
  * 4. **The parent stays drawn underneath while children fade in**, so there is
- *    no frame in which the globe is see-through.
+ *    no frame in which the globe is see-through. Only at cold start: once any
+ *    ancestor has a texture, a new child is drawn opaque immediately and shows
+ *    that texture through `uvA`, which is the same picture the parent was
+ *    drawing. Two coplanar meshes cross-fading is not continuity — they are
+ *    built from different heightmap levels and z-fight.
+ * 8. **Requests are re-ranked every frame** against where the camera is now,
+ *    by how wrong each tile currently looks. A priority fixed when the tile was
+ *    first wanted is, under a moving aircraft, an ordering for a view that no
+ *    longer exists — see `priorityOf`.
  * 5. **Visible tiles are never evicted**, whatever the memory pressure.
  * 6. **The camera's own path is prefetched** ahead of the aircraft, so tiles
  *    are already resident by the time they matter.
@@ -46,16 +54,28 @@ import {
   Vector3,
 } from 'three';
 
-import { DEG2RAD, type Vec3 } from '@/core/math/geo';
+import {
+  DEG2RAD,
+  ecefToGeodetic,
+  latToMercatorY,
+  lonToMercatorX,
+  tileKey,
+  type Vec3,
+} from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { StreamingProfile } from '@/net/quality';
 import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
-import { REFINE_TEXELS, ROOT_ZOOM, type GlobeOptions } from './constants';
+import {
+  DESCENT_TRIGGER_M,
+  REFINE_TEXELS,
+  ROOT_ZOOM,
+  type GlobeOptions,
+} from './constants';
 import { evictDistantTiles, type TileMap } from './eviction';
 import { SceneSynchroniser } from './sceneSync';
 import { selectTiles, type SelectionContext } from './selection';
 import { TileStreamer, type LoadFrontier } from './streaming';
-import { prefetchAlongPath, sampleTerrainHeight } from './terrainQuery';
+import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight } from './terrainQuery';
 import { TileNode } from './tileNode';
 
 export type { GlobeOptions } from './constants';
@@ -97,6 +117,10 @@ export class Globe {
   private maxAnisotropy = 8;
 
   private frame = 0;
+  /** Ground tile last seeded by `prefetchDescent`, so it runs on change only. */
+  private descentKey: string | null = null;
+  /** Camera forward direction, reused each frame. */
+  private readonly forward = new Vector3();
   private readonly frustum = new Frustum();
   private readonly viewProjection = new Matrix4();
   private readonly sphere = new Sphere();
@@ -280,12 +304,21 @@ export class Globe {
     // visited first rather than to the worst one on screen; and eviction has
     // to run after the render set exists, or it cannot know what is protected.
     this.streamer.flush(this.loadFrontier);
+    // After `flush`, so tiles that just entered the frontier are included, and
+    // before `abandonStale`, which is about withdrawal rather than ordering.
+    this.streamer.reprioritise();
     this.streamer.abandonStale();
 
     const drawn = this.sync.applyRenderSet(dt);
     this.stats.renderedTiles = drawn.rendered;
     this.stats.triangles = drawn.triangles;
     this.stats.deepestZoom = drawn.deepestZoom;
+
+    // The scene carries no rotation (the floating origin is a pure
+    // translation), so the camera's world-space forward vector is already an
+    // ECEF direction and needs no transform.
+    camera.getWorldDirection(this.forward);
+    this.maybeSeedDescent(camEcef, this.forward, drawn.deepestZoom);
 
     evictDistantTiles({
       nodes: this.nodes,
@@ -329,6 +362,62 @@ export class Globe {
     this.stats.loadingTiles = this.streamer.loadingCount;
     this.stats.queuedRequests = loaderStats.queued;
     this.stats.inFlightRequests = loaderStats.inFlight;
+  }
+
+  /**
+   * Collapse the level-by-level descent when the camera is near the ground.
+   *
+   * Only fires when it can actually help: close to the terrain, and with the
+   * drawn detail more than a couple of levels short of what this view is
+   * allowed. Both conditions matter — near the ground the screen-space error
+   * genuinely demands the maximum zoom, so targeting it is not a guess; and if
+   * the tree is already nearly there, the ordinary walk will finish on its own
+   * and seeding would only compete with it.
+   *
+   * Re-seeded when the ground tile underneath changes, which is what keeps it
+   * from re-issuing the same burst every frame. See `prefetchDescent`.
+   */
+  private maybeSeedDescent(camEcef: Vec3, forward: Vector3, deepestDrawn: number): void {
+    const eye = ecefToGeodetic(camEcef[0], camEcef[1], camEcef[2]);
+    const ground = this.sampleHeight(eye.lat, eye.lon);
+    const agl = eye.height - ground;
+    if (agl > DESCENT_TRIGGER_M) {
+      this.descentKey = null;
+      return;
+    }
+
+    const target = this.effectiveMaxZoom();
+    if (deepestDrawn >= target - 2) return;
+
+    /*
+     * Keyed on a mid-level tile, not on the deepest one.
+     *
+     * A zoom-19 tile is about 24 m across, so keying on it would re-seed on
+     * almost every frame of an approach — deduplicated by the loader, but
+     * still pointless work. Five levels up is roughly 800 m, which is the
+     * distance at which the chain really is somewhere new.
+     */
+    const keyZoom = Math.max(ROOT_ZOOM, target - 5);
+    const n = 1 << keyZoom;
+    const x = Math.floor(lonToMercatorX(eye.lon) * n);
+    const y = Math.floor(latToMercatorY(eye.lat) * n);
+    const key = tileKey(keyZoom, x, y);
+    if (key === this.descentKey) return;
+    this.descentKey = key;
+
+    prefetchDescent(this.streamer, this.nodes, eye.lat, eye.lon, target);
+
+    // And again where the camera is *pointing*.
+    //
+    // Seeding only the column underneath is right for a descent and wrong for
+    // everything else near the ground. From a cockpit at 50 m on final, or
+    // anywhere on the ground, the tile under the wheels is a handful of pixels
+    // at the bottom of the screen and the ground being looked at is a
+    // kilometre or two ahead — so the one column that got the parallel
+    // treatment was the one nobody was looking at, and the rest of the view
+    // went back to climbing a level per round trip.
+    const aim = aimPoint(camEcef, forward, agl);
+    if (aim) prefetchDescent(this.streamer, this.nodes, aim.lat, aim.lon, target);
   }
 
   /** Terrain height at a position, from the deepest resident tile. */

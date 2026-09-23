@@ -245,3 +245,27 @@ function tileY(latDeg: number, z: number): number {
   const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;
   return Math.floor(y * (1 << z));
 }
+
+describe('evictDistantTiles headroom', () => {
+  it('trims below the cap, so the sweep is not re-run every frame', () => {
+    // Trimming to exactly the cap means the next tile to arrive puts the tree
+    // over again — a full sort of several thousand nodes, every frame, for as
+    // long as the globe sits at its resident limit. Near the ground, where
+    // zoom-19 tiles fill the cap in seconds, that is permanently.
+    const nodes = mapOf(
+      ...Array.from({ length: 1001 }, (_, i) => new TileNode(12, 2000 + i, 1365, null)),
+    );
+
+    evictDistantTiles({
+      nodes,
+      renderSet: [],
+      camEcef: CAM,
+      maxResidentTiles: 1000,
+      onEvict: () => undefined,
+    });
+
+    expect(nodes.size).toBeLessThanOrEqual(900);
+    // And not so much that the globe is stripped bare to save a sort.
+    expect(nodes.size).toBeGreaterThan(800);
+  });
+});

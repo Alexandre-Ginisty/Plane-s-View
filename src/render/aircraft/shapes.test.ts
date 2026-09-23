@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isRotorcraftType, shapeFor } from './shapes';
+import { isRotorcraftType, isSurfaceVehicle, shapeFor } from './shapes';
 
 describe('isRotorcraftType', () => {
   it('recognises the common helicopter designators', () => {
@@ -106,6 +106,142 @@ describe('shapeFor', () => {
   });
 
   /**
+   * Regression: the table had `A32` and `B73` but none of the re-engined
+   * variants, which do not share those prefixes. Measured against live traffic
+   * over eight busy terminal areas, `A21N`, `B38M` and `A20N` were the three
+   * most common type codes matching nothing at all — 46% of every aircraft
+   * reporting a type fell through to a generic 40 m twin-jet.
+   */
+  it('recognises the narrowbodies that actually fill the sky', () => {
+    for (const code of ['A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B37M']) {
+      const shape = shapeFor(code, 'A3');
+      expect(shape.kind, code).toBe('jet');
+      expect(shape.engines, code).toBe(2);
+      expect(shape.engineMount, code).toBe('wing');
+      // Narrowbody, not the generic default and not a widebody.
+      expect(shape.length, code).toBeGreaterThan(30);
+      expect(shape.length, code).toBeLessThan(46);
+    }
+    // The stretch is visibly longer than the base model, which is the whole
+    // point of listing them separately.
+    expect(shapeFor('A21N', null).length).toBeGreaterThan(shapeFor('A20N', null).length);
+    expect(shapeFor('B39M', null).length).toBeGreaterThan(shapeFor('B38M', null).length);
+  });
+
+  /**
+   * Regression: `C17` is a complete ICAO designator (the Boeing C-17
+   * Globemaster III) *and* the prefix of the Cessna 170/172/175/177. The
+   * prefix rule won, so every Globemaster — four of them in a single live
+   * sample — was drawn as an 8 m single-engine Cessna.
+   */
+  it('prefers an exact designator to a prefix that would lie about it', () => {
+    const globemaster = shapeFor('C17', null);
+    expect(globemaster.length).toBeGreaterThan(40);
+    expect(globemaster.engines).toBe(4);
+
+    const cessna = shapeFor('C172', null);
+    expect(cessna.kind).toBe('piston');
+    expect(cessna.length).toBeLessThan(12);
+  });
+
+  it('matches the longest prefix whatever order the rows are written in', () => {
+    // `A321` and `A32` both match an A321; the specific row has to win, and it
+    // must keep winning when someone adds a row above it.
+    expect(shapeFor('A321', null).length).toBeGreaterThan(shapeFor('A319', null).length);
+    expect(shapeFor('A35K', null).length).toBeGreaterThan(60);
+    expect(shapeFor('A320', null).length).toBeLessThan(45);
+  });
+
+  /**
+   * `tTail` used to carry two meanings at once — stabiliser on the fin, and
+   * "no underwing engines" — and the geometry builder drew nothing for the
+   * tail case. So a CRJ had no engines, and an ATR, which has a T-tail *and*
+   * underwing turboprops, was excluded from the wing pods and had none either.
+   */
+  it('says where the engines are separately from where the tail is', () => {
+    const crj = shapeFor('CRJ9', null);
+    expect(crj.tTail).toBe(true);
+    expect(crj.engineMount).toBe('tail');
+    expect(crj.engines).toBe(2);
+
+    const atr = shapeFor('AT76', null);
+    expect(atr.kind).toBe('turboprop');
+    expect(atr.tTail).toBe(true);
+    // The whole regression: a T-tail does not mean the engines left the wing.
+    expect(atr.engineMount).toBe('wing');
+    expect(atr.engines).toBe(2);
+
+    const dash = shapeFor('DH8D', null);
+    expect(dash.engineMount).toBe('wing');
+
+    // Nothing is ever drawn hanging off a wing that has no engines on it.
+    const cessna = shapeFor('C152', null);
+    expect(cessna.engines).toBe(0);
+    expect(cessna.engineMount).toBe('none');
+  });
+
+  /**
+   * The emitter category is five buckets wide, so it cannot tell a Phenom 300
+   * from a Cessna 152 — both broadcast `A1`. Before the business jets were in
+   * the table, every one of them was drawn as a straight-wing piston single.
+   */
+  it('does not let a coarse category flatten a business jet into a trainer', () => {
+    const phenom = shapeFor('E55P', 'A1');
+    expect(phenom.kind).toBe('jet');
+    expect(phenom.sweepDeg).toBeGreaterThan(10);
+    expect(phenom.length).toBeGreaterThan(13);
+
+    const trainer = shapeFor('C152', 'A1');
+    expect(trainer.kind).toBe('piston');
+    expect(trainer.sweepDeg).toBe(0);
+    expect(trainer.length).toBeLessThan(9);
+  });
+
+  /**
+   * A coverage floor, held against the type codes actually observed over
+   * Paris, London, Frankfurt, New York, Dubai, Amsterdam, Rome and San
+   * Francisco, ordered by how common they were. The old table matched none of
+   * these; the point of the test is that a future edit cannot quietly drop
+   * them again.
+   */
+  it('gives a sailplane its wing from the type code alone', () => {
+    // Most gliders broadcast no emitter category, so the `B1` route never
+    // fires and the designator is the only signal there is.
+    for (const code of ['DISC', 'ASK21', 'LS8', 'DG1000', 'NIMB', 'SLG2']) {
+      const shape = shapeFor(code, null);
+      expect(shape.kind, code).toBe('glider');
+      expect(shape.spanRatio, code).toBeGreaterThan(2);
+      expect(shape.engines, code).toBe(0);
+    }
+  });
+
+  it('keeps microlights small instead of giving them an airliner', () => {
+    for (const code of ['VL3', 'WT9', 'FK9', 'EFOX', 'SIRA']) {
+      const shape = shapeFor(code, 'A1');
+      expect(shape.kind, code).toBe('piston');
+      expect(shape.length, code).toBeLessThan(8);
+    }
+  });
+
+  it('covers the common type codes that were falling through', () => {
+    const observed = [
+      'A21N', 'B38M', 'A20N', 'C152', 'DA42', 'PC12', 'A210', 'DR40', 'E55P',
+      'DA40', 'C42', 'E75L', 'C56X', 'CL35', 'E295', 'P68', 'GLEX', 'C208',
+      'G115', 'CL60', 'RV7', 'F2TH', 'PC24', 'F900', 'DV20', 'BE20', 'C525',
+      'GL7T', 'PA34', 'C150', 'LJ35', 'C560', 'B350', 'BE36', 'BE40', 'C510',
+      'PA38', 'M20P', 'C68A', 'E550', 'PA44', 'E50P', 'C680', 'M700', 'E35L',
+      'P180', 'BE35', 'G280', 'C650', 'K35R', 'C17',
+    ];
+    const unmatched = observed.filter((code) => {
+      // A shape that is identical to the "nothing matched" fallback is a miss.
+      const shape = shapeFor(code, null);
+      const fallback = shapeFor('ZZZZ', null);
+      return JSON.stringify(shape) === JSON.stringify(fallback);
+    });
+    expect(unmatched).toEqual([]);
+  });
+
+  /**
    * Regression: 'MD90' was in the rotorcraft table.
    *
    * It is the ICAO designator for the McDonnell Douglas MD-90 airliner, not a
@@ -119,5 +255,25 @@ describe('shapeFor', () => {
     expect(shapeFor('MD52', null).kind).toBe('rotorcraft');
     expect(shapeFor('MD60', null).kind).toBe('rotorcraft');
     expect(shapeFor('EXPL', null).kind).toBe('rotorcraft');
+  });
+});
+
+describe('isSurfaceVehicle', () => {
+  /**
+   * Airport ground fleets broadcast ADS-B on the same feed as the traffic, so
+   * a snapshot taken near a field carries a dozen of them. Their type codes
+   * (`GND`, `TWR`, `SERV`) match nothing, so each was drawn as a 40 m airliner
+   * parked on a taxiway — the spikes around airports.
+   */
+  it('recognises the surface and obstacle emitter categories', () => {
+    for (const cat of ['C0', 'C1', 'C2', 'C3', 'c2']) {
+      expect(isSurfaceVehicle(cat), cat).toBe(true);
+    }
+  });
+
+  it('does not claim anything that flies', () => {
+    for (const cat of ['A1', 'A3', 'A7', 'B1', 'B4', 'B6', null, undefined, '']) {
+      expect(isSurfaceVehicle(cat), String(cat)).toBe(false);
+    }
   });
 });

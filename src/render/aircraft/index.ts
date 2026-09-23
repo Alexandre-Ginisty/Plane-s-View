@@ -19,8 +19,8 @@ import { addVerticalFin, createAircraftGeometry } from './fixedWing';
 import { createRotorcraftGeometry } from './rotorcraft';
 import { shapeFor, type AirframeShape } from './shapes';
 
-export { isRotorcraftType, shapeFor } from './shapes';
-export type { AirframeKind, AirframeShape } from './shapes';
+export { isRotorcraftType, isSurfaceVehicle, shapeFor } from './shapes';
+export type { AirframeKind, AirframeShape, EngineMount } from './shapes';
 
 /** Complete model for a type code, ready to scale by `shape.length`. */
 export function buildAircraftModel(

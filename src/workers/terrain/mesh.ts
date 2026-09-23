@@ -170,11 +170,15 @@ export function buildTileMesh(req: BuildTileRequest, map: Heightmap | null): Bui
   // guess — makes low-zoom tiles hang kilometres below the surface, and from
   // altitude those walls are plainly visible at every tile edge, exactly the
   // artefact the skirt exists to hide.
+  //
+  // The caller's `skirtDepth` is a *floor*, and it is scaled to the tile —
+  // see `skirtFloorFor`. The additive 30 m that used to sit on the relief term
+  // undid that scaling: a flat zoom-19 tile 30 m across still got a 30 m wall
+  // hanging off each edge, which is what the vertical steps at tile joins on a
+  // runway were.
   const relief = Number.isFinite(maxHeight - minHeight) ? maxHeight - minHeight : 0;
-  const skirtDepth = Math.min(
-    Math.max(relief * 0.6 + 30, req.skirtDepth > 0 ? Math.min(req.skirtDepth, 120) : 30),
-    2500,
-  );
+  const floor = req.skirtDepth > 0 ? Math.min(req.skirtDepth, 120) : 30;
+  const skirtDepth = Math.min(Math.max(relief * 0.6, floor), 2500);
 
   // Four rings of w vertices, each a copy of an edge vertex pushed down along
   // the ellipsoid normal. Laid out north, south, west, east.

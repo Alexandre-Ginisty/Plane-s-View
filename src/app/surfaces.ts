@@ -58,8 +58,13 @@ export function createSurfaces(canvas: HTMLCanvasElement, origin: FloatingOrigin
    * against the 32-cell terrain mesh rather than the 256 texels, so it asked
    * for three levels past anything the screen can resolve and the ground
    * never arrived at all. See `REFINE_TEXELS`.
+   *
+   * 19 is Esri's own deepest level. Because the error target stops refinement
+   * the moment the imagery is at native resolution, the ceiling is inert
+   * everywhere except within a few hundred metres of the ground — which is
+   * exactly where 18 was leaving the last level visibly soft.
    */
-  const globe = new Globe(origin, { maxScreenSpaceError: 1, maxZoom: 18 });
+  const globe = new Globe(origin, { maxScreenSpaceError: 1, maxZoom: 19 });
 
   // Terrain is almost always seen at a grazing angle from a cockpit, which is
   // the exact case trilinear filtering smears into a band a few hundred metres

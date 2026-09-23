@@ -171,14 +171,64 @@ export function isTileVisible(
 }
 
 /**
- * Loader priority: shallower first, and a tile wanted *this* frame ahead of
- * one merely queued for later. Lower wins.
+ * Loader priority: worst-looking tile first. Lower wins.
  *
- * Shallow-first is not an accident of the formula — it is the rule that makes
- * refinement possible at all. A z14 tile cannot be drawn until its z13 ancestor
- * exists to inherit a texture from, so funding depth before breadth produces a
- * queue full of tiles that cannot be used yet.
+ * ## Why this is not ranked by zoom
+ *
+ * It used to be `z * 1000`, on the reasoning that a z14 tile cannot be drawn
+ * until its z13 ancestor exists to inherit a texture from, so breadth must be
+ * funded before depth. The reasoning is sound and the implementation of it was
+ * the single worst scheduling bug in the renderer, because **the walk already
+ * enforces that ordering structurally**: `selectTiles` only creates and
+ * requests a node's children once that node is `contentReady`. A child can
+ * never be asked for before its parent has arrived, whatever the priority says.
+ *
+ * So ranking by zoom bought nothing and cost this: a z12 tile at the horizon
+ * scored 12 000 and a z18 tile directly under the aircraft scored 18 000, so
+ * **every tile of the distant ground outranked the ground being looked at**,
+ * at every level, for as long as the horizon kept producing work — which it
+ * always does. The near column had to wait out the entire breadth of the view
+ * six times over to descend six levels. That is most of "it never loads when
+ * I am close".
+ *
+ * ## What it ranks by instead
+ *
+ * The screen-space error the tile is currently showing: how wrong the picture
+ * looks right now, in screen pixels per imagery texel. The same number that
+ * decides whether to refine, which is the point — the most urgent tile is by
+ * definition the one whose absence is most visible.
+ *
+ * This restores shallow-first *within a column* for free, and for the right
+ * reason rather than by decree: a coarse tile covering nearby ground has an
+ * enormous error (its texels are metres wide a hundred metres from the eye)
+ * and a deep one has a small error by construction, since the walk stopped
+ * refining when the error reached the target. Measured from 100 m AGL, the z14
+ * tile underneath scores ~9 450 and the z19 tile underneath ~0.9, so the chain
+ * is still funded from the top down — while the z12 tile at the horizon scores
+ * ~0.06 and no longer jumps the queue ahead of either.
  */
+
+/** Width of one priority band. Live tiles occupy [0, BAND), off-screen the next. */
+const PRIORITY_BAND = 10_000;
+
+/**
+ * Screen error at which a tile is considered maximally urgent.
+ *
+ * Errors run from ~1 (at the refinement target) to several thousand for a root
+ * tile seen from the ground, and the top of that range is not worth resolving:
+ * everything above it is "unusably coarse" and the ordering between two such
+ * tiles does not matter.
+ */
+const MAX_USEFUL_ERROR = 1_000;
+
 export function priorityOf(node: TileNode, frame: number): number {
-  return node.z * 1000 - (node.lastUsedFrame === frame ? 500 : 0);
+  const urgency = Math.min(Math.max(node.screenError, 0), MAX_USEFUL_ERROR) / MAX_USEFUL_ERROR;
+
+  // Off-screen work sits in its own band below every live tile, rather than
+  // competing with it on error: a tile the camera turned away from is not
+  // urgent however wrong it looks, but it is still worth finishing before a
+  // speculative prefetch.
+  const band = node.onScreenFrame === frame ? 0 : PRIORITY_BAND;
+
+  return band + Math.round((1 - urgency) * (PRIORITY_BAND - 1));
 }

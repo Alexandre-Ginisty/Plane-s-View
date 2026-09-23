@@ -62,11 +62,34 @@ export const MIN_OBLIQUITY = 1 / 6;
 export const ABANDON_AFTER_FRAMES = 180;
 
 /**
- * Floor for skirt depth, metres. The worker sizes the real skirt from the
- * tile's relief; this only guarantees a minimum on perfectly flat terrain,
- * where a hairline crack would otherwise show at an LOD boundary.
+ * Floor for skirt depth, as a fraction of the tile's own diagonal.
+ *
+ * The worker sizes the real skirt from the tile's relief; this only guarantees
+ * a minimum on flat terrain, where a hairline crack would otherwise show at an
+ * LOD boundary.
+ *
+ * It used to be a flat 60 m, and a constant is the wrong shape for this
+ * quantity. A skirt only has to bridge the height disagreement between this
+ * tile and a neighbour one level coarser, and that disagreement scales with
+ * the tile — so 60 m is about right for a z12 tile 15 km across and absurd for
+ * a z19 tile 30 m across, which got a wall twice its own width hanging off
+ * every edge. Standing on a runway, those are the vertical steps at the tile
+ * joins: the neighbouring tile is a level coarser and slightly higher, so its
+ * surface is what you see, with the fine tile's skirt as a dark cliff beside
+ * it. 1/64 of the diagonal is one grid cell of the near-tile mesh — the
+ * largest step two adjacent levels can actually produce.
  */
-export const MIN_SKIRT_M = 60;
+export const SKIRT_SPAN_FRACTION = 1 / 64;
+
+/** Hard bounds on the skirt floor, metres. */
+export const MIN_SKIRT_M = 1.5;
+export const MAX_SKIRT_FLOOR_M = 120;
+
+/** Skirt floor for a tile of this diagonal span, metres. */
+export function skirtFloorFor(spanMetres: number): number {
+  const scaled = spanMetres * SKIRT_SPAN_FRACTION;
+  return Math.min(MAX_SKIRT_FLOOR_M, Math.max(MIN_SKIRT_M, scaled));
+}
 
 export interface GlobeOptions {
   /** Target screen-space error in pixels. Lower is sharper and costlier. */
@@ -150,3 +173,30 @@ export const PREFETCH_QUEUE_LIMIT = 200;
  * texels run along its side.
  */
 export const REFINE_TEXELS = Math.round(256 * Math.SQRT2);
+
+/**
+ * Priority for the tiles seeded by the near-ground descent.
+ *
+ * Behind every live tile (`priorityOf` tops out around 18 000) and far ahead
+ * of the speculative path prefetch at `PREFETCH_PRIORITY`. Within the descent
+ * the shallower level goes first, because that is the order the quadtree walk
+ * will ask for them in.
+ */
+export const DESCENT_PRIORITY = 100_000;
+
+/**
+ * Height above the terrain below which the level-by-level descent is too slow
+ * to be acceptable, metres.
+ *
+ * The quadtree refines one level per round trip: a node is only refined once
+ * its own content has arrived, so reaching zoom 17 from the root costs fifteen
+ * *sequential* network round trips. From altitude that is invisible, because
+ * the needed zoom is around 12 and the tree is already there from a moment
+ * ago. Near the ground it is the whole experience — the ground simply never
+ * arrives, which is exactly what it looked like from a tower view: an empty
+ * grey void with the tree still sitting at zoom 2 after several seconds.
+ *
+ * 4 km covers every approach, every circuit and everything on the ground,
+ * without firing during cruise.
+ */
+export const DESCENT_TRIGGER_M = 4000;

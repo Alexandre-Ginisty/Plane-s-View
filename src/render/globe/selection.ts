@@ -13,7 +13,12 @@
  *    blur. It also means part-funding a quad buys literally nothing, which is
  *    why the frontier is a list of quads rather than of tiles.
  *  - **Keep the parent drawn underneath until the children are opaque**
- *    (rule 4), so there is no frame in which the globe is see-through.
+ *    (rule 4), so there is no frame in which the globe is see-through. In
+ *    practice this now almost never triggers, and that is the fix rather than
+ *    a regression: a child that can inherit its parent's imagery is drawn at
+ *    full opacity from its first frame, because it is already showing exactly
+ *    what the parent was showing. The overlap is kept only for cold start,
+ *    where nothing upstream has a texture yet.
  *  - **Only an on-screen child can hold its parent back.** An off-screen child
  *    never enters the render set, so its opacity stays at 0 for ever — and an
  *    unconditional test therefore pins the parent into the render set
@@ -28,7 +33,7 @@ import type { Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import { tileKey } from '@/core/math/geo';
 import type { TileMap } from './eviction';
-import { isTileVisible, screenSpaceError } from './metrics';
+import { isTileVisible, priorityOf, screenSpaceError } from './metrics';
 import type { LoadFrontier, TileStreamer } from './streaming';
 import { TileNode } from './tileNode';
 
@@ -65,6 +70,19 @@ export function selectTiles(
 
   node.lastUsedFrame = ctx.frame;
   node.onScreenFrame = ctx.frame;
+
+  // Scored before the readiness check, not after.
+  //
+  // The error is pure geometry — footprint, span, camera — so it is knowable
+  // for a tile that has not loaded yet, and that is precisely the tile whose
+  // score matters: it is the one sitting in the loader queue being ranked
+  // against every other outstanding request. Computing it only for tiles that
+  // already have content left every in-flight tile scored 0, which is to say
+  // ranked last. See `priorityOf`.
+  const error = screenSpaceError(node, camEcef, sseScale, ctx.refineResolution);
+  node.screenError = error;
+  node.priority = priorityOf(node, ctx.frame);
+
   // A node we are about to draw is never deferred — it is already needed.
   ctx.streamer.ensureContent(node);
 
@@ -73,7 +91,21 @@ export function selectTiles(
     return false;
   }
 
-  const error = screenSpaceError(node, camEcef, sseScale, ctx.refineResolution);
+  // Full opacity from the first frame, whenever there is something to inherit.
+  //
+  // The opacity fade exists to hide a tile arriving out of nothing. A tile
+  // with a texture ancestor is not arriving out of nothing: the shader is
+  // already showing it the ancestor's imagery through `uvA`, so at opacity 1
+  // it is pixel-for-pixel what the parent was drawing, only with better
+  // geometry underneath. Fading it in instead bought no continuity and cost
+  // real artefacts — a translucent child composited over a coplanar parent,
+  // the two meshes built from different heightmap levels and therefore
+  // disagreeing by metres, which is z-fighting by construction and shows as
+  // blurry patches punched through sharp ground every time the view refines.
+  //
+  // What still fades is the case the fade was written for: cold start, where
+  // no ancestor has a texture yet and the alternative really is a hole.
+  if (node.opacity === 0 && node.textureAncestor()) node.opacity = 1;
 
   if (node.z < ctx.maxZoom && error > ctx.maxScreenSpaceError) {
     const children = ensureChildren(ctx, node);
@@ -83,7 +115,19 @@ export function selectTiles(
     let pending: TileNode[] | null = null;
     for (const child of children) {
       child.lastUsedFrame = ctx.frame;
-      if (!child.contentReady) (pending ??= []).push(child);
+      if (child.contentReady) continue;
+
+      // Scored individually rather than inheriting the parent's error.
+      //
+      // The four children of one quad are not equally urgent: near the ground
+      // the two ahead of the aircraft can be an order of magnitude worse than
+      // the two behind it, and giving all four the parent's number throws that
+      // away. They are still loaded as a quad — a partial quad buys nothing —
+      // but the loader now serves the worst of the four first, so the quad
+      // completes soonest where it is most visible.
+      child.screenError = screenSpaceError(child, camEcef, sseScale, ctx.refineResolution);
+      child.priority = priorityOf(child, ctx.frame);
+      (pending ??= []).push(child);
     }
 
     if (pending) {

@@ -31,6 +31,17 @@
     sample?.latest.callsign ?? dossier?.meta?.registration ?? sample?.hex.toUpperCase() ?? '',
   );
 
+  /*
+   * The artificial horizon and the heading strip are *first-person*
+   * instruments: they describe what the pilot sees out of the windscreen. In
+   * chase, wing, orbit or tower the camera is not the pilot, so the horizon
+   * line refers to an attitude the view does not have and the compass to a
+   * heading it is not pointing along — and both are drawn straight across the
+   * aircraft you came to look at. The tapes stay in every view, because speed
+   * and altitude are facts about the aircraft rather than about the eye.
+   */
+  const firstPerson = $derived(app.cameraMode === 'cockpit');
+
   /** Only worth showing while it is actually constraining the picture. */
   const degraded = $derived(
     app.networkProfile && app.networkProfile.grade !== 'fast' && app.networkProfile.grade !== 'good'
@@ -41,8 +52,10 @@
 
 {#if sample}
   <div class="hud" aria-live="off">
-    <Attitude pitchDeg={sample.pitchDeg} rollDeg={sample.rollDeg} />
-    <Compass headingDeg={sample.headingDeg} />
+    {#if firstPerson}
+      <Attitude pitchDeg={sample.pitchDeg} rollDeg={sample.rollDeg} />
+      <Compass headingDeg={sample.headingDeg} />
+    {/if}
     <Tapes {sample} />
 
     <div class="ident">

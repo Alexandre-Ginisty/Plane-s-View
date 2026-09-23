@@ -12,8 +12,23 @@
  * a common awkward one.
  */
 
-import { DEG2RAD, MERCATOR_MAX_LAT, clamp, latToMercatorY, lonToMercatorX, tileKey, wrapTileX } from '@/core/math/geo';
-import { PREFETCH_PRIORITY, PREFETCH_QUEUE_LIMIT, ROOT_ZOOM } from './constants';
+import {
+  DEG2RAD,
+  MERCATOR_MAX_LAT,
+  clamp,
+  ecefToGeodetic,
+  latToMercatorY,
+  lonToMercatorX,
+  tileKey,
+  wrapTileX,
+  type Vec3,
+} from '@/core/math/geo';
+import {
+  DESCENT_PRIORITY,
+  PREFETCH_PRIORITY,
+  PREFETCH_QUEUE_LIMIT,
+  ROOT_ZOOM,
+} from './constants';
 import type { TileMap } from './eviction';
 import type { TileStreamer } from './streaming';
 import type { TileNode } from './tileNode';
@@ -123,4 +138,117 @@ export function prefetchAlongPath(
     // Strictly behind every live tile: see PREFETCH_PRIORITY.
     streamer.prefetchTile(z, tx, ty, PREFETCH_PRIORITY + i);
   }
+}
+
+/**
+ * Seed the whole zoom chain under one point, in parallel.
+ *
+ * ## The problem this solves
+ *
+ * `selectTiles` refines strictly one level at a time, and it refines a node
+ * only once that node's own content has arrived. Reaching zoom 17 from the
+ * root is therefore fifteen *sequential* round trips — request, wait, decode,
+ * build, then look at the children and request again. On a 130 ms link that is
+ * two seconds before the first request for the tile you actually want is even
+ * sent, and in practice much worse, because each level is four tiles and the
+ * frame budget is shared.
+ *
+ * From altitude nobody notices: the needed zoom is around 12 and the tree is
+ * already there from the previous position. Near the ground, and above all the
+ * instant the camera teleports into an aircraft, the tree has nothing nearby
+ * and has to climb the whole way. Measured from a tower view, the globe sat at
+ * zoom 2 with an empty grey horizon for several seconds.
+ *
+ * ## What this does
+ *
+ * Asks for the tile containing one point at *every* level at once. The
+ * quadtree walk is unchanged and still descends a level at a time — but each
+ * level's bytes are already in flight or on disk when it gets there, so the
+ * fifteen round trips collapse into one, plus the cost of the decode chain.
+ *
+ * Nothing here selects or renders anything. It only warms the loader, whose
+ * request keys are shared, so a real request issued later joins the same
+ * promise instead of opening a second connection.
+ */
+export function prefetchDescent(
+  streamer: TileStreamer,
+  nodes: TileMap,
+  latDeg: number,
+  lonDeg: number,
+  targetZoom: number,
+): number {
+  // Never speculate into a backlog: on a weak link these would be tiles the
+  // ground the user is looking at did not get. Same rule as the path prefetch.
+  if (streamer.queueDepth > PREFETCH_QUEUE_LIMIT) return 0;
+
+  const mx = lonToMercatorX(lonDeg);
+  const my = latToMercatorY(clamp(latDeg, -MERCATOR_MAX_LAT, MERCATOR_MAX_LAT));
+
+  let seeded = 0;
+  for (let z = ROOT_ZOOM + 1; z <= targetZoom; z++) {
+    const n = 1 << z;
+    const x = wrapTileX(Math.floor(mx * n), z);
+    const y = clamp(Math.floor(my * n), 0, n - 1);
+
+    // Already here: the walk will not be waiting on the network for this one.
+    if (nodes.get(tileKey(z, x, y))?.contentReady) continue;
+
+    // Shallower first — that is the order the walk will ask in, and a deep
+    // tile is useless until its ancestors have let the walk reach it.
+    streamer.prefetchTile(z, x, y, DESCENT_PRIORITY + z * 1000);
+    seeded++;
+  }
+  return seeded;
+}
+
+/**
+ * Where the camera is looking at the ground, approximately.
+ *
+ * Used to aim the near-ground descent seed at what the viewer is actually
+ * looking at rather than at the tile under the wheels. Approximate on purpose:
+ * this picks which tiles to warm, so being a few hundred metres out costs
+ * nothing, and an exact ray-terrain intersection would cost a march over
+ * heightmaps every time the camera moved.
+ *
+ * The ray is intersected with the horizontal plane through the terrain under
+ * the camera, then the range is clamped. The clamps do the real work:
+ *
+ *  - **The floor** covers a camera on the ground or pointing at the horizon,
+ *    where the plane intersection is at zero or at infinity respectively.
+ *  - **The ceiling** stops a shallow look-down angle from seeding a column
+ *    ten kilometres away, which is far enough that the deep levels there are
+ *    not wanted at all — the screen-space error would never ask for them.
+ */
+const AIM_RANGE_MIN_M = 400;
+const AIM_RANGE_MAX_M = 8000;
+/** Shallowest look-down angle treated as pointing at the ground, as a sine. */
+const AIM_MIN_DEPRESSION = 0.05;
+
+export function aimPoint(
+  camEcef: Vec3,
+  forward: { x: number; y: number; z: number },
+  aglM: number,
+): { lat: number; lon: number } | null {
+  const camLen = Math.hypot(camEcef[0], camEcef[1], camEcef[2]);
+  if (camLen === 0) return null;
+
+  // Geocentric up. It differs from the geodetic normal by at most ~0.19deg,
+  // which is irrelevant when the result is clamped to the nearest few hundred
+  // metres.
+  const ux = camEcef[0] / camLen;
+  const uy = camEcef[1] / camLen;
+  const uz = camEcef[2] / camLen;
+
+  const depression = -(forward.x * ux + forward.y * uy + forward.z * uz);
+  const range = clamp(
+    Math.max(aglM, 0) / Math.max(depression, AIM_MIN_DEPRESSION),
+    AIM_RANGE_MIN_M,
+    AIM_RANGE_MAX_M,
+  );
+
+  return ecefToGeodetic(
+    camEcef[0] + forward.x * range,
+    camEcef[1] + forward.y * range,
+    camEcef[2] + forward.z * range,
+  );
 }

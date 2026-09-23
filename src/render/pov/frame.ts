@@ -69,9 +69,14 @@ const _quat = new Quaternion();
 /**
  * Build the aircraft's body axes in ECEF from its geodetic position and
  * heading / pitch / roll.
+ *
+ * `altOverrideM` replaces the reported altitude, in metres above the
+ * ellipsoid. It is how an aircraft on the surface gets placed on the surface:
+ * the feed's answer for that case is a literal zero, which is a point well
+ * underground at any European airport. See `@/render/ground`.
  */
-export function aircraftFrame(sample: SampledAircraft): AircraftFrame {
-  const altM = sample.altFt * FEET_TO_METRES;
+export function aircraftFrame(sample: SampledAircraft, altOverrideM?: number): AircraftFrame {
+  const altM = altOverrideM ?? sample.altFt * FEET_TO_METRES;
   const position = geodeticToEcef(sample.lat, sample.lon, altM);
   const basis = enuBasis(sample.lat, sample.lon);
 

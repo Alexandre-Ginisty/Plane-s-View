@@ -164,7 +164,16 @@ export class Orchestrator {
       (window as unknown as Record<string, unknown>)['__planesview'] = this;
     }
 
-    app.notify('Pick an aircraft on the map, then step inside it.', 'info', 7000);
+    /*
+     * No "pick an aircraft" toast.
+     *
+     * It fired on every boot, which means every reload, and it sits in the
+     * same strip as the genuine warnings about the feed and the connection —
+     * so an instruction the user already followed once reads as something
+     * having gone wrong. What it said is on the aircraft panel ("Step inside
+     * this aircraft") at the moment it is actually true, and in the key panel
+     * under `?` for anyone looking for it.
+     */
   }
 
   // -------------------------------------------------------------------------
@@ -208,6 +217,12 @@ export class Orchestrator {
         app.notify('Signal lost — holding position while we re-acquire it.', 'warn', 4000);
       }
 
+      // Drag gain follows the live camera, so the same drag means the same
+      // rotation whatever the window size or field of view.
+      const radiansPerPixel =
+        (2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight;
+      pov.setViewport(radiansPerPixel);
+
       pov.update(engine.camera, flying, dt, (lat, lon) => globe.sampleHeight(lat, lon));
       this.applySunlight(flying.lat, flying.lon);
       this.maybePrefetch(dt, flying);
@@ -216,18 +231,26 @@ export class Orchestrator {
       globe.update(engine.camera, dt, engine.viewportHeight);
 
       this.cameraEcefVec.copy(engine.camera.position);
-      const radiansPerPixel =
-        (2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight;
-
-      traffic3d.update(samples, this.cameraEcefVec, radiansPerPixel, app.selectedHex);
+      traffic3d.update(samples, this.cameraEcefVec, radiansPerPixel, app.selectedHex, (lat, lon) =>
+        globe.sampleHeight(lat, lon),
+      );
 
       // The followed aircraft is drawn by its own renderer, at true scale and
       // with the silhouette of its actual type — but not from inside it.
       if (this.ownAircraft) {
+        // The registry, not `app.dossier`, and for two reasons. The dossier
+        // belongs to whatever is *selected*, which during a switch is not yet
+        // the aircraft being flown — so the model was briefly built for the
+        // wrong airframe. And the dossier only exists once its network lookup
+        // has landed, while the registry already holds the type code the
+        // position feed shipped alongside the position, so the right
+        // silhouette is usually there on the first frame instead of popping in
+        // a second later.
         this.ownAircraft.update(
           flying,
-          app.dossier?.meta?.icaoTypeCode ?? null,
+          registry.knownTypeCode(flying.hex),
           app.cameraMode !== 'cockpit',
+          (lat, lon) => globe.sampleHeight(lat, lon),
         );
         this.ownAircraft.setSun(this.sunVec);
       }

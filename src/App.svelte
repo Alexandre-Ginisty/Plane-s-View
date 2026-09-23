@@ -202,7 +202,27 @@
     height: 100%;
   }
 
-  .map { z-index: 1; }
+  /*
+   * Hidden once the cockpit is fully opaque, shown again instantly on the way
+   * out.
+   *
+   * Belt and braces. The globe canvas covers this completely in POV, so this
+   * changes nothing visible — but "covers it completely" is an invariant that
+   * a single undrawn frame breaks, and when it broke, what showed through was
+   * the 2D map. Nothing can show through something that is not painted.
+   *
+   * The delay is on `visibility` alone and costs nothing: entering waits out
+   * the cross-fade before hiding, leaving reveals the map in the same frame
+   * the class is removed, so the fade out still has something underneath it.
+   */
+  .map {
+    z-index: 1;
+    transition: visibility 0s linear 0s;
+  }
+  main.pov .map {
+    visibility: hidden;
+    transition: visibility 0s linear 0.55s;
+  }
 
   .globe {
     z-index: 2;
