@@ -81,6 +81,35 @@ const ANCHOR_TAU: Record<CameraMode, number> = {
 };
 
 /**
+ * Why the anchor is *predicted* forward before it is corrected.
+ *
+ * `ANCHOR_TAU` on its own is a first-order lag, and a first-order lag
+ * following a *moving* target never catches it: the steady-state error is
+ * speed times the time constant, which at 480 knots and 0.1 s is **twenty-five
+ * metres**. On an airliner that is most of a fuselage, and it showed exactly
+ * as you would expect — every external view aims at the damped anchor while
+ * the model is drawn at the true position, so the aeroplane sat permanently
+ * off to one side of views whose entire purpose is to centre it. The faster
+ * the aircraft, the further out of frame.
+ *
+ * The fix is to advance the anchor along the aircraft's own velocity each
+ * frame and let the damping act only on what is left over. The velocity is
+ * taken from the feed — ground speed along the track, plus the vertical rate —
+ * rather than learned from successive positions, and that choice matters:
+ *
+ * An alpha-beta filter that learns the rate from the residual was tried first
+ * and is quietly unsafe here. `dt` is clamped to 100 ms so a backgrounded tab
+ * cannot teleport the world, but the *positions* keep advancing with wall
+ * clock, so every stall hands the filter a jump of several hundred metres
+ * labelled as one tenth of a second. It faithfully concludes the aircraft is
+ * doing four thousand metres a second, and the camera is flung off into
+ * space. Measured, in this application, at 4741 m/s against a true 216.
+ *
+ * Reading the speed the aircraft is broadcasting cannot diverge, because
+ * nothing accumulates.
+ */
+
+/**
  * Damping for the airframe's *attitude*, seconds.
  *
  * The track filter's continuous small corrections to pitch and roll are
@@ -111,6 +140,9 @@ const _bodyQuat = new Quaternion();
 const _sForward = new Vector3();
 const _sRight = new Vector3();
 const _sUp = new Vector3();
+const _residual = new Vector3();
+const _velocity = new Vector3();
+const _horizontal = new Vector3();
 
 /** Orientation looking along `forward` with `up` as the vertical reference. */
 function lookQuaternion(forward: Vector3, up: Vector3, out: Quaternion): Quaternion {
@@ -120,6 +152,33 @@ function lookQuaternion(forward: Vector3, up: Vector3, out: Quaternion): Quatern
   _trueUp.crossVectors(_tmp, _right).normalize();
   _basis.makeBasis(_right, _trueUp, _tmp);
   return out.setFromRotationMatrix(_basis);
+}
+
+/**
+ * The aircraft's velocity in ECEF, from what it is broadcasting.
+ *
+ * Ground speed is along the *track*, and `frame.forward` is along the
+ * *heading*; the two differ by the drift angle, a few degrees in a strong
+ * crosswind. Projecting the body axis onto the horizontal and using that is
+ * therefore slightly wrong — by speed times the sine of the drift angle, which
+ * is under a metre of residual for the damping to absorb, against the
+ * twenty-five it exists to remove.
+ */
+function velocityOf(sample: SampledAircraft, frame: AircraftFrame, out: Vector3): Vector3 {
+  const groundMps = sample.groundSpeedKt * 0.514_444;
+  const verticalMps = (sample.verticalRateFpm * FEET_TO_METRES) / 60;
+
+  _horizontal
+    .copy(frame.forward)
+    .addScaledVector(frame.localUp, -frame.forward.dot(frame.localUp));
+
+  const length = _horizontal.length();
+  if (length < 1e-6) return out.set(0, 0, 0);
+
+  return out
+    .copy(_horizontal)
+    .multiplyScalar(groundMps / length)
+    .addScaledVector(frame.localUp, verticalMps);
 }
 
 /** Modes whose whole job is to keep the aircraft in frame. */
@@ -302,7 +361,15 @@ export class PovController {
       this.smoothedBody.copy(bodyQuaternion);
       this.initialised = true;
     } else {
-      this.smoothedAnchor.lerp(aircraft, 1 - Math.exp(-dt / ANCHOR_TAU[this.state.mode]));
+      // Carry the anchor along the aircraft's own velocity, then damp only the
+      // discrepancy that is left. See the note above `ANCHOR_TAU`.
+      this.smoothedAnchor.addScaledVector(velocityOf(sample, frame, _velocity), dt);
+      _residual.copy(aircraft).sub(this.smoothedAnchor);
+      this.smoothedAnchor.addScaledVector(
+        _residual,
+        1 - Math.exp(-dt / ANCHOR_TAU[this.state.mode]),
+      );
+
       this.smoothedBody.slerp(bodyQuaternion, 1 - Math.exp(-dt / BODY_TAU));
     }
 
@@ -447,6 +514,11 @@ export class PovController {
    * cannot change while the same aircraft is being flown, and this runs every
    * frame.
    */
+  /** The airframe currently being framed, for anything that has to match it. */
+  get airframe(): AirframeShape | null {
+    return this.shape;
+  }
+
   private airframeOf(sample: SampledAircraft): AirframeShape {
     if (this.shapeHex !== sample.hex || !this.shape) {
       this.shape = shapeFor(registry.knownTypeCode(sample.hex), sample.latest.category ?? null);

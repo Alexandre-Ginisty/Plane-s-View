@@ -13,7 +13,7 @@
  */
 
 import type { ProviderHealth } from '@/data/adsb/client';
-import type { NetworkReadout, StreamingProfile } from '@/net/quality';
+import { DEFAULT_QUALITY, type NetworkReadout, type QualityPreference, type StreamingProfile } from '@/net/quality';
 import type { CameraMode } from '@/render/pov';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
 import type { SampledAircraft } from '@/state/traffic';
@@ -55,6 +55,18 @@ class AppStore {
 
   cameraMode = $state<CameraMode>('cockpit');
   imageryId = $state('esri');
+  /** The user's detail ceiling. A ceiling, not a level — see `preference.ts`. */
+  quality = $state<QualityPreference>(DEFAULT_QUALITY);
+
+  /**
+   * Engine sound, off until asked for.
+   *
+   * Off is not timidity about the autoplay policy — a browser tab that starts
+   * making engine noises on load is a bad guest whatever the policy allows,
+   * and the people most likely to have several tabs open are the ones most
+   * likely to want this one.
+   */
+  sound = $state(false);
 
   providers = $state<ProviderHealth[]>([]);
   aircraftCount = $state(0);

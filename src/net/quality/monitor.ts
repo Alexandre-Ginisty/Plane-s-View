@@ -21,6 +21,7 @@ import {
   type StreamingProfile,
   type TransferSample,
 } from './profile';
+import { capGrade, type QualityPreference } from './preference';
 import { browserEnvironment, type NetworkEnvironment } from './environment';
 
 /** Samples kept. Enough to be stable, few enough to react within seconds. */
@@ -210,8 +211,45 @@ export class NetworkMonitor {
     }
   }
 
+  /**
+   * The user's ceiling on the measured grade.
+   *
+   * Defaults to `high`, meaning *no* ceiling: on its own this class is a
+   * measuring instrument and reports what it measured. The product decision
+   * — that a first visit should be economical — belongs to the app, which
+   * calls `setQuality` at boot with the stored preference. Keeping the default
+   * here uncapped is also what lets these tests assert what the link actually
+   * graded as rather than what a preference allowed through.
+   */
+  private quality: QualityPreference = 'high';
+
+  /** Apply the user's detail ceiling. Emits if the effective profile moved. */
+  setQuality(preference: QualityPreference): void {
+    if (this.quality === preference) return;
+    const before = this.profile.grade;
+    this.quality = preference;
+    if (this.profile.grade !== before) this.emit();
+  }
+
+  get qualityPreference(): QualityPreference {
+    return this.quality;
+  }
+
+  /** What the link measured, before the user's ceiling. */
+  get measuredGrade(): NetworkGrade {
+    return this.grade;
+  }
+
+  /**
+   * What every consumer should actually stream at.
+   *
+   * The measurement held under the user's ceiling — see `preference.ts`. The
+   * ceiling can only ever lower this: a preference cannot make a weak link
+   * carry more, and pretending otherwise is the exact failure the grades exist
+   * to prevent.
+   */
   get profile(): StreamingProfile {
-    return profileFor(this.grade);
+    return profileFor(capGrade(this.grade, this.quality));
   }
 
   subscribe(listener: NetworkListener): () => void {
@@ -482,6 +520,11 @@ export class NetworkMonitor {
 
   private commit(grade: NetworkGrade): void {
     this.grade = grade;
+    this.emit();
+  }
+
+  /** Tell every consumer what the effective profile is now. */
+  private emit(): void {
     const profile = this.profile;
     const readout = this.readout();
     for (const listener of this.listeners) listener(profile, readout);

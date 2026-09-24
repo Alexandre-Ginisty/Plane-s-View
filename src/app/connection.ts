@@ -66,6 +66,8 @@ const GRADE_MESSAGE: Record<NetworkGrade, { text: string; level: 'info' | 'warn'
 
 export class ConnectionSupervisor {
   private probeAccumulator = 0;
+  /** Last grade announced to the user, so only real changes are announced. */
+  private announcedGrade: NetworkGrade | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly onConnectivityChange = (): void => this.handleConnectivityChange();
 
@@ -76,9 +78,17 @@ export class ConnectionSupervisor {
    */
   constructor(private readonly onProfile: (profile: StreamingProfile) => void) {}
 
-  /** Largest radius the traffic query may ask for on this link, nm. */
+  /**
+   * Largest radius the traffic query may ask for on this link, nm.
+   *
+   * From the measured grade, not the user's detail ceiling. Detail is about
+   * how sharp the terrain is; this is about how much JSON the link can carry.
+   * Tying them together meant choosing standard detail quietly cut the number
+   * of aircraft on the map from a 250 nm circle to an 80 nm one, which is not
+   * a thing anyone asked for and not a thing the setting says it does.
+   */
   get feedRadiusCapNm(): number {
-    return FEED_RADIUS_CAP_NM[networkMonitor.profile.grade];
+    return FEED_RADIUS_CAP_NM[networkMonitor.measuredGrade];
   }
 
   get profile(): StreamingProfile {
@@ -101,11 +111,28 @@ export class ConnectionSupervisor {
       app.networkProfile = profile;
       this.onProfile(profile);
 
-      const message = GRADE_MESSAGE[profile.grade];
+      // The *measured* grade, not the effective profile.
+      //
+      // The profile is the measurement held under the user's detail ceiling
+      // (see `@/net/quality/preference`), so on standard detail it reads
+      // `slow` however good the link is — and this would then announce "Slow
+      // connection" to someone on fibre who had simply left the app on its
+      // default. These messages exist to explain the connection; a message
+      // that names the wrong cause sends the user to fix the wrong thing.
+      // Announce a grade *change*, not every emission.
+      //
+      // The monitor now emits when the user's detail ceiling moves as well as
+      // when the link does, so an unguarded notify fired "Connection
+      // recovered — back to full detail" the instant someone switched to high
+      // detail. Nothing about the connection had happened.
+      if (readout.grade === this.announcedGrade) return;
+      this.announcedGrade = readout.grade;
+
+      const message = GRADE_MESSAGE[readout.grade];
       // `fast` is not announced. Nobody needs to be told their connection is
       // fine, and a toast for it would fire every time a train left a tunnel.
-      if (profile.grade !== 'fast') {
-        app.notify(message.text, message.level, profile.grade === 'offline' ? 0 : 8000);
+      if (readout.grade !== 'fast') {
+        app.notify(message.text, message.level, readout.grade === 'offline' ? 0 : 8000);
       }
     });
 

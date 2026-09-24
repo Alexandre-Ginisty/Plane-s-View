@@ -57,6 +57,96 @@ function rig(): { pov: PovController; camera: PerspectiveCamera; origin: Floatin
   return { pov, camera, origin };
 }
 
+/**
+ * Fly the aircraft east at its reported ground speed.
+ *
+ * The missing ingredient in everything below it: every other test feeds the
+ * same sample every frame, and a target that never moves cannot reveal a
+ * filter that cannot follow a moving one.
+ */
+function flyEast(base: SampledAircraft, frame: number, dt: number): SampledAircraft {
+  const metresPerSecond = base.groundSpeedKt * 0.514_444;
+  const metresPerDegree = 111_320 * Math.cos((base.lat * Math.PI) / 180);
+  return { ...base, lon: base.lon + (metresPerSecond * dt * frame) / metresPerDegree };
+}
+
+describe('following an aircraft that is actually moving', () => {
+  const dt = 1 / 60;
+
+  it('keeps a fast airliner centred in orbit', () => {
+    /*
+     * The bug this exists for. A plain first-order lag on the anchor has a
+     * steady-state error of speed times time constant — at 480 knots and
+     * 0.1 s that is twenty-five metres, most of a fuselage — and the orbit
+     * camera aims at the anchor while the model is drawn at the true
+     * position. The aeroplane therefore sat permanently off to one side of
+     * the one view whose entire purpose is to centre it, and every test
+     * passed because none of them moved it.
+     */
+    const { pov, camera, origin } = rig();
+    pov.setMode('orbit');
+    const base = aircraft();
+
+    let sample = base;
+    for (let frame = 0; frame < 240; frame++) {
+      sample = flyEast(base, frame, dt);
+      pov.update(camera, sample, dt);
+    }
+
+    expect(subjectOffset(camera, origin, sample)).toBeLessThan(0.05);
+  });
+
+  it('keeps it centred in chase and wing views too', () => {
+    for (const mode of ['chase', 'wing'] as const) {
+      const { pov, camera, origin } = rig();
+      pov.setMode(mode);
+      const base = aircraft();
+
+      let sample = base;
+      for (let frame = 0; frame < 240; frame++) {
+        sample = flyEast(base, frame, dt);
+        pov.update(camera, sample, dt);
+      }
+
+      expect(subjectOffset(camera, origin, sample), mode).toBeLessThan(0.1);
+    }
+  });
+
+  it('still absorbs a jump rather than snapping to it', () => {
+    // The filter has to stay a filter. A new fix that disagrees with the
+    // track by thirty metres is the tremor this exists to remove, and it must
+    // not arrive in one frame.
+    const { pov, camera, origin } = rig();
+    pov.setMode('orbit');
+    const base = aircraft({ groundSpeedKt: 0 });
+
+    for (let frame = 0; frame < 120; frame++) pov.update(camera, base, dt);
+
+    const jumped = { ...base, lat: base.lat + 0.0005 }; // about 55 m north
+    pov.update(camera, jumped, dt);
+
+    // One frame later the camera has moved a little towards it, not all of it.
+    const settled = subjectOffset(camera, origin, base);
+    expect(settled).toBeGreaterThan(0);
+
+    for (let frame = 0; frame < 120; frame++) pov.update(camera, jumped, dt);
+    expect(subjectOffset(camera, origin, jumped)).toBeLessThan(0.05);
+  });
+});
+
+/**
+ * A parked aircraft, for the tests that measure the camera against fixed
+ * world coordinates.
+ *
+ * Explicit, because the default sample reports 480 knots and the suite used to
+ * hold it at one set of coordinates anyway — a state no real aircraft is ever
+ * in, and precisely the reason a filter that could not follow a moving target
+ * went unnoticed for so long. Anything measuring absolute displacement wants a
+ * genuinely stationary subject; anything measuring *following* wants
+ * `flyEast`, above.
+ */
+const parked = (): SampledAircraft => aircraft({ groundSpeedKt: 0, verticalRateFpm: 0 });
+
 describe('PovController framing', () => {
   /**
    * The regression. Position and orientation used to be smoothed on separate
@@ -67,7 +157,7 @@ describe('PovController framing', () => {
    */
   it('keeps the aircraft centred throughout an orbit drag', () => {
     const { pov, camera, origin } = rig();
-    const s = aircraft();
+    const s = parked();
     pov.setMode('orbit');
     for (let i = 0; i < 30; i++) pov.update(camera, s, 1 / 60);
 
@@ -91,7 +181,7 @@ describe('PovController framing', () => {
   it('keeps it centred in chase and tower too', () => {
     for (const mode of ['chase', 'tower'] as const) {
       const { pov, camera, origin } = rig();
-      const s = aircraft();
+      const s = parked();
       pov.setMode(mode);
       for (let i = 0; i < 40; i++) pov.update(camera, s, 1 / 60);
       expect(subjectOffset(camera, origin, s), mode).toBeLessThan(0.01);
@@ -193,7 +283,7 @@ describe('PovController input latency', () => {
     // second — the most obvious lag in the app, because orbit is the mode
     // people drag hardest.
     const { pov, camera } = rig();
-    const s = aircraft();
+    const s = parked();
 
     pov.setMode('orbit');
     pov.update(camera, s, 1 / 60);

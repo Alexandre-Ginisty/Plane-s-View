@@ -68,8 +68,10 @@ import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
 import {
   DESCENT_TRIGGER_M,
   REFINE_TEXELS,
+  RELIEF,
   ROOT_ZOOM,
   type GlobeOptions,
+  type ReliefDetail,
 } from './constants';
 import { evictDistantTiles, type TileMap } from './eviction';
 import { SceneSynchroniser } from './sceneSync';
@@ -78,7 +80,7 @@ import { TileStreamer, type LoadFrontier } from './streaming';
 import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight } from './terrainQuery';
 import { TileNode } from './tileNode';
 
-export type { GlobeOptions } from './constants';
+export type { GlobeOptions, ReliefDetail } from './constants';
 
 export interface GlobeStats {
   residentTiles: number;
@@ -100,6 +102,7 @@ export class Globe {
   private readonly streamer: TileStreamer;
   /** Owns the Three.js side: meshes, materials, fades. */
   private readonly sync: SceneSynchroniser;
+  private relief: ReliefDetail = 'standard';
 
   private imagery: ImagerySource = DEFAULT_IMAGERY;
   private options: Required<GlobeOptions>;
@@ -208,6 +211,53 @@ export class Globe {
       this.streamer.settle(node);
     }
     this.streamer.flushQueue();
+  }
+
+  /**
+   * How much relief the terrain is built with. See `RELIEF`.
+   *
+   * Every resident tile is rebuilt, because the mesh density and the vertical
+   * exaggeration are baked into the geometry the worker produced — changing
+   * the setting and waiting for the quadtree to replace tiles on its own would
+   * leave the world half in one relief and half in the other, with a visible
+   * step wherever the two met. Textures are kept: nothing about them changed,
+   * and dropping them would black out the globe for a second for no reason.
+   */
+  setRelief(detail: ReliefDetail): void {
+    if (this.relief === detail) return;
+    this.relief = detail;
+
+    const settings = RELIEF[detail];
+    this.options = {
+      ...this.options,
+      baseResolution: settings.baseResolution,
+      nearResolution: settings.nearResolution,
+      exaggeration: settings.exaggeration,
+    };
+    this.streamer.setOptions(this.options);
+    this.sync.setAmbient(settings.ambient);
+
+    for (const node of this.nodes.values()) {
+      this.streamer.cancelGeometry(node);
+      if (node.mesh) {
+        this.scene.remove(node.mesh);
+        node.mesh = null;
+        node.attached = false;
+      }
+      node.geometry?.dispose();
+      node.geometry = null;
+      node.heights = null;
+      node.geometryState = 'idle';
+      node.geometryAttempts = 0;
+      node.geometryRetryFrame = 0;
+      this.streamer.settle(node);
+    }
+    this.streamer.flushQueue();
+  }
+
+  /** Which relief the terrain is currently built with. */
+  get reliefDetail(): ReliefDetail {
+    return this.relief;
   }
 
   applyProfile(profile: StreamingProfile): void {

@@ -17,9 +17,15 @@
 import { Vector3 } from 'three';
 
 import { FloatingOrigin } from '@/core/frame';
-import { networkMonitor } from '@/net/quality';
+import {
+  loadQualityPreference,
+  networkMonitor,
+  saveQualityPreference,
+  type QualityPreference,
+} from '@/net/quality';
+import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
-import type { Globe } from '@/render/globe';
+import type { Globe, ReliefDetail } from '@/render/globe';
 import type { OwnAircraft } from '@/render/ownAircraft';
 import type { PovController, CameraMode } from '@/render/pov';
 import type { Traffic3D } from '@/render/traffic3d';
@@ -33,11 +39,13 @@ import { TrafficClient } from '@/data/adsb/client';
 import { registry } from '@/data/meta/registry';
 import { DEFAULT_IMAGERY, imageryById, type ImagerySource } from '@/tiles/sources';
 import { SelectionMap } from '@/map2d/map';
+import { flightRegime } from '@/state/regime';
 import { TrafficStore, type SampledAircraft } from '@/state/traffic';
 import { app } from '@/state/appStore.svelte';
 import { ConnectionSupervisor } from './connection';
 import { FALLBACK_VIEW, initialView } from './geolocate';
 import { PovSession } from './povSession';
+import { findRandomAircraft } from './shuffle';
 import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
@@ -57,6 +65,9 @@ export class Orchestrator {
   private traffic3d: Traffic3D | null = null;
   private ownAircraft: OwnAircraft | null = null;
   private pov: PovController | null = null;
+
+  /** Synthesised engine note. Silent until the user asks for it. */
+  private readonly audio = new EngineAudio();
   private map: SelectionMap | null = null;
 
   private query: TrafficQuery = { ...FALLBACK_VIEW, radiusNm: 120 };
@@ -73,6 +84,10 @@ export class Orchestrator {
 
   /** Held-fix state for the cockpit view, across feed gaps. */
   private readonly povSession = new PovSession();
+  /** Newest "take me somewhere else" search; older ones land nowhere. */
+  private shuffleToken = 0;
+  /** Relief chosen at boot, applied once the globe exists. */
+  private pendingRelief: ReliefDetail = 'standard';
 
   /** Watches the link and retunes the renderer to it. */
   private readonly connection = new ConnectionSupervisor((profile) =>
@@ -124,6 +139,14 @@ export class Orchestrator {
     // when the browser grants a position.
     this.query = { ...FALLBACK_VIEW, radiusNm: 120 };
 
+    // The detail ceiling before anything starts streaming, so a first visit
+    // never briefly downloads at full rate before the preference is read.
+    app.quality = loadQualityPreference();
+    networkMonitor.setQuality(app.quality);
+    // Relief before the first tile is requested, so nothing is built at the
+    // wrong resolution and then thrown away.
+    this.pendingRelief = app.quality === 'high' ? 'boosted' : 'standard';
+
     this.map = new SelectionMap(mapContainer, {
       onSelect: (hex) => void this.select(hex),
       onHover: (hex) => {
@@ -150,6 +173,7 @@ export class Orchestrator {
     this.traffic3d = surfaces.traffic3d;
     this.ownAircraft = surfaces.ownAircraft;
     this.pov = surfaces.pov;
+    this.globe.setRelief(this.pendingRelief);
 
     if (!this.engine.webgl2) {
       app.notify('WebGL2 unavailable — the 3D globe needs it.', 'error', 0);
@@ -250,10 +274,22 @@ export class Orchestrator {
           flying,
           registry.knownTypeCode(flying.hex),
           app.cameraMode !== 'cockpit',
+          dt,
           (lat, lon) => globe.sampleHeight(lat, lon),
         );
         this.ownAircraft.setSun(this.sunVec);
       }
+
+      /*
+       * The engines.
+       *
+       * Driven from the same inferred regime as the propellers (see
+       * `@/state/regime`): if the sound said climb power while the propellers
+       * said idle, the contradiction would be more noticeable than either
+       * being wrong on its own.
+       */
+      const airframe = pov.airframe;
+      if (airframe) this.audio.update(airframe, flightRegime(flying), app.cameraMode);
     }
 
     this.publish(dt, flying ?? selected, samples.length);
@@ -399,6 +435,10 @@ export class Orchestrator {
     }
 
     this.pov?.reset();
+    // `exitPov` suspends the graph rather than tearing it down, so the setting
+    // survives a trip back to the map and stepping into the next aircraft is
+    // not unexpectedly silent.
+    if (app.sound) void this.audio.enable();
 
     // Place the floating origin on the aircraft before the first frame, so the
     // very first tile selection is already centred correctly and nothing has
@@ -425,10 +465,69 @@ export class Orchestrator {
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
   }
 
+  /**
+   * Leave this aircraft for a random one somewhere else in the world.
+   *
+   * The button this serves used to be labelled "Pick another aircraft" and
+   * simply dropped back to the map, which is not picking anything — it is
+   * asking the user to go and do it. Now it does what it says: finds an
+   * airliner at altitude on the other side of the planet and puts you in it.
+   *
+   * Everything is guarded on the token rather than on a boolean, because the
+   * search takes a second or two over several regions and the user can press
+   * it again, press Escape, or select something on the map in the meantime;
+   * whichever action is newest wins and the older searches land nowhere.
+   */
+  async shuffleAircraft(): Promise<void> {
+    if (app.shuffling) return;
+    app.shuffling = true;
+    const token = ++this.shuffleToken;
+
+    try {
+      const found = await findRandomAircraft((query, signal) =>
+        this.client.fetchOnce(query, signal), { excludeHex: app.selectedHex });
+
+      if (token !== this.shuffleToken) return;
+
+      if (!found) {
+        app.notify('Could not reach the feed just now — try again in a moment.', 'warn');
+        return;
+      }
+
+      // Into the store before selecting: `select` and `enterPov` both read the
+      // track, and this aircraft is nowhere near the viewport query that has
+      // been running, so nothing else would have put it there.
+      this.traffic.ingestOne(found.aircraft);
+
+      // Point the feed at the new place *first*. Otherwise the next poll is
+      // still asking about the airspace we just left, and the aircraft we have
+      // just stepped into goes unrefreshed until the session gives up on it.
+      this.query = { lat: found.aircraft.lat, lon: found.aircraft.lon, radiusNm: 80 };
+
+      await this.select(found.aircraft.hex);
+      if (token !== this.shuffleToken) return;
+
+      this.enterPov();
+      app.notify(`Now over ${found.region.name}.`, 'info', 4500);
+    } finally {
+      // Unconditionally: only one search can be in flight (the guard above),
+      // so this is always *our* flag. Clearing it only on a token match left
+      // the button disabled for the rest of the session whenever the user
+      // pressed Escape while the search was running.
+      app.shuffling = false;
+    }
+  }
+
   exitPov(): void {
+    // Abandon any search in flight: landing in a random aircraft several
+    // seconds after the user asked to go back to the map is not a feature.
+    this.shuffleToken++;
     app.view = 'map';
     this.pov?.reset();
     this.povSession.reset();
+    // Nothing is being flown any more, so nothing should be heard. The setting
+    // itself is kept, so stepping into the next aircraft is not silent.
+    this.audio.disable();
 
     const sample = app.selectedHex ? this.traffic.sampleOne(app.selectedHex) : null;
     if (sample) this.map?.flyTo(sample.lat, sample.lon);
@@ -438,6 +537,50 @@ export class Orchestrator {
   setCameraMode(mode: CameraMode): void {
     this.pov?.setMode(mode);
     app.cameraMode = mode;
+  }
+
+  /**
+   * Turn the engine note on or off.
+   *
+   * Async because starting an AudioContext is, and because the browser may
+   * simply refuse — which is not an error worth a toast. The user pressed a
+   * speaker icon and nothing happened; a notice explaining autoplay policy
+   * would be the app blaming the browser at them.
+   */
+  async setSound(on: boolean): Promise<void> {
+    if (on) {
+      app.sound = await this.audio.enable();
+    } else {
+      this.audio.disable();
+      app.sound = false;
+    }
+  }
+
+  /**
+   * Change the detail ceiling, and remember it.
+   *
+   * Applied through the monitor rather than straight to the globe, because the
+   * ceiling has to reach everything the profile drives — the loader's
+   * concurrency and timeouts, the feed radius, the prefetch horizon — not just
+   * the zoom. Pushing it at the globe alone would leave the app asking for
+   * thirty parallel requests to serve a zoom-16 picture.
+   */
+  setQuality(preference: QualityPreference): void {
+    app.quality = preference;
+    saveQualityPreference(preference);
+    networkMonitor.setQuality(preference);
+    this.globe?.applyProfile(networkMonitor.profile);
+    /*
+     * Relief is the user's call, not the connection's.
+     *
+     * It has to be applied separately from the profile because it is not a
+     * bandwidth decision at all: the elevation tile is downloaded and decoded
+     * either way, and what changes is how much of it is turned into vertices.
+     * That is CPU and GPU. Tying it to the measured grade would refuse a
+     * detailed mesh to somebody on a fast machine and a slow link, who can
+     * afford it perfectly well.
+     */
+    this.globe?.setRelief(preference === 'high' ? 'boosted' : 'standard');
   }
 
   setImagery(id: string): void {
@@ -474,6 +617,7 @@ export class Orchestrator {
     this.globe?.dispose();
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
+    this.audio.dispose();
     this.map?.dispose();
   }
 }

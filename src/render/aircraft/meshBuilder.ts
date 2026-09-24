@@ -121,23 +121,125 @@ export class MeshBuilder {
     segments: number,
     offsetZ = 0,
   ): void {
+    this.tubeShaped(
+      sections.map(([y, r]) => [y, r, offsetZ] as const),
+      segments,
+    );
+  }
+
+  /**
+   * A tube whose axis is allowed to bend in Z.
+   *
+   * Which is what a fuselage does: the nose droops and the tail sweeps up, and
+   * a body built as a straight cylinder with a cone on each end is exactly the
+   * "plain capsule" silhouette this replaces. Each section carries its own
+   * centreline height, so the axis is a curve rather than a line.
+   */
+  tubeShaped(
+    sections: ReadonlyArray<readonly [y: number, radius: number, z: number]>,
+    segments: number,
+  ): void {
     for (let s = 0; s < sections.length - 1; s++) {
-      const [y0, r0] = sections[s]!;
-      const [y1, r1] = sections[s + 1]!;
+      const [y0, r0, z0] = sections[s]!;
+      const [y1, r1, z1] = sections[s + 1]!;
 
       for (let i = 0; i < segments; i++) {
         const a = (i / segments) * Math.PI * 2;
         const b = ((i + 1) / segments) * Math.PI * 2;
 
-        const p00 = [Math.cos(a) * r0, y0, Math.sin(a) * r0 + offsetZ] as const;
-        const p01 = [Math.cos(b) * r0, y0, Math.sin(b) * r0 + offsetZ] as const;
-        const p10 = [Math.cos(a) * r1, y1, Math.sin(a) * r1 + offsetZ] as const;
-        const p11 = [Math.cos(b) * r1, y1, Math.sin(b) * r1 + offsetZ] as const;
+        const p00 = [Math.cos(a) * r0, y0, Math.sin(a) * r0 + z0] as const;
+        const p01 = [Math.cos(b) * r0, y0, Math.sin(b) * r0 + z0] as const;
+        const p10 = [Math.cos(a) * r1, y1, Math.sin(a) * r1 + z1] as const;
+        const p11 = [Math.cos(b) * r1, y1, Math.sin(b) * r1 + z1] as const;
 
         if (r0 < 1e-6) this.tri(...p00, ...p11, ...p10);
         else if (r1 < 1e-6) this.tri(...p00, ...p01, ...p11);
         else this.quad(p00, p01, p11, p10);
       }
+    }
+  }
+
+  /**
+   * Index of the next vertex component, for use with `translateFrom`.
+   *
+   * The builder has no notion of a transform stack, and it does not need one:
+   * the only thing ever wanted is "build that where it belongs", which is a
+   * translation applied to the run of vertices just written. Every call site
+   * used to open-code the same loop over `positions` with a saved length, and
+   * two of them got the stride wrong.
+   */
+  mark(): number {
+    return this.positions.length;
+  }
+
+  /** Move everything written since `mark` by a fixed offset. */
+  translateFrom(mark: number, dx: number, dy: number, dz: number): void {
+    for (let i = mark; i < this.positions.length; i += 3) {
+      this.positions[i] = this.positions[i]! + dx;
+      this.positions[i + 1] = this.positions[i + 1]! + dy;
+      this.positions[i + 2] = this.positions[i + 2]! + dz;
+    }
+  }
+
+  /**
+   * Rotate everything written since `mark` about the +Y axis.
+   *
+   * Propeller blades and rotor blades are one blade built once and repeated at
+   * a set of azimuths, which is far less error-prone than parameterising the
+   * blade outline by its angle — the rotorcraft builder does the latter and is
+   * the reason this exists.
+   */
+  rotateYFrom(mark: number, radians: number): void {
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    for (let i = mark; i < this.positions.length; i += 3) {
+      const x = this.positions[i]!;
+      const z = this.positions[i + 2]!;
+      this.positions[i] = x * cos - z * sin;
+      this.positions[i + 2] = x * sin + z * cos;
+    }
+  }
+
+  /** An axis-aligned box, given opposite corners. */
+  box(
+    min: readonly [number, number, number],
+    max: readonly [number, number, number],
+  ): void {
+    const [x0, y0, z0] = min;
+    const [x1, y1, z1] = max;
+
+    // +Z and -Z
+    this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]);
+    this.quad([x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [x0, y0, z0]);
+    // +X and -X
+    this.quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]);
+    this.quad([x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]);
+    // +Y and -Y
+    this.quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]);
+    this.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]);
+  }
+
+  /**
+   * A tube whose axis runs along +X rather than +Y.
+   *
+   * Undercarriage axles and rotor shafts, which is the whole of its use. The
+   * alternative is building along +Y and rotating, and a rotation helper that
+   * exists for two call sites is more code than this.
+   */
+  tubeX(
+    sections: ReadonlyArray<readonly [x: number, radius: number]>,
+    segments: number,
+  ): void {
+    const mark = this.mark();
+    this.tube(sections.map(([x, r]) => [x, r] as const), segments);
+    // Built along +Y, then rotated a quarter turn about +Z so the axis lands
+    // on +X. A rotation, not a swap of the two axes: swapping them mirrors the
+    // geometry, which reverses every winding and leaves the tube inside out.
+    for (let i = mark; i < this.positions.length; i += 3) {
+      const x = this.positions[i]!;
+      const y = this.positions[i + 1]!;
+      this.positions[i] = y;
+      this.positions[i + 1] = -x;
     }
   }
 

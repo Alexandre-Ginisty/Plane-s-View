@@ -136,6 +136,15 @@ export class TileStreamer {
     }
   }
 
+  /** Supersede any geometry load in flight for this node and withdraw it. */
+  cancelGeometry(node: TileNode): void {
+    node.geometryGen++;
+    if (node.geometryRequestKey !== null) {
+      this.loader.cancel(node.geometryRequestKey);
+      node.geometryRequestKey = null;
+    }
+  }
+
   flushQueue(): void {
     this.loader.cancelAllQueued();
   }

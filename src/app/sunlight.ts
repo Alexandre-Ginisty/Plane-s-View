@@ -10,7 +10,8 @@
 
 import type { Vector3 } from 'three';
 
-import { clamp, enuBasis } from '@/core/math/geo';
+import { enuBasis } from '@/core/math/geo';
+import { fogDensityFor } from '@/render/atmosphere';
 import { sunDirectionEcef, sunElevation } from '@/core/sun';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
@@ -42,10 +43,4 @@ export function updateSunlight(
   // Terrain fades into the same colour the sky shows at the horizon, so the
   // edge of loaded terrain has nothing to give it away.
   globe.setAtmosphere(engine.horizonColor, fogDensityFor(elevation));
-}
-
-/** Thicker haze low down and at night; thinner in clear daylight. */
-export function fogDensityFor(sunElevationDeg: number): number {
-  const day = clamp((sunElevationDeg + 6) / 12, 0, 1);
-  return 2.2e-6 - 1.1e-6 * day;
 }

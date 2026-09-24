@@ -30,9 +30,12 @@
  * and error target, the traffic client its query radius.
  *
  * `profile.ts` is the policy (grades and what each one permits),
- * `monitor.ts` the measurement, `environment.ts` the browser hints.
+ * `monitor.ts` the measurement, `environment.ts` the browser hints, and
+ * `preference.ts` the user's ceiling on the result — which can lower the
+ * measurement but never raise it.
  */
 
 export * from './profile';
 export * from './environment';
+export * from './preference';
 export * from './monitor';

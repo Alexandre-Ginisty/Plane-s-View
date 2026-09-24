@@ -9,35 +9,114 @@
  *
  * It is hidden in cockpit view (the camera is inside it) and shown in every
  * external view. Rebuilt only when the type changes, which is once per flight.
+ *
+ * ## What moves
+ *
+ * The model is four buffers under one group (see `@/render/aircraft`), and two
+ * of them are conditional rather than static:
+ *
+ *   - the **undercarriage** appears below circuit height and retracts above it
+ *   - the **propellers and rotors** turn, at a rate taken from the inferred
+ *     flight regime, cross-fading into a blur disc once they are turning fast
+ *     enough for the blades to alias
+ *
+ * Neither is decoration. A turboprop with static propellers is the first thing
+ * anyone who likes aeroplanes will notice, and an airliner cruising with its
+ * gear down is the second.
  */
 
 import {
   AmbientLight,
-  BufferGeometry,
   Color,
   DirectionalLight,
+  DoubleSide,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
+  Quaternion,
   Scene,
   Vector3,
 } from 'three';
 import { FEET_TO_METRES, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
-import { buildAircraftModel, type AirframeShape } from './aircraft';
+import { flightRegime } from '@/state/regime';
+import {
+  bladeOpacity,
+  buildAircraftModel,
+  disposeAircraftModel,
+  propellerRpm,
+  rotorRpm,
+  visibleSpinRate,
+  type AircraftModel,
+  type AirframeShape,
+  type Spinner,
+} from './aircraft';
+import { loadModelFor } from './aircraft/library';
+import type { LoadedModel } from './aircraft/pvm';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
+
+/**
+ * Height above ground at which the gear comes down, metres.
+ *
+ * 750 m is about 2500 ft, which is where a jet on an ILS is configured and
+ * comfortably above circuit height for everything else. Being early is free;
+ * being late means an aircraft touching down on its belly.
+ */
+const GEAR_DOWN_AGL_M = 750;
+
+const MODEL_AXIS = new Vector3(0, 1, 0);
+const _axis = new Vector3();
+const _base = new Quaternion();
+const _spin = new Quaternion();
+
+/** A spinner's meshes and the state needed to drive them. */
+interface SpinnerNode {
+  drive: Spinner['drive'];
+  axis: readonly [number, number, number];
+  direction: 1 | -1;
+  blades: Mesh;
+  /** Blur disc, where the source provides one. */
+  disc: Mesh | null;
+  bladeMaterial: { opacity: number };
+  discMaterial: { opacity: number } | null;
+  angle: number;
+}
 
 export class OwnAircraft {
   readonly scene = new Scene();
   private readonly group = new Group();
-  private mesh: Mesh | null = null;
-  private geometry: BufferGeometry | null = null;
+  /** Scaled to the real airframe; every part of the model hangs off it. */
+  private readonly model = new Group();
 
-  private readonly material = new MeshLambertMaterial({
+  private built: AircraftModel | null = null;
+  private gearMeshes: Mesh[] = [];
+  private spinners: SpinnerNode[] = [];
+  /** Materials this instance created and must dispose. Library ones are shared. */
+  private owned: { dispose(): void }[] = [];
+
+  /** Bare metal and paint. */
+  private readonly hullMaterial = new MeshLambertMaterial({
     color: 0xdfe6ee,
     emissive: new Color(0x0a1420),
+  });
+
+  /**
+   * Glass and shadow.
+   *
+   * Nearly black with a cold emissive floor, so the windows stay readable as
+   * *windows* on the night side instead of vanishing into the fuselage.
+   */
+  private readonly trimMaterial = new MeshLambertMaterial({
+    color: 0x10161d,
+    emissive: new Color(0x0a1626),
+  });
+
+  private readonly gearMaterial = new MeshLambertMaterial({
+    color: 0x2a2f36,
+    emissive: new Color(0x05080c),
   });
 
   /** Type the current geometry was built for, so it is not rebuilt per frame. */
@@ -50,6 +129,7 @@ export class OwnAircraft {
 
   constructor(private readonly origin: FloatingOrigin) {
     this.scene.add(this.group);
+    this.group.add(this.model);
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
     this.scene.add(this.ambient);
@@ -62,29 +142,162 @@ export class OwnAircraft {
     return this.shape?.length ?? 40;
   }
 
+  /**
+   * Make sure the right model is on screen for this type.
+   *
+   * Two sources, in that order. The procedural model is built synchronously
+   * and shown at once; the real airframe, if the library has one, replaces it
+   * when its megabyte has arrived. Waiting for the download instead would put
+   * a hole in the middle of the screen at the moment the user stepped inside.
+   *
+   * Deliberately *not* gated on the detail preference. A model is about a
+   * megabyte, once per type, and then it is in the browser cache; the terrain
+   * behind it streams tens of megabytes in the same minute. It is also the
+   * subject of the shot. Withholding it to save a fraction of the terrain
+   * budget would be the wrong economy.
+   */
   private ensureModel(typeCode: string | null, category: string | null): void {
     const key = `${typeCode ?? ''}|${category ?? ''}`;
-    if (this.builtFor === key && this.mesh) return;
+    if (this.builtFor === key) return;
 
-    if (this.mesh) {
-      this.group.remove(this.mesh);
-      this.geometry?.dispose();
+    this.teardown();
+    this.builtFor = key;
+
+    const model = buildAircraftModel(typeCode, category, 'high');
+    this.built = model;
+    this.shape = model.shape;
+    this.applyProcedural(model);
+
+    void loadModelFor(typeCode).then((loaded) => {
+      // The user may have moved on while it was downloading.
+      if (!loaded || this.builtFor !== key) return;
+      this.applyLoaded(loaded);
+    });
+  }
+
+  /** Add a mesh to the scaled model group, with the conventions it needs. */
+  private attach(mesh: Mesh): Mesh {
+    mesh.frustumCulled = false;
+    this.model.add(mesh);
+    return mesh;
+  }
+
+  private applyProcedural(model: AircraftModel): void {
+    const still = (mesh: Mesh): Mesh => {
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      return this.attach(mesh);
+    };
+
+    still(new Mesh(model.hull, this.hullMaterial));
+    if (model.trim) still(new Mesh(model.trim, this.trimMaterial));
+    if (model.gear) this.gearMeshes.push(still(new Mesh(model.gear, this.gearMaterial)));
+
+    for (const spec of model.spinners) {
+      // Own materials per spinner: the opacity cross-fade is per-spinner state
+      // and sharing one material would make every propeller fade together.
+      const bladeMaterial = new MeshLambertMaterial({
+        color: 0x1d2228,
+        emissive: new Color(0x080c10),
+        transparent: true,
+      });
+      const discMaterial = new MeshBasicMaterial({
+        color: 0xb9c6d4,
+        transparent: true,
+        opacity: 0,
+        // Written into the depth buffer, a translucent disc hides everything
+        // drawn after it — including the terrain seen through it.
+        depthWrite: false,
+        side: DoubleSide,
+      });
+      this.owned.push(bladeMaterial, discMaterial);
+
+      const blades = this.attach(new Mesh(spec.geometry, bladeMaterial));
+      const disc = this.attach(new Mesh(spec.disc, discMaterial));
+      for (const mesh of [blades, disc]) {
+        mesh.position.set(spec.origin[0], spec.origin[1], spec.origin[2]);
+      }
+      disc.renderOrder = 2;
+
+      this.spinners.push({
+        drive: spec.drive,
+        axis: spec.axis,
+        direction: spec.direction,
+        blades,
+        disc,
+        bladeMaterial,
+        discMaterial,
+        angle: 0,
+      });
     }
 
-    const { geometry, shape } = buildAircraftModel(typeCode, category, 'high');
-    this.geometry = geometry;
-    this.shape = shape;
+    this.finishModel();
+  }
 
-    const mesh = new Mesh(geometry, this.material);
-    mesh.matrixAutoUpdate = false;
-    mesh.frustumCulled = false;
-    // The model is normalised to length 1; scale to the real airframe.
-    mesh.scale.setScalar(shape.length);
-    mesh.updateMatrix();
+  /**
+   * Swap in a real airframe from the library.
+   *
+   * The procedural model is torn down first rather than hidden: the two would
+   * otherwise occupy the same space and z-fight against each other, which is
+   * a far worse artefact than either model on its own.
+   */
+  private applyLoaded(loaded: LoadedModel): void {
+    this.clearMeshes();
 
-    this.group.add(mesh);
-    this.mesh = mesh;
-    this.builtFor = key;
+    const discs = new Map<string, Mesh>();
+    const pending: { part: (typeof loaded.parts)[number]; mesh: Mesh }[] = [];
+
+    for (const part of loaded.parts) {
+      const mesh = this.attach(new Mesh(part.geometry, part.material));
+      const spins = part.role !== 'hull' && part.role !== 'gear';
+      if (spins) mesh.position.set(part.origin[0], part.origin[1], part.origin[2]);
+      else {
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+      }
+
+      if (part.role === 'gear') this.gearMeshes.push(mesh);
+      else if (part.role === 'disc') {
+        mesh.renderOrder = 2;
+        // `propdiscL` belongs to `propL`. Matching by name is what the source
+        // models make available, and it is what the converter preserves.
+        discs.set(part.name.replace(/disc/i, '').toLowerCase(), mesh);
+      } else if (spins) pending.push({ part, mesh });
+    }
+
+    for (const { part, mesh } of pending) {
+      const disc = discs.get(part.name.toLowerCase()) ?? null;
+      this.spinners.push({
+        drive:
+          part.role === 'mainRotor'
+            ? 'mainRotor'
+            : part.role === 'tailRotor'
+              ? 'tailRotor'
+              : 'propeller',
+        axis: part.axis,
+        direction: 1,
+        blades: mesh,
+        disc,
+        bladeMaterial: part.material,
+        discMaterial: disc ? (disc.material as MeshBasicMaterial) : null,
+        angle: 0,
+      });
+      // The blur disc is only ever shown against the blades, so it starts off.
+      if (disc) {
+        (disc.material as MeshBasicMaterial).transparent = true;
+        (disc.material as MeshBasicMaterial).opacity = 0;
+        disc.visible = false;
+      }
+      part.material.transparent = true;
+    }
+
+    this.finishModel();
+  }
+
+  private finishModel(): void {
+    // The models are normalised to length 1; scale to the real airframe.
+    this.model.scale.setScalar(this.shape?.length ?? 40);
+    this.model.updateMatrix();
   }
 
   /**
@@ -100,6 +313,7 @@ export class OwnAircraft {
     sample: SampledAircraft,
     typeCode: string | null,
     visible: boolean,
+    dt: number,
     terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
     this.scene.visible = visible;
@@ -108,13 +322,9 @@ export class OwnAircraft {
     this.ensureModel(typeCode, sample.latest.category);
 
     let altM = sample.altFt * FEET_TO_METRES;
+    const terrainM = terrainHeightAt?.(sample.lat, sample.lon) ?? 0;
     if (this.shape && terrainHeightAt && (sample.latest.onGround || altM < GROUND_CHECK_CEILING_M)) {
-      altM = surfaceAltitudeM(
-        altM,
-        sample.latest.onGround,
-        terrainHeightAt(sample.lat, sample.lon),
-        clearanceFor(this.shape),
-      );
+      altM = surfaceAltitudeM(altM, sample.latest.onGround, terrainM, clearanceFor(this.shape));
     }
 
     const frame = aircraftFrame(sample, altM);
@@ -130,6 +340,53 @@ export class OwnAircraft {
     this.group.matrix.makeBasis(frame.right, frame.forward, frame.up);
     this.group.matrix.setPosition(this.group.position);
     this.group.matrixWorldNeedsUpdate = true;
+
+    const regime = flightRegime(sample);
+    const gearDown = regime.onGround || altM - terrainM < GEAR_DOWN_AGL_M;
+    for (const mesh of this.gearMeshes) mesh.visible = gearDown;
+    this.animateSpinners(dt, regime.power);
+  }
+
+  /** Turn every propeller and rotor, and fade blades into blur discs. */
+  private animateSpinners(dt: number, power: number): void {
+    if (this.spinners.length === 0 || !this.shape) return;
+    const shape = this.shape;
+
+    for (const node of this.spinners) {
+      const rpm = this.rpmFor(node.drive, shape, power);
+      node.angle += node.direction * visibleSpinRate(rpm) * Math.PI * 2 * dt;
+
+      _axis.set(node.axis[0], node.axis[1], node.axis[2]).normalize();
+      // Geometry is built in the plane normal to +Y, so it is first stood onto
+      // its own axis and then turned about it.
+      _base.setFromUnitVectors(MODEL_AXIS, _axis);
+      _spin.setFromAxisAngle(_axis, node.angle);
+      node.blades.quaternion.copy(_spin).multiply(_base);
+      node.disc?.quaternion.copy(_base);
+
+      const solid = bladeOpacity(rpm);
+      node.bladeMaterial.opacity = solid;
+      node.blades.visible = solid > 0.01;
+      // The disc is faint even at full blur: a propeller you cannot see
+      // through is a dinner plate.
+      if (node.disc && node.discMaterial) {
+        node.discMaterial.opacity = (1 - solid) * 0.3;
+        node.disc.visible = node.discMaterial.opacity > 0.01;
+      }
+    }
+  }
+
+  private rpmFor(drive: Spinner['drive'], shape: AirframeShape, power: number): number {
+    switch (drive) {
+      case 'mainRotor':
+        return rotorRpm(shape);
+      case 'tailRotor':
+        // Geared off the main rotor, and much faster — which is why it blurs
+        // solid while the main disc is still showing individual blades.
+        return rotorRpm(shape) * 5.2;
+      case 'propeller':
+        return propellerRpm(shape.kind === 'turboprop' ? 'turboprop' : 'piston', power);
+    }
   }
 
   /**
@@ -146,8 +403,34 @@ export class OwnAircraft {
     this.sun.updateMatrixWorld();
   }
 
+  /**
+   * Drop the meshes without touching the type.
+   *
+   * Split from `teardown` because swapping the procedural model for the real
+   * one keeps the type and the airframe shape — only the geometry changes.
+   */
+  private clearMeshes(): void {
+    this.model.clear();
+    this.gearMeshes = [];
+    this.spinners = [];
+    for (const material of this.owned) material.dispose();
+    this.owned = [];
+    // The library's geometries and materials are cached and shared between
+    // every aircraft of the type; only the procedurally generated ones belong
+    // to this instance.
+    if (this.built) disposeAircraftModel(this.built);
+    this.built = null;
+  }
+
+  private teardown(): void {
+    this.clearMeshes();
+    this.builtFor = null;
+  }
+
   dispose(): void {
-    this.geometry?.dispose();
-    this.material.dispose();
+    this.teardown();
+    this.hullMaterial.dispose();
+    this.trimMaterial.dispose();
+    this.gearMaterial.dispose();
   }
 }

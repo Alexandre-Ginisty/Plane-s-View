@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { gradeRank, profileFor } from '@/net/quality';
   import { imageryById } from '@/tiles/sources';
   import { TERRARIUM } from '@/tiles/sources';
   import { age } from './format';
@@ -35,12 +36,32 @@
   const profile = $derived(app.networkProfile);
   const net = $derived(app.network);
 
+  /*
+   * The link indicator reports the *measurement*, never the effective profile.
+   *
+   * They stopped being the same thing when the detail ceiling arrived: a user
+   * on fibre who has left the app on standard detail gets a profile graded
+   * `slow`, and reading that out as "Link: slow" tells them their connection
+   * is bad when it is their own setting. It is also the single most alarming
+   * thing this bar can say, so getting it wrong turns a preference into a
+   * support question.
+   *
+   * `app.network` is the raw readout and its grade is unfiltered, which is
+   * exactly what belongs here. The ceiling gets its own chip below.
+   */
+  const measured = $derived(net ? profileFor(net.grade) : null);
+
   const linkColor = $derived(
-    profile?.grade === 'offline' || profile?.grade === 'poor'
+    measured?.grade === 'offline' || measured?.grade === 'poor'
       ? 'var(--error)'
-      : profile?.grade === 'slow'
+      : measured?.grade === 'slow'
         ? 'var(--warn)'
         : 'var(--ok)',
+  );
+
+  /** True when detail is being held back by the setting rather than the link. */
+  const heldByPreference = $derived(
+    app.quality === 'low' && !!net && gradeRank(net.grade) > gradeRank('slow'),
   );
 
   /**
@@ -81,8 +102,22 @@
 
   <div class="link" title={linkTitle}>
     <span class="dot" style="background: {linkColor}"></span>
-    <span>{profile?.label ?? 'Link: measuring'}</span>
+    <span>{measured?.label ?? 'Link: measuring'}</span>
   </div>
+
+  {#if heldByPreference}
+    <!--
+      Only shown when the setting is what is limiting detail, never when the
+      link is. Otherwise it reads as an apology for a weak connection, and the
+      user goes looking for a problem that is one click away from being a
+      choice.
+    -->
+    <button
+      class="detail"
+      onclick={() => (app.showLayers = true)}
+      title="Your connection could carry more. Switch to high detail in the Imagery menu."
+    >Standard detail</button>
+  {/if}
 
   <div class="live">
     <span class="tabular">{app.aircraftCount}</span> aircraft
@@ -124,6 +159,17 @@
   .feed { display: flex; align-items: center; gap: 5px; }
   .feed.active a { color: var(--text-dim); font-weight: 600; }
   .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .detail {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--accent-dim);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(127, 223, 255, 0.25);
+  }
+  .detail:hover { color: var(--accent); background: rgba(127, 223, 255, 0.1); }
 
   .link { display: flex; align-items: center; gap: 5px; flex-shrink: 0; cursor: help; }
 

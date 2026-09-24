@@ -14,9 +14,56 @@
 export const ROOT_ZOOM = 2;
 
 /** Cross-fade duration for "own texture replaces inherited", seconds. */
-export const TEXTURE_FADE_SEC = 0.45;
+export const TEXTURE_FADE_SEC = 0.9;
 /** Fade-in for a tile entering the render set, seconds. */
 export const TILE_FADE_SEC = 0.3;
+
+/**
+ * How much relief the terrain is built with.
+ *
+ * `standard` is what the app has always done and stays the default; `boosted`
+ * is what the detail switch turns on.
+ *
+ * ## Resolution is free detail, and most of it was being thrown away
+ *
+ * A Terrarium tile is 256x256 samples. The mesh was 64 quads a side near the
+ * ground and 32 further out, so it kept 65x65 of those 65 536 elevations — six
+ * percent of an elevation map that had already been downloaded and decoded.
+ * Raising the near grid to 128 keeps a quarter of them, which is the single
+ * biggest gain available anywhere in the terrain and costs no bandwidth at
+ * all: the same PNG, meshed properly.
+ *
+ * ## Exaggeration is not free, and is deliberate
+ *
+ * 1.45x vertical is a lie about the shape of the Earth, and it is the lie
+ * every terrain viewer tells, for a reason worth stating: true scale is
+ * genuinely flat from the altitudes this app spends its time at. From FL350 a
+ * 2 km alp subtends a third of a degree against a hundred kilometres of
+ * ground, so a perfectly faithful globe reads as a painted sheet — which is
+ * exactly the complaint this setting answers.
+ *
+ * It is safe here only because it is applied in *one* place. The worker bakes
+ * it into the heights it returns, and those same heights are what
+ * `sampleHeight` reports to everything else — where an aircraft sits when it
+ * is on the ground, how far the camera has to be lifted to clear a hillside,
+ * when the undercarriage comes down. So the aeroplane stands on the terrain
+ * you can see rather than on an invisible true-scale one underneath it.
+ * Exaggerating in the shader instead would have broken all three.
+ */
+export type ReliefDetail = 'standard' | 'boosted';
+
+export interface ReliefSettings {
+  baseResolution: number;
+  nearResolution: number;
+  exaggeration: number;
+  /** Shadow floor in the terrain shader; lower makes slopes read harder. */
+  ambient: number;
+}
+
+export const RELIEF: Record<ReliefDetail, ReliefSettings> = {
+  standard: { baseResolution: 32, nearResolution: 64, exaggeration: 1, ambient: 0.45 },
+  boosted: { baseResolution: 48, nearResolution: 128, exaggeration: 1.45, ambient: 0.3 },
+};
 
 /** Highest terrain on Earth plus margin; used for conservative bounds. */
 export const MAX_TERRAIN_M = 9000;

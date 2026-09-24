@@ -111,11 +111,39 @@ export class SelectionMap {
         },
         layers: [
           { id: 'background', type: 'background', paint: { 'background-color': '#04070d' } },
-          { id: 'basemap', type: 'raster', source: 'basemap' },
+          {
+            id: 'basemap',
+            type: 'raster',
+            source: 'basemap',
+            paint: {
+              /*
+               * Longer than MapLibre's 300 ms default.
+               *
+               * A zoom step replaces every tile on screen at once, and at the
+               * default the old level is gone before the new one has finished
+               * decoding — so the picture blinks through a coarse ancestor on
+               * the way. Half a second is long enough that the two levels
+               * overlap for the whole swap and short enough not to smear a
+               * continuous pinch-zoom.
+               */
+              'raster-fade-duration': 500,
+            },
+          },
           ...AIRCRAFT_LAYERS,
         ],
       },
       attributionControl: { compact: true },
+      /*
+       * Keep what has already been downloaded.
+       *
+       * The default cache holds barely more than one screen, so zooming out
+       * and back in re-fetches tiles that were on screen a second earlier —
+       * which is most of what makes zooming feel abrupt rather than slow. This
+       * is memory the browser was going to spend on the same bytes anyway.
+       */
+      maxTileCacheSize: 512,
+      /** Symbol fades, matched to the raster cross-fade above. */
+      fadeDuration: 500,
       // Pitch and rotation belong to the 3D view; here they only get in the way.
       pitchWithRotate: false,
       dragRotate: false,
@@ -124,6 +152,18 @@ export class SelectionMap {
     });
 
     this.map = map;
+
+    /*
+     * A finer wheel.
+     *
+     * MapLibre's default rate turns one notch of a mouse wheel into a large
+     * jump, which reads as the map snapping between zoom levels rather than
+     * moving through them. A trackpad sends a stream of small deltas and does
+     * not need it; a wheel does, and the same setting serves both because it
+     * scales the delta rather than quantising it.
+     */
+    map.scrollZoom.setWheelZoomRate(1 / 800);
+
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
     map.addControl(new ScaleControl({ unit: 'nautical' }), 'bottom-left');
 

@@ -21,7 +21,8 @@ import { Color, Mesh, Scene, Vector3, Vector4 } from 'three';
 
 import type { FloatingOrigin } from '@/core/frame';
 import { TerrainMaterial } from '../terrainMaterial';
-import { TEXTURE_FADE_SEC, TILE_FADE_SEC } from './constants';
+import { CLEAR_DAY_DENSITY } from '../atmosphere';
+import { RELIEF, TEXTURE_FADE_SEC, TILE_FADE_SEC } from './constants';
 import type { TileMap } from './eviction';
 import type { TileNode } from './tileNode';
 
@@ -38,7 +39,11 @@ export class SceneSynchroniser {
 
   private sunDirection = new Vector3(1, 0, 0);
   private fogColor = new Color(0x8fb2d4);
-  private fogDensity = 1.2e-6;
+  private fogDensity = CLEAR_DAY_DENSITY;
+  /** Shadow floor handed to every terrain material. See `setAmbient`. */
+  private ambient = RELIEF.standard.ambient;
+  /** Planet centre in render space. Recomputed each frame: the origin moves. */
+  private readonly planetCentre = new Vector3();
 
   setSun(direction: Vector3): void {
     this.sunDirection.copy(direction).normalize();
@@ -50,6 +55,14 @@ export class SceneSynchroniser {
   }
 
   applyRenderSet(dt: number): { triangles: number; deepestZoom: number; rendered: number } {
+    // Render space is ECEF minus the origin, so the planet's centre sits at
+    // minus the origin. Read once per frame rather than per tile.
+    this.planetCentre.set(
+      -this.origin.current[0],
+      -this.origin.current[1],
+      -this.origin.current[2],
+    );
+
     const selected = new Set(this.renderSet);
     let triangles = 0;
     let deepest = 0;
@@ -91,7 +104,7 @@ export class SceneSynchroniser {
 
       material.setFade(node.opacity);
       material.setSun(this.sunDirection);
-      material.setFog(this.fogColor, this.fogDensity);
+      material.setFog(this.fogColor, this.fogDensity, this.planetCentre);
 
       // Deeper tiles draw after shallower ones, so a fading child always
       // composites over the parent it is replacing.
@@ -135,6 +148,7 @@ export class SceneSynchroniser {
     const material = new TerrainMaterial({
       fogColor: this.fogColor,
       fogDensity: this.fogDensity,
+      ambient: this.ambient,
     });
     const mesh = new Mesh(node.geometry, material);
     mesh.matrixAutoUpdate = false;
@@ -153,6 +167,18 @@ export class SceneSynchroniser {
       node.centerEcef[2] - this.origin.current[2],
     );
     node.mesh.updateMatrix();
+  }
+
+  /**
+   * Shadow floor for the terrain, and for every tile already on screen.
+   *
+   * Applied to the live materials as well as remembered for the ones built
+   * next, or changing the setting would relight the world one tile at a time
+   * as the quadtree happened to replace them.
+   */
+  setAmbient(value: number): void {
+    this.ambient = value;
+    for (const node of this.nodes.values()) node.material?.setAmbient(value);
   }
 
   /** Re-place every mesh after the floating origin moved. */

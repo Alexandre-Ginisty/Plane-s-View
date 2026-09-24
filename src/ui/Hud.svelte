@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { profileFor } from '@/net/quality';
   import { CAMERA_MODES } from '@/render/pov';
   import type { Orchestrator } from '@/app/orchestrator';
   import Attitude from './hud/Attitude.svelte';
@@ -42,10 +43,20 @@
    */
   const firstPerson = $derived(app.cameraMode === 'cockpit');
 
-  /** Only worth showing while it is actually constraining the picture. */
+  /*
+   * Only when the *link* is what is constraining the picture.
+   *
+   * Keyed on the measured grade, not the effective profile. Once the detail
+   * ceiling existed, a user on a strong connection who had left the app on
+   * standard detail got a profile graded `slow` and this banner announced
+   * "Detail reduced so the ground finishes loading instead of stalling" across
+   * the middle of their cockpit — blaming a connection that was fine for a
+   * setting they had chosen. An explanation that names the wrong cause is
+   * worse than no explanation.
+   */
   const degraded = $derived(
-    app.networkProfile && app.networkProfile.grade !== 'fast' && app.networkProfile.grade !== 'good'
-      ? app.networkProfile
+    app.network && app.network.grade !== 'fast' && app.network.grade !== 'good'
+      ? profileFor(app.network.grade)
       : null,
   );
 </script>
@@ -92,6 +103,19 @@
           title={mode.hint}
         >{mode.label}</button>
       {/each}
+
+      <!--
+        The engine note, next to the camera modes because it is the same kind
+        of control: it changes what the aircraft is like to be in rather than
+        what the app is doing. Off by default — see `app.sound`.
+      -->
+      <button
+        class="chip sound"
+        class:active={app.sound}
+        onclick={() => void orchestrator.setSound(!app.sound)}
+        title={app.sound ? 'Mute the engines' : 'Hear the engines'}
+        aria-pressed={app.sound}
+      >{app.sound ? 'Sound on' : 'Sound off'}</button>
     </nav>
 
     <button class="chip exit" onclick={() => orchestrator.exitPov()}>
@@ -185,6 +209,10 @@
     display: flex;
     gap: 3px;
   }
+
+  /* Set apart from the camera modes: it is a different kind of switch, and
+     grouping it with them invites the eye to read it as a sixth view. */
+  .sound { margin-left: 14px; }
 
   .exit { position: absolute; top: 18px; left: 24px; }
   .kbd {

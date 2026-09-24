@@ -26,6 +26,7 @@
  * are at their coarsest. Without it the eye immediately finds the boundary.
  */
 
+import { CLEAR_DAY_DENSITY, EARTH_RADIUS_M, SCALE_HEIGHT_M } from './atmosphere';
 import {
   BackSide,
   Color,
@@ -74,7 +75,12 @@ const fragmentShader = /* glsl */ `
 
   uniform vec3 sunDirection;
   uniform vec3 fogColor;
+  // Sea-level extinction per metre. See @/render/atmosphere.
   uniform float fogDensity;
+  uniform float fogScaleHeight;
+  // Planet centre in render space, i.e. minus the floating origin.
+  uniform vec3 planetCenter;
+  uniform float earthRadius;
   uniform float ambient;
 
   varying vec2 vUv;
@@ -99,8 +105,36 @@ const fragmentShader = /* glsl */ `
     // kept gentle: enough to reveal relief, not enough to double-light it.
     vec3 lit = albedo * (ambient + (1.0 - ambient) * lambert);
 
-    float distance = length(vWorldPosition - cameraPosition);
-    float fogAmount = 1.0 - exp(-distance * fogDensity);
+    /*
+     * Aerial perspective through an exponential atmosphere.
+     *
+     * A transcription of opticalDepth in @/render/atmosphere -- see that
+     * file for why a constant density is wrong in both directions at once, and
+     * for the tests that pin these numbers. Keep the two in step.
+     *
+     * This is what removes the ring of colour around the aircraft: the imagery
+     * provider serves a different dataset at deep zoom than at shallow, so the
+     * ground near the aircraft is graded cooler than the ground at the horizon.
+     * Fifty kilometres of air washes the difference out, exactly as it does
+     * from a real window.
+     */
+    float rayLength = length(vWorldPosition - cameraPosition);
+    float hFrag = max(length(vWorldPosition - planetCenter) - earthRadius, 0.0);
+    float hCam = max(length(cameraPosition - planetCenter) - earthRadius, 0.0);
+    float dh = hFrag - hCam;
+
+    float tau;
+    if (abs(dh) < 1.0) {
+      // Level ray: the closed form below divides by dh.
+      tau = fogDensity * exp(-hCam / fogScaleHeight) * rayLength;
+    } else {
+      tau = abs(
+        fogDensity * fogScaleHeight * (rayLength / dh) *
+        (exp(-hCam / fogScaleHeight) - exp(-hFrag / fogScaleHeight))
+      );
+    }
+
+    float fogAmount = 1.0 - exp(-tau);
     vec3 finalColor = mix(lit, fogColor, clamp(fogAmount, 0.0, 1.0));
 
     gl_FragColor = vec4(finalColor, tileOpacity);
@@ -132,7 +166,10 @@ export class TerrainMaterial extends ShaderMaterial {
         tileOpacity: { value: 1 },
         sunDirection: { value: new Vector3(1, 0, 0) },
         fogColor: { value: options.fogColor?.clone() ?? new Color(0x8fb2d4) },
-        fogDensity: { value: options.fogDensity ?? 1.2e-6 },
+        fogDensity: { value: options.fogDensity ?? CLEAR_DAY_DENSITY },
+        fogScaleHeight: { value: SCALE_HEIGHT_M },
+        planetCenter: { value: new Vector3(0, 0, 0) },
+        earthRadius: { value: EARTH_RADIUS_M },
         ambient: { value: options.ambient ?? 0.45 },
       },
       side: FrontSide,
@@ -180,9 +217,29 @@ export class TerrainMaterial extends ShaderMaterial {
     (this.uniforms['sunDirection']!.value as Vector3).copy(direction);
   }
 
-  setFog(color: Color, density: number): void {
+  /**
+   * Shadow floor: how bright a slope facing directly away from the sun is.
+   *
+   * Satellite imagery already contains the sun that lit it, so this stays high
+   * enough not to double-light the picture. Lowering it is what makes relief
+   * read as relief rather than as a photograph of relief, which is most of
+   * what the boosted terrain setting is for — geometry the eye cannot shade is
+   * geometry the eye does not see.
+   */
+  setAmbient(value: number): void {
+    this.uniforms['ambient']!.value = value;
+  }
+
+  /**
+   * @param planetCentre Where the centre of the Earth is in render space —
+   * the negated floating origin. Needed every frame because the origin moves,
+   * and an altitude measured against a stale centre puts the whole world at
+   * the wrong density after every rebase.
+   */
+  setFog(color: Color, density: number, planetCentre: Vector3): void {
     (this.uniforms['fogColor']!.value as Color).copy(color);
     this.uniforms['fogDensity']!.value = density;
+    (this.uniforms['planetCenter']!.value as Vector3).copy(planetCentre);
   }
 }
 

@@ -129,8 +129,46 @@ adsb.lol but seconds on adsb.fi.
 
 ---
 
+## Aircraft models
+
+Two sources, and the app moves between them without the user noticing.
+
+**Procedural.** `src/render/aircraft` generates an airframe from the ICAO type
+code: wing sweep and span, engine count and mounting, propeller blade count,
+winglet style, undercarriage layout. It covers every designator the type table
+knows and is what makes a Dash 8 look like a Dash 8 rather than like a generic
+twin. Original work, under this project's licence.
+
+**Converted.** For the types that have one, `tools/fgmodel/convert.mjs` pulls a
+real textured airframe from the [FlightGear](https://www.flightgear.org/)
+add-on hangar and converts it to a compact binary the app loads on demand. The
+procedural model is shown immediately and the real one replaces it when it
+arrives, so nothing ever waits on a download.
+
+Run `node tools/fgmodel/convert.mjs` to regenerate `public/models`.
+
+### Licence of the converted models
+
+**They are GPL-2.0 and this project is MIT — those are different licences, on
+purpose, and it matters.**
+
+The FlightGear aircraft are licensed GPL-2.0 by their original authors. A
+converted model is a derivative work of one, so it stays GPL-2.0; the upstream
+licence and author files are reproduced under `public/models/credits/` and the
+model catalogue is `public/models/CREDITS.md`. Nothing in `src/` derives from
+them — the app loads them at runtime as data, the way it loads a map tile — so
+the application code remains MIT.
+
+That reading is the ordinary one for a program that ships separately-licensed
+assets, but it *is* a reading. If you would rather not rely on it, delete
+`public/models`: the app works exactly as before with the procedural models,
+which is what it does today for every type the library does not cover.
+
 ## Attribution
 
 Required and always on screen: Esri World Imagery; Sentinel-2 cloudless by EOX;
 Mapzen Terrain Tiles on AWS Open Data; adsb.lol, adsb.fi and OpenSky Network;
 adsbdb; Planespotters (photographer credit and link); Open-Meteo.
+
+3D aircraft models from FlightGear FGAddon, GPL-2.0 — see
+`public/models/CREDITS.md` for the per-aircraft authors and licences.
