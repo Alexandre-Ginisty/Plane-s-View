@@ -46,7 +46,7 @@ import {
 } from './aircraft';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
-import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
+import { GROUND_CHECK_CEILING_M, GroundMemory, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 
 /**
@@ -109,6 +109,9 @@ export class OwnAircraft {
     color: 0x2a2f36,
     emissive: new Color(0x05080c),
   });
+
+  /** Where the ground was last known to be, for the approach. */
+  private readonly ground = new GroundMemory();
 
   /** Type the current geometry was built for, so it is not rebuilt per frame. */
   private builtFor: string | null = null;
@@ -310,7 +313,13 @@ export class OwnAircraft {
     this.ensureModel(typeCode, sample.latest.category, operatorOf(sample.latest.callsign));
 
     let altM = sample.altFt * FEET_TO_METRES;
-    const terrainM = terrainHeightAt?.(sample.lat, sample.lon) ?? 0;
+    // Remembered, not just sampled. An aircraft on approach outruns the tiles
+    // that cover the airfield, so the sample goes unknown exactly when the
+    // clamp is needed — and an airfield is flat enough that the elevation from
+    // a few hundred metres back is the right answer. See `GroundMemory`.
+    const terrainM = this.ground.update(
+      terrainHeightAt?.(sample.lat, sample.lon) ?? Number.NaN,
+    );
     if (this.shape && terrainHeightAt && (sample.latest.onGround || altM < GROUND_CHECK_CEILING_M)) {
       altM = surfaceAltitudeM(altM, sample.latest.onGround, terrainM, clearanceFor(this.shape));
     }
@@ -406,6 +415,9 @@ export class OwnAircraft {
   }
 
   private teardown(): void {
+    // A different aircraft is somewhere else entirely; the remembered ground
+    // belongs to the last one.
+    this.ground.forget();
     this.clearMeshes();
     this.builtFor = null;
   }

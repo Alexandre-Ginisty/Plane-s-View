@@ -256,3 +256,119 @@ describe('propeller rate', () => {
     expect(mid).toBeLessThan(1);
   });
 });
+
+describe('the wingtip device is a winglet, not a plank', () => {
+  /**
+   * Reported as "des carrés blancs autour des ailes".
+   *
+   * It was a rectangle stood on the wingtip at ninety degrees, at the wing's
+   * own thickness and 1.35 times the tip chord tall — so from anywhere but
+   * dead astern it read as a white board bolted to the wing. Nothing caught it
+   * because nothing was looking: the triangles were there, wound correctly,
+   * and in the right place. Only the *shape* was wrong, and shape is what the
+   * whole procedural model exists to get right.
+   *
+   * What separates a winglet from a board is cant, sweep and a blended root.
+   * Each is checked here against the geometry rather than eyeballed, because
+   * the eyeballing is what missed it the first time.
+   */
+
+  /** Vertices of a type's hull, as triples. */
+  function hullVertices(typeCode: string): [number, number, number][] {
+    const model = buildAircraftModel(typeCode, null, 'high');
+    const position = model.hull.getAttribute('position');
+    const out: [number, number, number][] = [];
+    for (let i = 0; i < position.count; i++) {
+      out.push([position.getX(i), position.getY(i), position.getZ(i)]);
+    }
+    disposeAircraftModel(model);
+    return out;
+  }
+
+  /** The tip region: everything within 4% of the widest point, on one side. */
+  function tipRegion(vertices: [number, number, number][]): [number, number, number][] {
+    const halfSpan = Math.max(...vertices.map((v) => v[0]));
+    return vertices.filter((v) => v[0] > halfSpan * 0.9);
+  }
+
+  /** Vertical extent of a set of vertices. */
+  const heightOf = (vs: [number, number, number][]): number =>
+    Math.max(...vs.map((v) => v[2])) - Math.min(...vs.map((v) => v[2]));
+
+  /** Fore-aft extent of a set of vertices. */
+  const chordOf = (vs: [number, number, number][]): number =>
+    Math.max(...vs.map((v) => v[1])) - Math.min(...vs.map((v) => v[1]));
+
+  /** The slice of a tip region between two fractions of its own height. */
+  function band(
+    tip: [number, number, number][],
+    from: number,
+    to: number,
+  ): [number, number, number][] {
+    const low = Math.min(...tip.map((v) => v[2]));
+    const height = heightOf(tip);
+    return tip.filter((v) => {
+      const t = (v[2] - low) / height;
+      return t >= from && t <= to;
+    });
+  }
+
+  it('leans outboard as it rises', () => {
+    // The cant, and the one property that actually separates the two shapes.
+    //
+    // "Tip is outboard of root" is not enough: the old vertical plank passed
+    // it, because its two skins sit half a thickness either side of the same
+    // X and the outer one is trivially outboard. The lean has to be a real
+    // fraction of the height, which only a canted surface manages.
+    const tip = tipRegion(hullVertices('A320'));
+    const highest = tip.reduce((a, b) => (b[2] > a[2] ? b : a));
+    const rootX = Math.min(...band(tip, 0, 0.2).map((v) => v[0]));
+    const lean = highest[0] - rootX;
+    const height = heightOf(tip);
+
+    expect(lean / height, 'the winglet stands vertically, like a fin').toBeGreaterThan(0.15);
+  });
+
+  it('sweeps back as it rises', () => {
+    // A rectangle has its top edge directly above its bottom edge. A winglet's
+    // is well behind it — measured against the leading edge of its own root
+    // rather than against z = 0, which no vertex sits exactly on.
+    const tip = tipRegion(hullVertices('A320'));
+    const highest = tip.reduce((a, b) => (b[2] > a[2] ? b : a));
+    const rootLeading = Math.max(...band(tip, 0, 0.2).map((v) => v[1]));
+    expect(highest[1], 'the winglet rises straight up instead of raking back').toBeLessThan(
+      rootLeading,
+    );
+  });
+
+  it('tapers rather than staying the same width', () => {
+    const tip = tipRegion(hullVertices('A320'));
+    const atRoot = chordOf(band(tip, 0, 0.2));
+    const atTop = chordOf(band(tip, 0.8, 1));
+
+    expect(atRoot).toBeGreaterThan(0);
+    expect(atTop, 'the winglet is as wide at the top as at the root').toBeLessThan(atRoot * 0.7);
+  });
+
+  it('is not built for types that do not carry one', () => {
+    // Drawing a winglet on everything is the other way to get this wrong. The
+    // yardstick is the wing's own thickness at mid-span, not the tip chord: a
+    // glider's tip chord is so small that any aerofoil looks tall against it.
+    for (const type of ['ASK21', 'C172']) {
+      const vertices = hullVertices(type);
+      const halfSpan = Math.max(...vertices.map((v) => v[0]));
+      // A wide band: a glider's wing is built from very few spanwise
+      // stations, and a narrow slice of it can contain no vertices at all.
+      const midWing = vertices.filter(
+        (v) => v[0] > halfSpan * 0.3 && v[0] < halfSpan * 0.85,
+      );
+      const tip = tipRegion(vertices);
+
+      expect(midWing.length, `${type}: no mid-wing vertices to measure against`).toBeGreaterThan(0);
+      expect(
+        heightOf(tip),
+        `${type} has something standing on its wingtip`,
+      ).toBeLessThan(heightOf(midWing) * 1.6);
+    }
+  });
+});

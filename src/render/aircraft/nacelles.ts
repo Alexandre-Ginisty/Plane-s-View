@@ -207,35 +207,65 @@ export function addWinglet(
     return;
   }
 
+  /*
+   * A sharklet, not a plank.
+   *
+   * The first version stood a rectangle on the wingtip at ninety degrees, at
+   * the wing's own thickness and 1.35 times the tip chord tall. From anywhere
+   * but dead astern it read as a white board bolted to the wing — which is
+   * what it was, and what got reported.
+   *
+   * Three things separate a winglet from a board, and all three are cheap:
+   *
+   *  - **Cant.** A blended winglet leans outboard, fifteen to twenty degrees
+   *    off vertical. It is the first thing the eye uses to tell a winglet from
+   *    a fin, because a fin is vertical and this is not.
+   *  - **Sweep.** The leading edge rakes back far harder than the wing's, so
+   *    the tip sits well behind the root and the whole surface is a slender
+   *    triangle rather than a rectangle.
+   *  - **A blended root.** It grows out of the tip over a short chord instead
+   *    of meeting it at a corner. The corner is what makes it look bolted on.
+   *
+   * Built in two panels for that reason: a short blend that leans out of the
+   * wing, then the surface proper above it.
+   */
   const x = tipFore[0];
   const fore = tipFore[1];
   const aft = tipAft[1];
   const base = tipFore[2];
   const chord = fore - aft;
-  const height = style === 'fence' ? chord * 0.5 : chord * 1.35;
 
-  b.slabYZ(
-    [
-      [fore, base],
-      [aft, base],
-      [aft + chord * 0.3, base + height],
-      [fore - chord * 0.12, base + height],
-    ],
-    x,
-    thickness,
-  );
+  const fence = style === 'fence';
+  const height = fence ? chord * 0.45 : chord * 1.15;
+  const cant = fence ? 0 : height * 0.3;
+  const skin = thickness * (fence ? 0.35 : 0.3);
 
-  if (style === 'fence') {
-    // A fence runs below the tip as well as above it.
-    b.slabYZ(
-      [
-        [fore, base],
-        [fore - chord * 0.12, base - height * 0.7],
-        [aft + chord * 0.3, base - height * 0.7],
-        [aft, base],
-      ],
-      x,
-      thickness,
-    );
+  /** A station along the winglet: how far up, out, and back, and its chord. */
+  const station = (
+    up: number,
+    out: number,
+    back: number,
+    chordFraction: number,
+  ): [readonly [number, number, number], readonly [number, number, number]] => {
+    const leading = fore - back * chord;
+    return [
+      [x + side * out, leading, base + up],
+      [x + side * out, leading - chord * chordFraction, base + up],
+    ];
+  };
+
+  // The blend: a third of the height, leaning out, barely narrowing.
+  const root = station(0, 0, 0, 1);
+  const knee = station(height * 0.32, cant * 0.45, 0.1, 0.82);
+  const tip = station(height, cant, 0.42, 0.34);
+
+  b.panel(root[0], root[1], knee[0], knee[1], skin, side === -1);
+  b.panel(knee[0], knee[1], tip[0], tip[1], skin, side === -1);
+
+  if (fence) {
+    // A fence runs below the tip as well as above it, and the lower half is
+    // shorter — it is there to stop the flow curling round, not to carry load.
+    const under = station(-height * 0.6, 0, 0.06, 0.6);
+    b.panel(root[0], root[1], under[0], under[1], skin, side === 1);
   }
 }

@@ -61,7 +61,17 @@ export function sampleTerrainHeight(
     best = node;
   }
 
-  if (!best?.heights) return 0;
+  // NaN, not zero.
+  //
+  // Zero is a *height*, and a wrong one everywhere that is not the sea: at
+  // Charles de Gaulle the ground is 165 m up, so an aircraft placed relative
+  // to "zero" is placed a hundred and sixty-five metres underground. That is
+  // the aeroplane seen sinking through the terrain on approach — not a clamp
+  // that failed, a clamp that was handed sea level and believed it.
+  //
+  // The distinction the caller needs is "the ground is at sea level" versus
+  // "I do not know where the ground is", and only NaN can carry the second.
+  if (!best?.heights) return Number.NaN;
 
   const n = 1 << best.z;
   const u = clamp(mx * n - best.x, 0, 1);

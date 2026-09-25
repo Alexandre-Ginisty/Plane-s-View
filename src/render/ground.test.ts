@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { shapeFor } from './aircraft';
-import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
+import { GROUND_CHECK_CEILING_M, GroundMemory, clearanceFor, surfaceAltitudeM } from './ground';
 
 /** Heathrow: 25 m of terrain, 47 m of geoid separation under it. */
 const LHR_TERRAIN_M = 25;
@@ -76,5 +76,64 @@ describe('surfaceAltitudeM', () => {
     // stay well under a cruising airliner.
     expect(GROUND_CHECK_CEILING_M).toBeGreaterThan(4500);
     expect(GROUND_CHECK_CEILING_M).toBeLessThan(9000);
+  });
+});
+
+describe('when the terrain is not known yet', () => {
+  /**
+   * The case that put a landing aircraft under the satellite imagery.
+   *
+   * `sampleTerrainHeight` used to answer 0 when no tile covered the point,
+   * which is a *height* and a wrong one everywhere that is not the sea. An
+   * aircraft on approach outruns the tiles that cover the airfield, so the
+   * clamp was handed sea level at exactly the moment it mattered and placed
+   * the aeroplane a hundred and sixty-five metres under Charles de Gaulle.
+   */
+
+  it('leaves an airborne aircraft where the feed put it', () => {
+    // Not clamped to a floor invented from a height nobody measured.
+    expect(surfaceAltitudeM(2_000, false, Number.NaN, 3)).toBe(2_000);
+  });
+
+  it('does not bury an aircraft reporting itself on the ground', () => {
+    // `onGround` normalises to zero feet, so clamping it to "terrain + gear"
+    // with terrain unknown is what put forty-one aircraft under Heathrow.
+    expect(surfaceAltitudeM(0, true, Number.NaN, 3)).toBe(0);
+  });
+
+  it('still clamps once the terrain is known', () => {
+    expect(surfaceAltitudeM(50, false, 165, 3)).toBe(168);
+    expect(surfaceAltitudeM(0, true, 165, 3)).toBe(168);
+    // And never pushes a cruising aircraft down onto the hill below it.
+    expect(surfaceAltitudeM(10_000, false, 165, 3)).toBe(10_000);
+  });
+});
+
+describe('GroundMemory', () => {
+  it('answers nothing before it has been told anything', () => {
+    expect(Number.isNaN(new GroundMemory().update(Number.NaN))).toBe(true);
+  });
+
+  it('holds the last elevation it was given', () => {
+    const memory = new GroundMemory();
+    expect(memory.update(165)).toBe(165);
+    // The tiles under the aircraft have not arrived; the airfield has not moved.
+    expect(memory.update(Number.NaN)).toBe(165);
+    expect(memory.update(Number.NaN)).toBe(165);
+  });
+
+  it('prefers a fresh sample to a remembered one', () => {
+    const memory = new GroundMemory();
+    memory.update(165);
+    expect(memory.update(70)).toBe(70);
+  });
+
+  it('forgets when the aircraft changes', () => {
+    // Stepping into an aircraft on the other side of the world must not place
+    // it on the last one's airfield.
+    const memory = new GroundMemory();
+    memory.update(165);
+    memory.forget();
+    expect(Number.isNaN(memory.update(Number.NaN))).toBe(true);
   });
 });

@@ -19,7 +19,7 @@ import {
   DynamicDrawUsage,
   InstancedMesh,
   Matrix4,
-  MeshBasicMaterial,
+  MeshLambertMaterial,
   Object3D,
   Quaternion,
   Scene,
@@ -84,7 +84,7 @@ class InstanceLayer {
   readonly mesh: InstancedMesh;
   count = 0;
 
-  constructor(geometry: BufferGeometry, material: MeshBasicMaterial, capacity: number) {
+  constructor(geometry: BufferGeometry, material: MeshLambertMaterial, capacity: number) {
     this.mesh = new InstancedMesh(geometry, material, capacity);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -106,7 +106,23 @@ class InstanceLayer {
 export class Traffic3D {
   readonly scene = new Scene();
 
-  private readonly material = new MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+  /**
+   * Lit, and *not* `vertexColors`.
+   *
+   * `vertexColors: true` was the bug that made every other aircraft in the sky
+   * a black speck. Per-instance colour on an `InstancedMesh` comes from
+   * `instanceColor`, which needs no flag; `vertexColors` additionally asks the
+   * shader for a per-*vertex* `color` attribute, and these geometries have
+   * none — so it read (0, 0, 0) and multiplied the instance colour to nothing.
+   * Aircraft rendered as flies against a bright sky.
+   *
+   * Lambert rather than basic, now that they are visible at all: an unlit
+   * marker is a flat cut-out whatever colour it is, and the whole reason these
+   * are shaped like aeroplanes is so they read as aeroplanes. They are lit by
+   * the same sun as the aircraft you are riding — `OwnAircraft` puts it in
+   * this scene — so a wing catches the light at the same angle yours does.
+   */
+  private readonly material = new MeshLambertMaterial({ toneMapped: false });
   private readonly fixedWing: InstanceLayer;
   private readonly rotorcraft: InstanceLayer;
 

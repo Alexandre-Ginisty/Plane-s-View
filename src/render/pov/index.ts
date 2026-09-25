@@ -25,7 +25,12 @@ import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
 import { shapeFor, type AirframeShape } from '@/render/aircraft';
-import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from '@/render/ground';
+import {
+  GROUND_CHECK_CEILING_M,
+  GroundMemory,
+  clearanceFor,
+  surfaceAltitudeM,
+} from '@/render/ground';
 import { aircraftFrame, bearingOf, type AircraftFrame, type CameraMode } from './frame';
 import { placeCamera } from './placement';
 import type { PovState } from './state';
@@ -214,6 +219,15 @@ export class PovController {
   private radPerPx = FALLBACK_RAD_PER_PX;
 
   /**
+   * Where the ground was last known to be, for the approach.
+   *
+   * The camera has to agree with the model about the surface, or the aircraft
+   * you are riding sinks relative to the view. Both consult the same tiles, so
+   * both go blind at the same moment — and both have to remember.
+   */
+  private readonly ground = new GroundMemory();
+
+  /**
    * Compass bearing the camera is actually looking along, degrees.
    *
    * Not the aircraft's heading. The HUD strip sits over the *view*, so it has
@@ -312,7 +326,7 @@ export class PovController {
       altM = surfaceAltitudeM(
         altM,
         sample.latest.onGround,
-        terrainHeightAt(sample.lat, sample.lon),
+        this.ground.update(terrainHeightAt(sample.lat, sample.lon)),
         clearanceFor(shape),
       );
     }
@@ -502,6 +516,7 @@ export class PovController {
 
   reset(): void {
     this.initialised = false;
+    this.ground.forget();
     this.orbitDistanceTarget = this.state.orbitDistance;
   }
 }

@@ -58,9 +58,17 @@ export function clearanceFor(shape: AirframeShape): number {
 /**
  * The altitude to actually draw at, metres above the ellipsoid.
  *
- * `terrainM` is what the resident tiles say, which is zero where nothing has
- * loaded — the same convention `sampleTerrainHeight` uses, and the right guess
- * for open water.
+ * `terrainM` is what the resident tiles say, and **NaN when they do not know**
+ * — which is the case that matters. An aircraft descending into an airfield
+ * arrives ahead of the tiles that cover it, so the moment the clamp is needed
+ * most is the moment it is least likely to have an answer.
+ *
+ * Told nothing, it changes nothing: the reported altitude is drawn as-is. That
+ * is wrong by whatever the airfield's elevation is, but it is wrong by less
+ * than treating "unknown" as sea level, which planted every aircraft at Charles
+ * de Gaulle a hundred and sixty-five metres underground. Callers that can do
+ * better — by remembering where the ground was a moment ago — should; see
+ * `GroundMemory`.
  */
 export function surfaceAltitudeM(
   altM: number,
@@ -68,9 +76,40 @@ export function surfaceAltitudeM(
   terrainM: number,
   clearanceM: number,
 ): number {
+  if (!Number.isFinite(terrainM)) return altM;
+
   const floor = terrainM + clearanceM;
   // On the surface, the reported altitude carries no information at all — it
   // is the literal zero the normaliser substituted for the string "ground".
   if (onGround) return floor;
   return Math.max(altM, floor);
+}
+
+/**
+ * The last place the ground was known to be.
+ *
+ * A landing aircraft crosses a few kilometres of airfield in the seconds it
+ * takes the deep tiles to arrive, and an airfield is flat — so the elevation
+ * measured three hundred metres back is within a metre or two of the runway.
+ * Holding it is a far better answer than "unknown", and an enormously better
+ * one than sea level.
+ *
+ * It is deliberately not distance-limited. The failure it guards against lasts
+ * seconds and resolves itself; a stale value is only ever consulted when the
+ * alternative is no value at all, and terrain that far out of date would mean
+ * the tiles have stopped arriving entirely, which the aircraft flying over
+ * unloaded ground already looks like.
+ */
+export class GroundMemory {
+  private known = Number.NaN;
+
+  /** Feed a fresh sample, and get the best available answer. */
+  update(sampled: number): number {
+    if (Number.isFinite(sampled)) this.known = sampled;
+    return this.known;
+  }
+
+  forget(): void {
+    this.known = Number.NaN;
+  }
 }
