@@ -72,8 +72,23 @@ describe('the catalogue the converter writes', () => {
   };
 
   it('covers the busiest type designators', () => {
-    for (const type of ['B738', 'B77W', 'B788', 'A388', 'AT72', 'DH8D', 'CRJ7', 'E145']) {
+    for (const type of ['B738', 'B77W', 'B788', 'A388', 'AT72', 'DH8D', 'CRJ7', 'E145', 'E190']) {
       expect(index.types[type]).toBeTruthy();
+    }
+  });
+
+  it('never points a type at a model that was not shipped', () => {
+    // Dropping a broken aircraft used to leave its entry in the catalogue and
+    // its file on disk, so the type went on downloading a model that had
+    // failed validation. The converter now rewrites the whole directory.
+    const shipped = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('node:fs').readdirSync('public/models') as string[])
+        .filter((f) => f.endsWith('.pvm'))
+        .map((f) => f.replace(/\.pvm$/, '')),
+    );
+    for (const [type, id] of Object.entries(index.types)) {
+      expect(shipped.has(id), `${type} -> ${id}, which is not shipped`).toBe(true);
     }
   });
 

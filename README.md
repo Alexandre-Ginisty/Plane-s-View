@@ -176,12 +176,26 @@ Two things make the substitution honest rather than merely plausible:
   kind. A real model of the wrong variant reads as far more true than an
   accurate drawing of a generic one.
 
-The converter validates what it produces: an aircraft whose model measures the
-wrong length, or whose span is under 60% of its length (the signature of wings
-kept in a separate file), is reported and skipped rather than shipped scaled to
-nonsense. Textures are downscaled to 2048 px and re-encoded as WebP, which took
-the model set from 88 MB to 31 MB with no visible difference at the size these
-are drawn.
+The converter validates what it produces, because a bad model is wrong in a way
+nothing else notices — it loads, it lights, it renders, and the aeroplane is
+simply missing a piece. An aircraft is reported and skipped, never shipped, if:
+
+- it measures the wrong length (axes or units are wrong);
+- its span is under 60% of its length — the signature of wings kept in a
+  separate `.ac` file that FlightGear assembles from XML offsets and this
+  converter does not. The 737-800 is one, and converted alone it is a tube;
+- it is a helicopter with no main rotor, for the same reason. The R44 and the
+  UH-1 are;
+- a part classified as undercarriage sits in the upper half of the airframe,
+  which means a lifting surface has been mislabelled and would be retracted
+  above circuit height.
+
+The same properties are asserted against the *committed* models in
+`src/render/aircraft/models.test.ts`, because the converter only validates when
+someone runs it, and the repository is what visitors are served.
+
+Textures are downscaled to 2048 px and re-encoded as WebP, which took the model
+set from 88 MB to 33 MB with no visible difference at the size these are drawn.
 
 Run `node tools/fgmodel/convert.mjs` to regenerate `public/models`.
 

@@ -30,7 +30,7 @@
 
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,13 +85,30 @@ const DISCARD =
  * welded to the fuselage: down at cruise, and no longer retractable, in the
  * app as well as anywhere else the model is drawn.
  *
- * The texture rule below catches the rest. Aircraft authors put the whole
- * undercarriage on one sheet, so a part painted with it is gear whatever the
- * object happens to be called — which is how the main bogies (`Mesh.395` and
- * friends) are found at all.
+ * Judged on the object's name and *only* its name.
+ *
+ * A rule keyed on the texture was tried — "a part painted with the
+ * undercarriage sheet is undercarriage" — and it is wrong for a reason worth
+ * recording: authors pack unrelated surfaces onto one sheet to save a texture
+ * unit. The MD-80's is called `txt_hstab_gear`, so that rule classified the
+ * whole horizontal stabiliser as gear and the renderer duly retracted the
+ * tailplane above circuit height. The aeroplane flew with no tail.
+ *
+ * It bought nothing, either: every gear part it found on the 787 —
+ * `NoseWheel`, `rightgear.hyd2`, `lhgearibdoor` — the name catches now that
+ * the anchor is gone. A texture sheet says what a part is painted with, not
+ * what it is.
  */
-const GEAR = /(gear|wheel|bogie|tyre|tire|oleo)/i;
-const GEAR_TEXTURE = /(gear|wheel|bogie|tyre|tire)/i;
+const GEAR = /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo)/i;
+
+/*
+ * `gear` as a noun, not as an adjective.
+ *
+ * A *geared* elevator tab is a control surface, and the MD-80 has one called
+ * `ElTabGearedL`. Matched as undercarriage, it was retracted with the wheels —
+ * so the aeroplane lost part of its tail above circuit height. The same trap
+ * waits in `gearbox` on any helicopter and `gearing` on anything.
+ */
 
 /** Turning parts, emitted as spinners the renderer drives. */
 const PROP = /^prop(?!disc)/i;
@@ -326,15 +343,6 @@ export const AIRCRAFT = [
     credit: 'Bo 105 — FlightGear FGAddon, GPL-2.0',
   },
   {
-    id: 'r44',
-    path: 'R44',
-    model: 'Models/r44.ac',
-    types: ['R44', 'R22', 'R66'],
-    lengthM: 9.0,
-    rotorcraft: true,
-    credit: 'Robinson R44 — FlightGear FGAddon, GPL-2.0',
-  },
-  {
     id: 's76c',
     path: 'Sikorsky-76C',
     model: 'Models/s76c.ac',
@@ -353,21 +361,46 @@ export const AIRCRAFT = [
     credit: 'Aerospatiale AS332 — FlightGear FGAddon, GPL-2.0',
   },
   {
-    id: 'uh1',
-    path: 'UH-1',
-    model: 'Models/uh1.ac',
-    types: ['UH1', 'B412', 'B212', 'B206', 'B407', 'B429'],
-    lengthM: 12.9,
-    rotorcraft: true,
-    credit: 'UH-1 — FlightGear FGAddon, GPL-2.0',
+    /*
+     * The 737-300, not the -800.
+     *
+     * FGAddon's 737-800 keeps its wings, stabilisers and engines in separate
+     * `.ac` files that the simulator assembles from XML offsets, so converting
+     * the main file yields a fuselage: correctly scaled, correctly lit, and
+     * nine per cent as wide as it is long. The -300 is one self-contained
+     * file, and as the generic narrowbody that stands in for every unmatched
+     * jet, being an aeroplane matters more than being the right variant.
+     */
+    id: 'b733',
+    path: '737-300',
+    model: 'Models/737-300.ac',
+    types: ['B733', 'B734', 'B735', 'B736', 'B737', 'B738', 'B739', 'B38M', 'B39M', 'B73H'],
+    lengthM: 33.4,
+    credit: '737-300 — FlightGear FGAddon, GPL-2.0',
   },
   {
-    id: 'b738',
-    path: '737-800',
-    model: 'Models/737-800.ac',
-    types: ['B738', 'B737', 'B739', 'B38M', 'B39M', 'B736', 'B735', 'B733', 'B734', 'B73H'],
-    lengthM: 39.5,
-    credit: '737-800 — FlightGear FGAddon, GPL-2.0',
+    id: 'b712',
+    path: '717',
+    model: 'Models/717-200.ac',
+    types: ['B712', 'MD95'],
+    lengthM: 37.8,
+    credit: '717-200 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'a346',
+    path: 'A340-600',
+    model: 'Models/A340.ac',
+    types: ['A346', 'A343', 'A342', 'A345'],
+    lengthM: 75.4,
+    credit: 'A340-600 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'mrj9',
+    path: 'MRJ',
+    model: 'Models/MRJ90.ac',
+    types: ['MRJ', 'E170', 'E75L', 'E75S', 'E190', 'E195', 'E290', 'E295'],
+    lengthM: 35.8,
+    credit: 'MRJ90 — FlightGear FGAddon, GPL-2.0',
   },
   {
     id: 'f27',
@@ -450,13 +483,12 @@ function toAppAxes(v) {
   return [-v[2], -v[0], v[1]];
 }
 
-function roleOf(name, texture) {
+function roleOf(name) {
   if (PROPDISC.test(name)) return 'disc';
   if (PROP.test(name)) return 'prop';
   if (TAILROTOR.test(name)) return 'tailRotor';
   if (ROTOR.test(name)) return 'mainRotor';
   if (GEAR.test(name)) return 'gear';
-  if (texture && GEAR_TEXTURE.test(texture)) return 'gear';
   return 'hull';
 }
 
@@ -586,7 +618,7 @@ export async function convert(entry, { quiet = false } = {}) {
 
     const material = object.surfaces[0]?.material ?? 0;
     const texture = object.texture;
-    const role = roleOf(object.name, texture);
+    const role = roleOf(object.name);
     if (texture && !textures.includes(texture)) textures.push(texture);
 
     // Spinners are kept whole and separate: each one turns about its own hub.
@@ -621,11 +653,12 @@ export async function convert(entry, { quiet = false } = {}) {
       `${entry.id}: model is ${measured.toFixed(2)} m along the fuselage axis but the type is ` +
         `${entry.lengthM} m (${(error * 100).toFixed(1)}% out) — axes or units are wrong`,
     );
+  }
 
-  /*
-   * And the wings.
+  /**
+   * The span of a set of groups, as a ratio to the measured length.
    *
-   * The length check alone passes a fuselage with no wings, because a fuselage
+   * The length check above passes a fuselage with no wings, because a fuselage
    * is exactly as long as the aeroplane. Several FGAddon aircraft keep the
    * wings, stabilisers and engines in separate `.ac` files that the simulator
    * assembles from XML offsets — the 737-800 is one — and converting only the
@@ -636,17 +669,112 @@ export async function convert(entry, { quiet = false } = {}) {
    * 10%, so the two populations are nowhere near each other and the threshold
    * needs no per-type data.
    */
+  const spanRatioOf = (keep) => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const group of groups.values()) {
+      if (!keep(group)) continue;
+      for (const tri of group.tris) {
+        for (const p of tri.v) {
+          min = Math.min(min, p[0]);
+          max = Math.max(max, p[0]);
+        }
+      }
+    }
+    return Number.isFinite(min) ? (max - min) / measured : 0;
+  };
+
   if (!entry.rotorcraft) {
-    const span = box[0][1] - box[0][0];
-    const ratio = span / measured;
+    const ratio = spanRatioOf(() => true);
     if (ratio < 0.6) {
       throw new Error(
         `${entry.id}: span is only ${(ratio * 100).toFixed(0)}% of length ` +
-          `(${span.toFixed(1)} m across ${measured.toFixed(1)} m) — the wings are ` +
-          `probably in a separate file this converter does not assemble`,
+          `(${(ratio * measured).toFixed(1)} m across ${measured.toFixed(1)} m) — the wings ` +
+          `are probably in a separate file this converter does not assemble`,
+      );
+    }
+
+    const cruise = spanRatioOf((group) => group.role !== 'gear');
+    if (cruise < 0.6) {
+      throw new Error(
+        `${entry.id}: with the gear retracted the span drops to ${(cruise * 100).toFixed(0)}% ` +
+          `of length — a wing has been classified as undercarriage`,
       );
     }
   }
+
+  /*
+   * A helicopter has to have a rotor.
+   *
+   * The exact analogue of the wing check, and it catches the same upstream
+   * habit: the R44 and the UH-1 keep their rotors in a separate `.ac` file
+   * that the simulator assembles from XML offsets, so converting the main
+   * file yields a fuselage with a bare mast. Nothing else notices — the model
+   * loads, lights and renders — and the aeroplane simply hovers on nothing.
+   *
+   * Both were dropped rather than shipped; their types fall back to the EC135,
+   * whose rotor does turn. A real model with a frozen rotor is worse than a
+   * generated one that spins.
+   */
+  if (entry.rotorcraft) {
+    const hasRotor = [...groups.values()].some((group) => group.role === 'mainRotor');
+    if (!hasRotor) {
+      throw new Error(
+        `${entry.id}: no main rotor — it is probably in a separate file this converter does ` +
+          `not assemble, and the model would hover on a bare mast`,
+      );
+    }
+  }
+
+  /*
+   * The undercarriage has to be underneath.
+   *
+   * Everything roled `gear` is hidden above circuit height, so a surface
+   * misclassified as undercarriage does not merely look odd — it disappears in
+   * the cruise, which is where the aeroplane spends its whole life. The
+   * MD-80's texture sheet is called `txt_hstab_gear`, and a rule that read the
+   * texture name retracted the entire tailplane with the wheels.
+   *
+   * The span check above does not catch that: a stabiliser is a quarter of the
+   * span, so losing it still leaves a wing wide enough to pass. What is always
+   * true is *where* gear is — wheels hang below the fuselage, lifting surfaces
+   * sit on or above the centreline — so a gear group whose centre is in the
+   * upper half of the airframe is not gear.
+   *
+   * ## What this cannot see
+   *
+   * Objects are merged by role, texture and material before they get here, so
+   * a stabiliser that shares a texture sheet with the real undercarriage
+   * arrives as one group with the wheels, and its centroid averages out to
+   * somewhere near the middle. Tested against the MD-80 with the texture rule
+   * restored: this check passes it. Geometry cannot separate two surfaces that
+   * have already been welded together.
+   *
+   * So this is a guard against an *isolated* misclassification — a name-regex
+   * false positive on a part with its own texture — and not a substitute for
+   * classifying by name in the first place. It is worth the six lines; it is
+   * not worth trusting on its own.
+   */
+  {
+    const midZ = (box[2][0] + box[2][1]) / 2;
+    for (const group of groups.values()) {
+      if (group.role !== 'gear') continue;
+      let sum = 0;
+      let count = 0;
+      for (const tri of group.tris) {
+        for (const p of tri.v) {
+          sum += p[2];
+          count++;
+        }
+      }
+      if (count > 0 && sum / count > midZ) {
+        throw new Error(
+          `${entry.id}: "${group.name}" is classified as undercarriage but its centre is in ` +
+            `the upper half of the airframe — it is a lifting surface, and hiding it above ` +
+            `circuit height would fly the aeroplane without it`,
+        );
+      }
+    }
   }
 
   /*
@@ -906,6 +1034,8 @@ export async function convert(entry, { quiet = false } = {}) {
     textures: kept.map((t) => t.name),
     /** Texture slot an operator livery replaces, or -1 if the model has none. */
     liveryTexture,
+    /** True for a helicopter: it has a rotor and no fixed lifting surface. */
+    rotorcraft: Boolean(entry.rotorcraft),
     parts,
   };
 
@@ -992,11 +1122,23 @@ async function main() {
    * better stand-in for the rest than that.
    */
   const FALLBACKS = {
-    jet: 'b738',
+    jet: 'b733',
     turboprop: 'at72',
     piston: 'c172',
     rotorcraft: 'ec35',
   };
+
+  /*
+   * Clear the output first.
+   *
+   * Removing an aircraft from the list above does not remove the files it
+   * wrote last time, and a stale `.pvm` is still served — so a model dropped
+   * for being broken goes on being downloaded by anyone whose type code still
+   * matches a stale catalogue. Rewriting the directory each run means the
+   * shipped set is exactly the set that passed validation on this run.
+   */
+  await rm(OUT, { recursive: true, force: true });
+  await mkdir(OUT, { recursive: true });
 
   const index = { types: {}, liveries: {}, fallback: {} };
   const rows = [];

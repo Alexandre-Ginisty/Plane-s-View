@@ -35,11 +35,12 @@ Aircraft types with no model here are drawn by the procedural generator in
 | `da40` | DA40, DA42, DV20 | [Aircraft/DA40](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/DA40/) | GPL-2.0 | `credits/da40/COPYING` |
 | `ec35` | EC35, EC45, H135, H145 | [Aircraft/ec135](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/ec135/) | GPL-2.0 | `credits/ec35/LICENSE` |
 | `bo05` | BO05, EC20, H120 | [Aircraft/bo105](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/bo105/) | GPL-2.0 | `credits/bo05/COPYING` |
-| `r44` | R44, R22, R66 | [Aircraft/R44](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/R44/) | GPL-2.0 | `credits/r44/COPYING` |
 | `s76c` | S76, S92, A139, AW39 | [Aircraft/Sikorsky-76C](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/Sikorsky-76C/) | GPL-2.0 | `credits/s76c/AUTHORS` |
 | `as32` | AS32, H225, EC25, S61 | [Aircraft/as332](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/as332/) | GPL-2.0 | `credits/as32/AUTHORS` |
-| `uh1` | UH1, B412, B212, B206, B407, B429 | [Aircraft/UH-1](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/UH-1/) | GPL-2.0 | `credits/uh1/COPYING` |
-| `b738` | B738, B737, B739, B38M, B39M, B736, B735, B733, B734, B73H | [Aircraft/737-800](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/737-800/) | GPL-2.0 | `credits/b738/LICENSE`, `credits/b738/README.md` |
+| `b733` | B733, B734, B735, B736, B737, B738, B739, B38M, B39M, B73H | [Aircraft/737-300](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/737-300/) | GPL-2.0 | `credits/b733/README.md` |
+| `b712` | B712, MD95 | [Aircraft/717](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/717/) | GPL-2.0 | **none upstream** |
+| `a346` | A346, A343, A342, A345 | [Aircraft/A340-600](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/A340-600/) | GPL-2.0 | `credits/a346/AUTHORS` |
+| `mrj9` | MRJ, E170, E75L, E75S, E190, E195, E290, E295 | [Aircraft/MRJ](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/MRJ/) | GPL-2.0 | `credits/mrj9/AUTHORS` |
 | `f27` | F27, F50 | [Aircraft/Fokker-F.27](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/Fokker-F.27/) | GPL-2.0 | `credits/f27/COPYING` |
 
 To regenerate: `node tools/fgmodel/convert.mjs`.

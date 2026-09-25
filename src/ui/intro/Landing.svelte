@@ -237,7 +237,14 @@
       class:current={active === index}
     >
       <div class="content">
-        <p class="badge">{section.badge}</p>
+        <!-- The first section's badge is the site's name, not a section tag,
+             so it is set as a wordmark, split the way the toolbar splits it.
+             Every other section keeps the small eyebrow label. -->
+        {#if index === 0}
+          <p class="badge wordmark">Planes<span>View</span></p>
+        {:else}
+          <p class="badge">{section.badge}</p>
+        {/if}
         <h1 class:lead={index === 0}>
           {section.title}
           {#if section.subtitle}<span class="subtitle">{section.subtitle}</span>{/if}
@@ -454,6 +461,28 @@
     text-transform: uppercase;
     color: var(--accent);
   }
+
+  /*
+   * The masthead.
+   *
+   * Sized against the viewport rather than in pixels, because it has to hold
+   * its proportion to the headline underneath it at every width — at a fixed
+   * size it is a title on a laptop and a footnote on a monitor. The tracking
+   * tightens as it grows: wide letter-spacing reads as a label at 11px and as
+   * a gap at 40px.
+   */
+  .badge.wordmark {
+    margin-bottom: clamp(14px, 2vw, 26px);
+    font-family: var(--sans);
+    font-size: clamp(1.5rem, 3.4vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    text-transform: none;
+    line-height: 1;
+    color: var(--text);
+  }
+  /* The half that is the product, picked out the way the toolbar does it. */
+  .badge.wordmark span { color: var(--accent); }
 
   h1 {
     margin: 0 0 22px;
