@@ -59,7 +59,7 @@ export interface BuiltTile {
   maxHeight: number;
 }
 
-export interface BuildTileError {
+interface BuildTileError {
   type: 'error';
   id: number;
   message: string;

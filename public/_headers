@@ -1,0 +1,32 @@
+# Security headers, applied by Cloudflare Pages to everything it serves.
+#
+# What these can and cannot do is worth being exact about. They do not hide the
+# code: a browser has to receive a script in order to run it, so anyone can read
+# the bundle and modify it at runtime in DevTools, and no header changes that.
+# What they do is stop the *page* from being turned against its visitor —
+# injected scripts, clickjacking frames, content sniffed into the wrong type,
+# and the referrer leaking where people came from.
+#
+# The Content-Security-Policy is an allowlist of every origin this app is
+# supposed to talk to. Anything else — an injected analytics tag, a script
+# smuggled through a dependency, an exfiltration beacon — is refused by the
+# browser rather than merely discouraged. Keeping it tight is only possible
+# because the app has no third-party scripts at all.
+
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://t.plnspttrs.net https://api.planespotters.net; connect-src 'self' https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://api.adsbdb.com https://api.open-meteo.com; font-src 'self'; manifest-src 'self'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Hashed filenames, so these can never go stale.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Converted airframes: large, and replaced only by a new deploy.
+/models/*
+  Cache-Control: public, max-age=604800

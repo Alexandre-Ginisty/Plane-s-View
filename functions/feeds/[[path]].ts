@@ -17,6 +17,15 @@
  * never be reached through it, so it cannot be used to probe private networks
  * or to launder traffic — the failure mode that makes naive CORS proxies
  * dangerous to deploy.
+ *
+ * ## And it is same-origin
+ *
+ * It used to answer `Access-Control-Allow-Origin: *`, which is the other half
+ * of the same problem. The app is served from this origin, so it never needed
+ * CORS at all; what the wildcard bought was any other site on the internet
+ * being able to point its own client at this deployment and spend its request
+ * budget — and, through it, the goodwill of feeds that are donating bandwidth
+ * on the understanding that this project is the one using them.
  */
 
 import relayTargets from '../../relay-targets.json';
@@ -45,12 +54,33 @@ interface PagesContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-function corsHeaders(extra: Record<string, string> = {}): Record<string, string> {
+/**
+ * Content types the relay will pass on.
+ *
+ * Reflecting whatever the upstream sent means an upstream that is down, or
+ * hijacked, can decide what type of document this origin serves. Everything
+ * here is fetched as JSON by the client, so anything else is a failure to
+ * report rather than a body to forward.
+ */
+const ALLOWED_CONTENT_TYPES = ['application/json', 'text/json', 'application/geo+json'];
+
+function safeContentType(upstream: string | null): string {
+  const base = (upstream ?? '').split(';')[0]!.trim().toLowerCase();
+  return ALLOWED_CONTENT_TYPES.includes(base)
+    ? `${base}; charset=utf-8`
+    : 'application/json; charset=utf-8';
+}
+
+/**
+ * Same-origin only. The app is served from here, so the browser sends no
+ * preflight and needs no allow-origin header; echoing the caller's origin back
+ * would re-open exactly what the wildcard did.
+ */
+function baseHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Accept, Content-Type',
-    'Access-Control-Max-Age': '86400',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    Vary: 'Origin',
     ...extra,
   };
 }
@@ -58,12 +88,27 @@ function corsHeaders(extra: Record<string, string> = {}): Record<string, string>
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders({ 'Content-Type': 'application/json; charset=utf-8' }),
+    headers: baseHeaders({ 'Content-Type': 'application/json; charset=utf-8' }),
   });
 }
 
-export const onRequestOptions = (): Response =>
-  new Response(null, { status: 204, headers: corsHeaders() });
+/**
+ * Anything that is not a GET.
+ *
+ * A same-origin relay has no preflight to answer, so an OPTIONS here is either
+ * a scanner or a misconfiguration; either way the honest reply is that only GET
+ * exists. Cloudflare routes every method to the catch-all, so without this a
+ * POST would fall through to the platform's own handling rather than being
+ * refused by the code that owns the route.
+ */
+const methodNotAllowed = (): Response =>
+  new Response(null, { status: 405, headers: baseHeaders({ Allow: 'GET' }) });
+
+export const onRequestOptions = methodNotAllowed;
+export const onRequestPost = methodNotAllowed;
+export const onRequestPut = methodNotAllowed;
+export const onRequestPatch = methodNotAllowed;
+export const onRequestDelete = methodNotAllowed;
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const raw = context.params.path;
@@ -100,17 +145,17 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       signal: AbortSignal.timeout(10_000),
     } as RequestInit);
 
-    const headers = corsHeaders({
-      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json',
+    const headers = baseHeaders({
+      'Content-Type': safeContentType(upstream.headers.get('Content-Type')),
       'Cache-Control': `public, max-age=${ttl}`,
-      'X-Relay-Target': target,
     });
 
     return new Response(upstream.body, { status: upstream.status, headers });
-  } catch (err) {
-    return json(
-      { error: 'Upstream unreachable', target, detail: String(err) },
-      502,
-    );
+  } catch {
+    // No `detail`. The caught value is a network error from an internal fetch
+    // and its text names the upstream URL and the shape of the infrastructure
+    // behind this route — free reconnaissance, in exchange for a message no
+    // user can act on. The client already falls through to the next provider.
+    return json({ error: 'Upstream unreachable', target }, 502);
   }
 }

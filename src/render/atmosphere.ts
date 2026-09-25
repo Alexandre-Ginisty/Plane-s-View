@@ -3,33 +3,26 @@
  *
  * ## The problem it actually solves
  *
- * Esri World Imagery is not one dataset. It is a stack of them, and which one
- * you get depends on the zoom level: deep zooms are recent aerial survey,
- * shallow zooms are a satellite composite. They are captured by different
- * sensors in different seasons and graded differently, so the composite runs
- * warm and brown where the aerial runs cool and blue-green.
+ * Esri World Imagery is a stack of datasets, and which one you get depends on
+ * the zoom: deep zooms are recent aerial survey, shallow zooms a satellite
+ * composite, captured by different sensors in different seasons. The composite
+ * runs warm and brown where the aerial runs cool and blue-green.
  *
- * That is invisible on a flat map, where you only ever see one level at a
- * time. In a cockpit you see *every* level at once, laid out by distance: deep
- * zoom under the aircraft, shallow at the horizon. The dataset change then
- * draws a ring on the ground around you — a bluer disc near the aircraft, a
- * browner world beyond it — and the ring moves with you, which makes it far
- * more obvious than a static seam would be.
+ * That is invisible on a flat map, where you see one level at a time. In a
+ * cockpit you see *every* level at once, laid out by distance, so the dataset
+ * change draws a ring on the ground around you — and it moves with you, which
+ * makes it far more obvious than a static seam.
  *
- * It cannot be fixed at the source; the imagery is what it is, and it is free.
- * What removes it is the thing that removes it in reality: **air**. Fifty
- * kilometres of atmosphere between the eye and the ground washes out any
- * colour difference long before the eye can compare the two, which is why a
- * real aeroplane window does not show a ring either.
+ * It cannot be fixed at the source. What removes it is what removes it in
+ * reality: **air**. Fifty kilometres of atmosphere washes out any colour
+ * difference before the eye can compare the two.
  *
  * ## Why the old fog did not do this
  *
- * There was already a fog term, and its own comment said its job was to hide
- * the LOD horizon. It could not: at 1.1e-6 per metre it reached **3% opacity
- * at thirty kilometres and 20% at the horizon from FL350**. Thirty kilometres
- * of real air is not 3% — the far hills are plainly hazed. The density was
- * roughly twenty times too thin to be atmosphere, so it read as a faint tint
- * and left the dataset ring fully legible underneath it.
+ * At 1.1e-6 per metre it reached **3% opacity at thirty kilometres and 20% at
+ * the horizon from FL350**. Thirty kilometres of real air is not 3% — the far
+ * hills are plainly hazed. Twenty times too thin to be atmosphere, so it read
+ * as a faint tint and left the ring fully legible underneath.
  *
  * ## The model
  *
@@ -75,12 +68,10 @@ export const EARTH_RADIUS_M = 6_371_000;
  * chosen for that reason.
  *
  * A textbook clear day is nearer 2.0e-5, and it was tried first. From FL460 it
- * turns the whole forward view white: the cockpit looks *along* the ground
- * rather than down at it, so almost everything on screen is 100-300 km away,
- * and at two hundred kilometres a physically honest atmosphere is 86% opaque.
- * That is correct and it is not what anyone opened a satellite globe to see.
- * 1.4e-5 keeps the horizon dissolved (95% at 370 km, which is what hides the
- * dataset ring) while leaving the mid-field legible.
+ * turns the forward view white: the cockpit looks *along* the ground, so most
+ * of the screen is 100-300 km away and an honest atmosphere is 86% opaque
+ * there. Correct, and not what anyone opened a satellite globe to see. 1.4e-5
+ * keeps the horizon dissolved (95% at 370 km) and the mid-field legible.
  *
  * The night figure is thicker because haze reads as heavier in low light and,
  * more practically, because an unlit LOD boundary needs more covering.

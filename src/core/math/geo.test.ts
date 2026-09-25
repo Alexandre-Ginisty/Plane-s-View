@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  enuBasis,
   ecefToGeodetic,
   geodeticToEcef,
-  geodeticSurfaceNormal,
   haversineMetres,
-  initialBearingDeg,
-  destinationPoint,
   latToMercatorY,
   lonToMercatorX,
   mercatorYToLat,
   metresPerDegree,
   tileBounds,
   tileCenterLatLon,
-  tileForLonLat,
   angleDeltaDeg,
   wrapLongitude,
   WGS84_A,
@@ -56,7 +53,7 @@ describe('geodetic <-> ECEF', () => {
     // On an ellipsoid these differ everywhere except the equator and poles;
     // using the wrong one tilts the horizon in the cockpit view.
     const lat = 45;
-    const normal = geodeticSurfaceNormal(lat, 0);
+    const normal = enuBasis(lat, 0).up;
     const p = geodeticToEcef(lat, 0, 0);
     const len = Math.hypot(p[0], p[1], p[2]);
     const radial: [number, number, number] = [p[0] / len, p[1] / len, p[2] / len];
@@ -70,7 +67,7 @@ describe('geodetic <-> ECEF', () => {
 
   it('keeps the normal a unit vector', () => {
     for (const lat of [-90, -45, 0, 33.3, 89.99]) {
-      const n = geodeticSurfaceNormal(lat, 12.5);
+      const n = enuBasis(lat, 12.5).up;
       expect(Math.hypot(n[0], n[1], n[2])).toBeCloseTo(1, 12);
     }
   });
@@ -88,20 +85,7 @@ describe('great-circle helpers', () => {
     expect(haversineMetres(10, 20, 10, 20)).toBeCloseTo(0, 6);
   });
 
-  it('bears due east along the equator', () => {
-    expect(initialBearingDeg(0, 0, 0, 10)).toBeCloseTo(90, 6);
-  });
 
-  it('bears due north along a meridian', () => {
-    expect(initialBearingDeg(10, 5, 20, 5)).toBeCloseTo(0, 6);
-  });
-
-  it('round-trips destination against distance and bearing', () => {
-    const start = { lat: 51.5, lon: -0.12 };
-    const dest = destinationPoint(start.lat, start.lon, 73, 250_000);
-    expect(haversineMetres(start.lat, start.lon, dest.lat, dest.lon)).toBeCloseTo(250_000, 0);
-    expect(initialBearingDeg(start.lat, start.lon, dest.lat, dest.lon)).toBeCloseTo(73, 4);
-  });
 
   it('crosses the antimeridian without a discontinuity', () => {
     const d = haversineMetres(0, 179.9, 0, -179.9);
@@ -130,31 +114,6 @@ describe('web mercator', () => {
     expect(Number.isFinite(latToMercatorY(-90))).toBe(true);
   });
 
-  it('selects the tile that contains the point', () => {
-    const z = 12;
-    const lat = 48.8584;
-    const lon = 2.2945;
-    const t = tileForLonLat(lon, lat, z);
-    const b = tileBounds(t.z, t.x, t.y);
-
-    expect(lon).toBeGreaterThanOrEqual(b.west);
-    expect(lon).toBeLessThanOrEqual(b.east);
-    expect(lat).toBeGreaterThanOrEqual(b.south);
-    expect(lat).toBeLessThanOrEqual(b.north);
-  });
-
-  it('keeps tile indices in range at the extremes', () => {
-    for (const z of [0, 1, 8, 15]) {
-      const n = 1 << z;
-      for (const [lon, lat] of [[-180, 90], [180, -90], [179.999, -89.999]] as const) {
-        const t = tileForLonLat(lon, lat, z);
-        expect(t.x).toBeGreaterThanOrEqual(0);
-        expect(t.x).toBeLessThan(n);
-        expect(t.y).toBeGreaterThanOrEqual(0);
-        expect(t.y).toBeLessThan(n);
-      }
-    }
-  });
 
   it('tiles the world exactly at zoom 1', () => {
     const nw = tileBounds(1, 0, 0);

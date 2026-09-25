@@ -37,7 +37,7 @@ export { feedClockToMs, usableFeedClock } from './coerce';
 import type { AircraftState, ProviderId } from '@/data/types';
 
 /** One entry of a readsb-style `ac` array. Everything is optional in practice. */
-export interface ReadsbAircraft {
+interface ReadsbAircraft {
   hex?: string;
   type?: string;
   flight?: string;
@@ -98,7 +98,7 @@ export interface InlineAirframeHint {
  * Normalise one readsb record. Returns null for records without a usable
  * position — the feeds include aircraft heard on the radio but not yet located.
  */
-export function normalizeReadsbAircraft(
+function normalizeReadsbAircraft(
   raw: ReadsbAircraft,
   source: ProviderId,
   receivedAt: number,
@@ -203,7 +203,7 @@ export function normalizeReadsbResponse(
  * 10 true_track, 11 vertical_rate(m/s), 12 sensors, 13 geo_altitude(m),
  * 14 squawk, 15 spi, 16 position_source, 17 category (optional).
  */
-export type OpenSkyStateVector = readonly unknown[];
+type OpenSkyStateVector = readonly unknown[];
 
 export interface OpenSkyResponse {
   time?: number;
@@ -233,7 +233,7 @@ const OPENSKY_CATEGORY: readonly (string | null)[] = [
   'C3', // point obstacle
 ];
 
-export function normalizeOpenSkyState(
+function normalizeOpenSkyState(
   v: OpenSkyStateVector,
   receivedAt: number,
   feedTimeSec: number | null,

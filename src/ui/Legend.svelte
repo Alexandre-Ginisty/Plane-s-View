@@ -13,7 +13,20 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { CAMERA_MODES } from '@/render/pov';
   import { TRAFFIC_LEGEND } from './palette';
+
+  /*
+   * Built from `CAMERA_MODES`, not typed out.
+   *
+   * The number keys index that array directly (see `App.svelte`), and the
+   * hand-written version had drifted out of step with it: it promised
+   * "cockpit, wing, chase, tower, free" against the real order — two keys
+   * transposed and two simply wrong. A help panel that misstates the controls
+   * is worse than no help panel, and the only way it stays right is by not
+   * being written down twice.
+   */
+  const cameraKeys = CAMERA_MODES.map((mode) => mode.label.toLowerCase()).join(', ');
 
   const KEYS: readonly { key: string; does: string }[] = [
     { key: 'Click', does: 'Select an aircraft on the map' },
@@ -21,7 +34,7 @@
     { key: 'Esc', does: 'Leave the cockpit, or clear the selection' },
     { key: 'Drag', does: 'Look around while flying' },
     { key: 'Wheel', does: 'Zoom the view in and out' },
-    { key: '1 – 5', does: 'Switch camera: cockpit, wing, chase, tower, free' },
+    { key: `1 – ${CAMERA_MODES.length}`, does: `Switch camera: ${cameraKeys}` },
     { key: 'C', does: 'Re-centre the view straight ahead' },
     { key: 'D', does: 'Show the performance and connection counters' },
     { key: 'H', does: 'Show or hide this panel' },

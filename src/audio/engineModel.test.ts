@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { CAMERA_MODES } from '@/render/pov';
 import { shapeFor } from '@/render/aircraft';
 import type { FlightRegime } from '@/state/regime';
 import {
@@ -135,9 +136,24 @@ describe('perspectiveGain', () => {
     expect(cockpit.cutoffHz).toBeLessThan(wing.cutoffHz);
   });
 
-  it('leaves a ground observer with almost nothing but low frequencies', () => {
-    const tower = perspectiveGain('tower');
-    expect(tower.cutoffHz).toBeLessThan(1_500);
-    expect(tower.wind).toBeLessThan(0.2);
+  it('gives the detached views less wind than the ones on the airframe', () => {
+    // Wind noise is what you hear *on* the aeroplane, so it separates by where
+    // the camera is mounted rather than by how the modes are listed: cockpit
+    // and wingtip are bolted to the airframe, chase and orbit are not. The
+    // list order is a UI ordering and says nothing about distance.
+    const onAirframe = ['cockpit', 'wing'].map((m) => perspectiveGain(m).wind);
+    const detached = ['chase', 'orbit'].map((m) => perspectiveGain(m).wind);
+    expect(Math.min(...onAirframe)).toBeGreaterThan(Math.max(...detached));
+  });
+
+  it('answers for every camera mode that exists', () => {
+    // The switch has a default, so a mode nobody wrote a case for is silently
+    // given the generic answer. That is how Tower's numbers went on being
+    // returned after Tower was removed — and how a new mode would ship
+    // sounding like nothing in particular.
+    for (const mode of CAMERA_MODES) {
+      const gain = perspectiveGain(mode.id);
+      expect(gain).not.toEqual(perspectiveGain('no-such-mode'));
+    }
   });
 });

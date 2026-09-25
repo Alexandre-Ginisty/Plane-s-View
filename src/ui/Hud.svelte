@@ -35,8 +35,8 @@
   /*
    * The artificial horizon and the heading strip are *first-person*
    * instruments: they describe what the pilot sees out of the windscreen. In
-   * chase, wing, orbit or tower the camera is not the pilot, so the horizon
-   * line refers to an attitude the view does not have and the compass to a
+   * chase, wing or orbit the camera is not the pilot, so the horizon line
+   * refers to an attitude the view does not have and the compass to a
    * heading it is not pointing along — and both are drawn straight across the
    * aircraft you came to look at. The tapes stay in every view, because speed
    * and altitude are facts about the aircraft rather than about the eye.
@@ -65,7 +65,7 @@
   <div class="hud" aria-live="off">
     {#if firstPerson}
       <Attitude pitchDeg={sample.pitchDeg} rollDeg={sample.rollDeg} />
-      <Compass headingDeg={sample.headingDeg} />
+      <Compass headingDeg={app.viewHeadingDeg} />
     {/if}
     <Tapes {sample} />
 

@@ -27,7 +27,7 @@ const feedProxy = Object.fromEntries(
   ]),
 );
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // Relative base so the build works unchanged on GitHub Pages project sites,
   // Cloudflare Pages and Vercel without env-specific configuration.
   base: './',
@@ -57,7 +57,26 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    /**
+     * No source maps in the published build.
+     *
+     * A source map is the entire original TypeScript — every file, every
+     * comment, every name — served next to the bundle and loaded by DevTools
+     * automatically. Shipping one does not merely make the code readable; it
+     * republishes the repository in a form that is easier to read than the
+     * repository, and it does it to every visitor.
+     *
+     * It is kept in development, where it is the difference between a stack
+     * trace and a wall of minified identifiers, and dropped in production,
+     * where nobody debugging the deployed site has the source to map to
+     * anyway.
+     *
+     * This is a real reduction in what a visitor is handed. It is not a
+     * protection: a browser must receive the code in order to run it, so the
+     * bundle can always be read, paused and modified in DevTools. What stops
+     * someone reusing the code is the licence, not the build.
+     */
+    sourcemap: mode !== 'production',
     rollupOptions: {
       output: {
         // Function form: the object form was dropped in the Vite 8 bundler.
@@ -71,7 +90,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // `functions/` too: the relay is the only code in this project exposed
+    // directly to the internet, and it was the only code with no tests.
+    include: ['src/**/*.test.ts', 'functions/**/*.test.ts'],
   },
   server: {
     port: 5173,
@@ -81,4 +102,4 @@ export default defineConfig({
     port: 4173,
     proxy: feedProxy,
   },
-});
+}));

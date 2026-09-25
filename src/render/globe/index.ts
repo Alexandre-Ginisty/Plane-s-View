@@ -12,29 +12,27 @@
  *    into a partially loaded quad is what produces the classic flickering
  *    checkerboard. Waiting costs a moment of blur and buys continuity.
  * 4. **The parent stays drawn underneath while children fade in**, so there is
- *    no frame in which the globe is see-through. Only at cold start: once any
+ *    no frame in which the globe is see-through — at cold start only. Once any
  *    ancestor has a texture, a new child is drawn opaque immediately and shows
- *    that texture through `uvA`, which is the same picture the parent was
- *    drawing. Two coplanar meshes cross-fading is not continuity — they are
- *    built from different heightmap levels and z-fight.
- * 8. **Requests are re-ranked every frame** against where the camera is now,
+ *    that texture through `uvA`. Two coplanar meshes cross-fading is not
+ *    continuity: they are built from different heightmap levels and z-fight.
+ * 5. **Requests are re-ranked every frame** against where the camera is now,
  *    by how wrong each tile currently looks. A priority fixed when the tile was
  *    first wanted is, under a moving aircraft, an ordering for a view that no
  *    longer exists — see `priorityOf`.
- * 5. **Visible tiles are never evicted**, whatever the memory pressure.
- * 6. **The camera's own path is prefetched** ahead of the aircraft, so tiles
+ * 6. **Visible tiles are never evicted**, whatever the memory pressure.
+ * 7. **The camera's own path is prefetched** ahead of the aircraft, so tiles
  *    are already resident by the time they matter.
- * 7. **Detail follows the connection.** `applyProfile` lowers the zoom ceiling
+ * 8. **Detail follows the connection.** `applyProfile` lowers the zoom ceiling
  *    and relaxes the error target on a weak link, because a complete coarse
  *    picture beats an incomplete sharp one — see `@/net/quality`.
  *
  * ## Structure
  *
  * Roots are the sixteen zoom-2 tiles. Web Mercator stops at +/-85.05 degrees
- * and so does the globe: beyond that latitude there is no imagery and no
- * elevation to draw, because every XYZ source in this project is Mercator.
- * Nothing this app follows flies there, and inventing a polar cap would mean
- * inventing its texture too.
+ * and so does the globe: every XYZ source in this project is Mercator, so
+ * beyond that latitude there is nothing to draw. Nothing this app follows
+ * flies there, and inventing a polar cap would mean inventing its texture too.
  *
  * ## Where the rest of it lives
  *
@@ -189,8 +187,8 @@ export class Globe {
   }
 
   /**
-   * Switch imagery layer. Geometry is untouched — only the textures are
-   * dropped, so the globe re-skins without a moment of missing terrain.
+   * Geometry is untouched — only the textures are dropped, so the globe
+   * re-skins without a moment of missing terrain.
    */
   setImagery(source: ImagerySource): void {
     if (source.id === this.imagery.id) return;
@@ -214,14 +212,11 @@ export class Globe {
   }
 
   /**
-   * How much relief the terrain is built with. See `RELIEF`.
-   *
-   * Every resident tile is rebuilt, because the mesh density and the vertical
-   * exaggeration are baked into the geometry the worker produced — changing
-   * the setting and waiting for the quadtree to replace tiles on its own would
-   * leave the world half in one relief and half in the other, with a visible
-   * step wherever the two met. Textures are kept: nothing about them changed,
-   * and dropping them would black out the globe for a second for no reason.
+   * See `RELIEF`. Every resident tile is rebuilt, because mesh density and
+   * vertical exaggeration are baked into the geometry the worker produced —
+   * letting the quadtree replace tiles on its own would leave the world half in
+   * one relief and half in the other, with a visible step where they met.
+   * Textures are kept: nothing about them changed.
    */
   setRelief(detail: ReliefDetail): void {
     if (this.relief === detail) return;
@@ -246,7 +241,14 @@ export class Globe {
       }
       node.geometry?.dispose();
       node.geometry = null;
-      node.heights = null;
+      /*
+       * The heights stay. `sampleHeight` reads them, and it decides where an
+       * aircraft on the ground sits and how far the camera is lifted to clear
+       * a hillside. Clearing them alongside the mesh makes every tile answer
+       * "sea level" until its replacement lands — toggling the setting over
+       * the Alps dropped the camera two kilometres into the mountain. One
+       * rebuild out of date is invisible; zero is not.
+       */
       node.geometryState = 'idle';
       node.geometryAttempts = 0;
       node.geometryRetryFrame = 0;
@@ -255,7 +257,6 @@ export class Globe {
     this.streamer.flushQueue();
   }
 
-  /** Which relief the terrain is currently built with. */
   get reliefDetail(): ReliefDetail {
     return this.relief;
   }
@@ -279,14 +280,12 @@ export class Globe {
   }
 
   /**
-   * Texture filtering quality.
-   *
    * Terrain is viewed at grazing angles almost all of the time — that is what
-   * a cockpit view *is* — and that is exactly the case where trilinear
-   * filtering collapses the ground into a smeared band a few hundred metres
-   * ahead of the aircraft. Anisotropic filtering is the single cheapest
-   * improvement available to the ground's appearance, and the renderer's own
-   * maximum is the right value because the cost is per-texel, not per-frame.
+   * a cockpit view *is* — and that is exactly where trilinear filtering
+   * collapses the ground into a smeared band a few hundred metres ahead.
+   * Anisotropic filtering is the cheapest improvement available to the
+   * ground's appearance, and the renderer's own maximum is the right value
+   * because the cost is per-texel, not per-frame.
    */
   setAnisotropy(max: number): void {
     this.maxAnisotropy = Math.max(1, Math.floor(max));
@@ -381,12 +380,10 @@ export class Globe {
   }
 
   /**
-   * Let go of a node the eviction pass has chosen.
-   *
-   * Three owners have to be told, which is precisely why eviction takes a
-   * callback rather than reaching into them: the scene holds its mesh, the
-   * streamer holds its loader requests and its place in the frontier, and the
-   * node itself holds GPU resources. Missing any one of the three was a leak.
+   * Three owners have to be told, which is why eviction takes a callback rather
+   * than reaching into them: the scene holds the mesh, the streamer holds the
+   * loader requests and the place in the frontier, and the node holds GPU
+   * resources. Missing any one of the three was a leak.
    */
   private releaseNode(node: TileNode): void {
     if (node.attached && node.mesh) this.scene.remove(node.mesh);
@@ -395,12 +392,10 @@ export class Globe {
   }
 
   /**
-   * Deepest zoom that can actually be drawn.
-   *
    * The minimum of what the app allows and what the active imagery layer
-   * serves. Refining past the layer's own maximum produces tiles that can
-   * never get their own texture and inherit for ever — sharper geometry under
-   * blurrier imagery, which is worse than not refining.
+   * serves. Refining past the layer's maximum produces tiles that can never get
+   * their own texture and inherit for ever — sharper geometry under blurrier
+   * imagery, which is worse than not refining.
    */
   private effectiveMaxZoom(): number {
     return Math.min(this.options.maxZoom, this.imagery.maxZoom);
@@ -417,15 +412,14 @@ export class Globe {
   /**
    * Collapse the level-by-level descent when the camera is near the ground.
    *
-   * Only fires when it can actually help: close to the terrain, and with the
-   * drawn detail more than a couple of levels short of what this view is
-   * allowed. Both conditions matter — near the ground the screen-space error
-   * genuinely demands the maximum zoom, so targeting it is not a guess; and if
-   * the tree is already nearly there, the ordinary walk will finish on its own
-   * and seeding would only compete with it.
+   * Only fires when it can help: close to the terrain, and with the drawn
+   * detail more than a couple of levels short of what this view allows. Both
+   * matter — near the ground the screen-space error genuinely demands the
+   * maximum zoom, so targeting it is not a guess; and if the tree is nearly
+   * there the ordinary walk finishes on its own and seeding only competes.
    *
-   * Re-seeded when the ground tile underneath changes, which is what keeps it
-   * from re-issuing the same burst every frame. See `prefetchDescent`.
+   * Re-seeded when the ground tile underneath changes, which keeps it from
+   * re-issuing the same burst every frame. See `prefetchDescent`.
    */
   private maybeSeedDescent(camEcef: Vec3, forward: Vector3, deepestDrawn: number): void {
     const eye = ecefToGeodetic(camEcef[0], camEcef[1], camEcef[2]);
@@ -439,14 +433,10 @@ export class Globe {
     const target = this.effectiveMaxZoom();
     if (deepestDrawn >= target - 2) return;
 
-    /*
-     * Keyed on a mid-level tile, not on the deepest one.
-     *
-     * A zoom-19 tile is about 24 m across, so keying on it would re-seed on
-     * almost every frame of an approach — deduplicated by the loader, but
-     * still pointless work. Five levels up is roughly 800 m, which is the
-     * distance at which the chain really is somewhere new.
-     */
+    // Keyed on a mid-level tile: a zoom-19 tile is about 24 m across, so
+    // keying on it re-seeds on almost every frame of an approach. Five levels
+    // up is roughly 800 m, the distance at which the chain really is
+    // somewhere new.
     const keyZoom = Math.max(ROOT_ZOOM, target - 5);
     const n = 1 << keyZoom;
     const x = Math.floor(lonToMercatorX(eye.lon) * n);
@@ -457,15 +447,11 @@ export class Globe {
 
     prefetchDescent(this.streamer, this.nodes, eye.lat, eye.lon, target);
 
-    // And again where the camera is *pointing*.
-    //
-    // Seeding only the column underneath is right for a descent and wrong for
-    // everything else near the ground. From a cockpit at 50 m on final, or
-    // anywhere on the ground, the tile under the wheels is a handful of pixels
-    // at the bottom of the screen and the ground being looked at is a
-    // kilometre or two ahead — so the one column that got the parallel
-    // treatment was the one nobody was looking at, and the rest of the view
-    // went back to climbing a level per round trip.
+    // And again where the camera is *pointing*. Seeding only the column
+    // underneath is right for a descent and wrong for everything else near the
+    // ground: from a cockpit at 50 m on final the tile under the wheels is a
+    // handful of pixels at the bottom of the screen, so the one column that got
+    // the parallel treatment was the one nobody was looking at.
     const aim = aimPoint(camEcef, forward, agl);
     if (aim) prefetchDescent(this.streamer, this.nodes, aim.lat, aim.lon, target);
   }
@@ -475,14 +461,7 @@ export class Globe {
     return sampleTerrainHeight(this.nodes, this.options.maxZoom, latDeg, lonDeg);
   }
 
-  /**
-   * Warm the cache along a predicted path.
-   *
-   * Rule 6, and the single most effective trick in the whole system: by the
-   * time the aircraft reaches a tile, it was requested tens of seconds ago and
-   * is already on disk. What the user perceives as "never loading" is mostly
-   * this.
-   */
+  /** Warm the cache along a predicted path. See `prefetchAlongPath`. */
   prefetchAlong(
     latDeg: number,
     lonDeg: number,

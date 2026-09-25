@@ -5,12 +5,11 @@
  * whether it can be seen, how wrong it currently looks, which heightmap covers
  * it, how urgently it is wanted. All pure, all free functions.
  *
- * They were methods on `Globe` and that was the problem: each one is a small
- * piece of arithmetic with a subtle sign or axis convention that is easy to get
- * plausibly wrong (the obliquity floor, the horizon dot product, the Terrarium
- * sub-rectangle), and none of them was reachable from a test while it lived
- * behind a class that needs a WebGL context and a worker pool to construct.
- * Out here they are the most heavily tested part of the renderer.
+ * They were methods on `Globe`, and each is a small piece of arithmetic with a
+ * sign or axis convention that is easy to get plausibly wrong — the obliquity
+ * floor, the horizon dot product, the Terrarium sub-rectangle — none of it
+ * reachable from a test behind a class needing a WebGL context and a worker
+ * pool. Out here they are the most heavily tested part of the renderer.
  */
 
 import { Frustum, Sphere } from 'three';
@@ -22,7 +21,7 @@ import { MIN_OBLIQUITY } from './constants';
 import type { TileNode } from './tileNode';
 
 /** The sub-rectangle of a heightmap a tile occupies, in [0,1] tile space. */
-export interface SampleRect {
+interface SampleRect {
   x0: number;
   y0: number;
   x1: number;
@@ -84,16 +83,14 @@ export function screenSpaceError(
   const geometricError = node.spanMetres / resolution;
 
   // Obliquity. Distance alone says a tile near the horizon needs as much
-  // detail as the one directly below at the same range, which is false: seen
-  // almost edge-on it is foreshortened into a handful of vertical pixels.
-  // From a cockpit at FL420 that mistake is most of the bill — the whole
-  // ground plane out to the horizon refines to full depth to produce a band
-  // of pixels a thumbnail could cover.
+  // detail as one directly below at the same range, which is false: seen
+  // edge-on it is foreshortened into a handful of vertical pixels. From a
+  // cockpit at FL420 that is most of the bill — the whole ground plane out to
+  // the horizon refining to full depth for a band a thumbnail could cover.
   //
-  // `centerEcef` normalised is the *geocentric* normal, not the geodetic one
-  // WGS84 would give; they differ by at most ~0.19deg. That matters when
-  // placing geometry and not at all when weighting a cosine, so it is not
-  // worth the extra trig here.
+  // `centerEcef` normalised is the *geocentric* normal, not the geodetic one;
+  // they differ by at most ~0.19deg, which matters when placing geometry and
+  // not at all when weighting a cosine.
   const len = Math.hypot(dx, dy, dz) || 1;
   const nl = Math.hypot(node.centerEcef[0], node.centerEcef[1], node.centerEcef[2]) || 1;
   const cosIncidence = Math.abs(
@@ -175,36 +172,29 @@ export function isTileVisible(
  *
  * ## Why this is not ranked by zoom
  *
- * It used to be `z * 1000`, on the reasoning that a z14 tile cannot be drawn
- * until its z13 ancestor exists to inherit a texture from, so breadth must be
- * funded before depth. The reasoning is sound and the implementation of it was
- * the single worst scheduling bug in the renderer, because **the walk already
- * enforces that ordering structurally**: `selectTiles` only creates and
- * requests a node's children once that node is `contentReady`. A child can
- * never be asked for before its parent has arrived, whatever the priority says.
+ * It used to be `z * 1000`, reasoning that breadth must be funded before depth
+ * since a z14 tile cannot inherit a texture until its z13 ancestor exists. The
+ * reasoning is sound and **the walk already enforces that ordering
+ * structurally**: `selectTiles` only requests a node's children once that node
+ * is `contentReady`, whatever the priority says.
  *
  * So ranking by zoom bought nothing and cost this: a z12 tile at the horizon
- * scored 12 000 and a z18 tile directly under the aircraft scored 18 000, so
- * **every tile of the distant ground outranked the ground being looked at**,
- * at every level, for as long as the horizon kept producing work — which it
- * always does. The near column had to wait out the entire breadth of the view
- * six times over to descend six levels. That is most of "it never loads when
- * I am close".
+ * scored 12 000 against 18 000 for a z18 tile under the aircraft, so **every
+ * tile of the distant ground outranked the ground being looked at**, at every
+ * level, for as long as the horizon kept producing work — which it always
+ * does. That is most of "it never loads when I am close".
  *
  * ## What it ranks by instead
  *
- * The screen-space error the tile is currently showing: how wrong the picture
- * looks right now, in screen pixels per imagery texel. The same number that
- * decides whether to refine, which is the point — the most urgent tile is by
+ * The screen-space error the tile is currently showing — the same number that
+ * decides whether to refine, which is the point: the most urgent tile is by
  * definition the one whose absence is most visible.
  *
- * This restores shallow-first *within a column* for free, and for the right
- * reason rather than by decree: a coarse tile covering nearby ground has an
- * enormous error (its texels are metres wide a hundred metres from the eye)
- * and a deep one has a small error by construction, since the walk stopped
- * refining when the error reached the target. Measured from 100 m AGL, the z14
- * tile underneath scores ~9 450 and the z19 tile underneath ~0.9, so the chain
- * is still funded from the top down — while the z12 tile at the horizon scores
+ * That restores shallow-first *within a column* for the right reason rather
+ * than by decree: a coarse tile over nearby ground has an enormous error, and
+ * a deep one a small error by construction, since the walk stopped refining
+ * when the error reached the target. From 100 m AGL the z14 tile underneath
+ * scores ~9 450 and the z19 ~0.9, while the z12 tile at the horizon scores
  * ~0.06 and no longer jumps the queue ahead of either.
  */
 

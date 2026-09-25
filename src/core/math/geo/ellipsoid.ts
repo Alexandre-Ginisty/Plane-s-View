@@ -33,7 +33,7 @@ function primeVerticalRadius(sinLat: number): number {
   return WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
 }
 
-export function geodeticToEcefInto(
+function geodeticToEcefInto(
   latDeg: number,
   lonDeg: number,
   height: number,
@@ -98,25 +98,6 @@ export function ecefToGeodetic(x: number, y: number, z: number): {
       : z / sinLat - n * (1 - WGS84_E2);
 
   return { lat: lat * RAD2DEG, lon: lon * RAD2DEG, height };
-}
-
-/**
- * Outward ellipsoid surface normal at a geodetic position. This is *not* the
- * normalised ECEF vector (the ellipsoid is not a sphere) — it is the true
- * local "up", and using the wrong one visibly tilts the horizon.
- */
-export function geodeticSurfaceNormalInto(latDeg: number, lonDeg: number, out: Vec3): Vec3 {
-  const lat = latDeg * DEG2RAD;
-  const lon = lonDeg * DEG2RAD;
-  const cosLat = Math.cos(lat);
-  out[0] = cosLat * Math.cos(lon);
-  out[1] = cosLat * Math.sin(lon);
-  out[2] = Math.sin(lat);
-  return out;
-}
-
-export function geodeticSurfaceNormal(latDeg: number, lonDeg: number): Vec3 {
-  return geodeticSurfaceNormalInto(latDeg, lonDeg, [0, 0, 0]);
 }
 
 /**

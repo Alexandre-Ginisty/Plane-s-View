@@ -12,7 +12,12 @@
  * to live that was not "wherever there was room".
  */
 
-import { networkMonitor, type NetworkGrade, type StreamingProfile } from '@/net/quality';
+import {
+  gradeRank,
+  networkMonitor,
+  type NetworkGrade,
+  type StreamingProfile,
+} from '@/net/quality';
 import { TERRARIUM } from '@/tiles/sources';
 import { app } from '@/state/appStore.svelte';
 
@@ -41,10 +46,26 @@ const PROBE_SETTLE_MS = 8000;
 const FEED_RADIUS_CAP_NM: Record<NetworkGrade, number> = {
   fast: 250,
   good: 250,
-  slow: 80,
-  poor: 40,
+  slow: 120,
+  poor: 50,
   offline: 40,
 };
+
+/**
+ * How long a changed grade must hold before the user is told, seconds.
+ *
+ * The grade itself already has hysteresis (see `HYSTERESIS` in the monitor),
+ * which stops it flapping. This is the separate question of whether a change
+ * that really did happen is worth interrupting someone over, and the answer
+ * depends on how long it lasts: a link that dips for four seconds while a lift
+ * passes a floor has not done anything the user can act on, and by the time
+ * they have read the notice it is wrong.
+ *
+ * Twelve seconds is longer than any transient the monitor's own window can
+ * produce and short enough that a genuine problem is explained while the user
+ * is still wondering about it.
+ */
+const ANNOUNCE_HOLD_SEC = 12;
 
 /** Plain-language explanation of each connection grade, for the user. */
 const GRADE_MESSAGE: Record<NetworkGrade, { text: string; level: 'info' | 'warn' | 'error' }> = {
@@ -64,10 +85,83 @@ const GRADE_MESSAGE: Record<NetworkGrade, { text: string; level: 'info' | 'warn'
   },
 };
 
+/**
+ * Decides which grade changes are worth interrupting the user over.
+ *
+ * Separated from the supervisor because it is the only part with rules in it —
+ * everything else there is wiring to `window`, a singleton monitor and a Svelte
+ * store, none of which a test can reach. Pulling the rules out is what let the
+ * flapping-toast behaviour be pinned rather than eyeballed.
+ */
+export class AnnouncementPolicy {
+  private announced: NetworkGrade | null = null;
+  private pending: { grade: NetworkGrade; heldSec: number } | null = null;
+
+  /** The grade last announced, or null if nothing ever has been. */
+  get lastAnnounced(): NetworkGrade | null {
+    return this.announced;
+  }
+
+  /**
+   * Take a new measured grade. Returns the grade to announce now, or null.
+   *
+   * Nothing fires immediately except going offline, which the browser told us
+   * about directly and which the user is about to notice anyway. Everything
+   * else waits out `ANNOUNCE_HOLD_SEC` in `tick`, and a change that reverses
+   * before the timer expires is never mentioned — the common case, and the
+   * whole point.
+   */
+  observe(grade: NetworkGrade): NetworkGrade | null {
+    if (grade === this.announced) {
+      this.pending = null;
+      return null;
+    }
+    if (grade === 'offline') {
+      this.pending = null;
+      return this.commit(grade);
+    }
+    // Already counting down towards this same grade: let the clock run rather
+    // than restarting it on every emission.
+    if (this.pending?.grade !== grade) this.pending = { grade, heldSec: 0 };
+    return null;
+  }
+
+  /** Advance the hold. Returns the grade to announce now, or null. */
+  tick(dt: number): NetworkGrade | null {
+    if (!this.pending) return null;
+    this.pending.heldSec += dt;
+    if (this.pending.heldSec < ANNOUNCE_HOLD_SEC) return null;
+    const { grade } = this.pending;
+    this.pending = null;
+    return this.commit(grade);
+  }
+
+  private commit(grade: NetworkGrade): NetworkGrade | null {
+    const previous = this.announced;
+    this.announced = grade;
+
+    // Nothing to recover *from*. If the user was never told the link had
+    // degraded, "Connection recovered" is a notice about a problem they never
+    // saw — and it was the commonest toast in the app, because a link that
+    // wobbles below `good` and back announces only the good half once the hold
+    // has swallowed the bad one.
+    //
+    // `null` counts as healthy, deliberately: having said nothing yet is the
+    // same baseline as having said the link is fine, so the first good reading
+    // of a session is not a recovery either.
+    const healthy = (g: NetworkGrade | null): boolean =>
+      g === null || gradeRank(g) >= gradeRank('good');
+    if (healthy(grade) && healthy(previous)) return null;
+
+    // `fast` is never announced. Nobody needs to be told their connection is
+    // fine, and a toast for it would fire every time a train left a tunnel.
+    return grade === 'fast' ? null : grade;
+  }
+}
+
 export class ConnectionSupervisor {
   private probeAccumulator = 0;
-  /** Last grade announced to the user, so only real changes are announced. */
-  private announcedGrade: NetworkGrade | null = null;
+  private readonly announcements = new AnnouncementPolicy();
   private unsubscribe: (() => void) | null = null;
   private readonly onConnectivityChange = (): void => this.handleConnectivityChange();
 
@@ -119,21 +213,7 @@ export class ConnectionSupervisor {
       // connection" to someone on fibre who had simply left the app on its
       // default. These messages exist to explain the connection; a message
       // that names the wrong cause sends the user to fix the wrong thing.
-      // Announce a grade *change*, not every emission.
-      //
-      // The monitor now emits when the user's detail ceiling moves as well as
-      // when the link does, so an unguarded notify fired "Connection
-      // recovered — back to full detail" the instant someone switched to high
-      // detail. Nothing about the connection had happened.
-      if (readout.grade === this.announcedGrade) return;
-      this.announcedGrade = readout.grade;
-
-      const message = GRADE_MESSAGE[readout.grade];
-      // `fast` is not announced. Nobody needs to be told their connection is
-      // fine, and a toast for it would fire every time a train left a tunnel.
-      if (readout.grade !== 'fast') {
-        app.notify(message.text, message.level, readout.grade === 'offline' ? 0 : 8000);
-      }
+      this.announce(this.announcements.observe(readout.grade));
     });
 
     window.addEventListener('online', this.onConnectivityChange);
@@ -147,6 +227,12 @@ export class ConnectionSupervisor {
     // itself, reported as a property of the user's connection. Letting the
     // burst clear first makes the number mean something.
     setTimeout(() => void networkMonitor.probe(PROBE_URL), PROBE_SETTLE_MS);
+  }
+
+  private announce(grade: NetworkGrade | null): void {
+    if (grade === null) return;
+    const message = GRADE_MESSAGE[grade];
+    app.notify(message.text, message.level, grade === 'offline' ? 0 : 8000);
   }
 
   private handleConnectivityChange(): void {
@@ -166,6 +252,8 @@ export class ConnectionSupervisor {
    * low detail after the train leaves the tunnel.
    */
   tick(dt: number): void {
+    this.announce(this.announcements.tick(dt));
+
     const grade = networkMonitor.profile.grade;
     if (grade === 'fast' || grade === 'good') {
       this.probeAccumulator = 0;

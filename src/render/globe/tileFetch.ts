@@ -39,7 +39,7 @@ export interface StreamerOptions {
 }
 
 /** How a load outcome is recorded. Implemented by `TileStreamer.finish`. */
-export type FinishFn = (
+type FinishFn = (
   node: TileNode,
   kind: 'geometry' | 'texture',
   gen: number,

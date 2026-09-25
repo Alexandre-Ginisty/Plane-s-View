@@ -39,20 +39,6 @@ export function propBladesFor(shape: AirframeShape): number {
 }
 
 /**
- * Where the propellers go, as offsets in model space (length-normalised).
- *
- * Two cases, and which one applies is already in the shape: an airframe with
- * wing-mounted engines gets one per nacelle, and a propeller-driven airframe
- * with *no* mounted engines has the engine in the nose, which is the only
- * place left for it. Jets get none, whatever is mounted where.
- */
-export function propellerCount(shape: AirframeShape): number {
-  if (propBladesFor(shape) === 0) return 0;
-  if (shape.engineMount === 'wing') return shape.engines;
-  return 1;
-}
-
-/**
  * Wingtip device, derived from generation rather than from a list.
  *
  * Sweep and length together are a good proxy for when an airframe was
@@ -69,17 +55,6 @@ export function wingletStyleFor(shape: AirframeShape): WingletStyle {
   if (shape.engineMount === 'tail') return shape.length >= 25 ? 'fence' : 'none';
   if (shape.length >= 25) return 'blended';
   return 'none';
-}
-
-/**
- * Whether the airframe has retractable gear worth drawing extended.
- *
- * Almost everything does; the exceptions are the airframes that have no gear
- * to retract. A glider gets a single centreline wheel and a helicopter gets
- * skids, both of which are drawn by their own builders.
- */
-export function hasRetractableGear(shape: AirframeShape): boolean {
-  return shape.kind !== 'glider' && shape.kind !== 'rotorcraft';
 }
 
 /**

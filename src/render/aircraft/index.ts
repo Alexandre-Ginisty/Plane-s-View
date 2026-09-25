@@ -31,13 +31,12 @@ import { createAircraftGeometry, type Spinner } from './fixedWing';
 import { createRotorcraftGeometry } from './rotorcraft';
 import { shapeFor, type AirframeShape } from './shapes';
 
-export { isRotorcraftType, isSurfaceVehicle, shapeFor } from './shapes';
-export type { AirframeKind, AirframeShape, EngineMount } from './shapes';
-export { propBladesFor, propellerCount, wingletStyleFor, mainWheelsPerSide } from './details';
-export type { WingletStyle } from './details';
+export { isSurfaceVehicle, shapeFor } from './shapes';
+export type { AirframeShape } from './shapes';
+export { propBladesFor } from './details';
 export { bladeOpacity, propellerRpm, visibleSpinRate } from './propeller';
-export { rotorRpm } from './rotorcraft';
 export type { Spinner } from './propeller';
+export { rotorRpm } from './rotorcraft';
 
 export interface AircraftModel {
   /** Airframe skin: fuselage, wings, tail, nacelles. Light and matte. */

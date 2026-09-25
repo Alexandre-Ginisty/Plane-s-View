@@ -27,7 +27,7 @@ import {
   type Texture,
 } from 'three';
 
-export type PartRole = 'hull' | 'gear' | 'prop' | 'mainRotor' | 'tailRotor' | 'disc';
+type PartRole = 'hull' | 'gear' | 'prop' | 'mainRotor' | 'tailRotor' | 'disc';
 
 interface Range {
   offset: number;
@@ -55,14 +55,18 @@ interface ModelHeader {
   license: string;
   lengthM: number;
   textures: string[];
+  /** Texture slot an operator livery replaces, or -1 if the model has none. */
+  liveryTexture?: number;
   parts: PartHeader[];
 }
 
-export interface ModelPart {
+interface ModelPart {
   role: PartRole;
   name: string;
   geometry: BufferGeometry;
   material: MeshLambertMaterial;
+  /** Which of the model's textures this part is painted with, or -1. */
+  textureIndex: number;
   origin: readonly [number, number, number];
   axis: readonly [number, number, number];
 }
@@ -73,6 +77,8 @@ export interface LoadedModel {
   license: string;
   /** Length of the source model, metres. Informational: geometry is unit length. */
   lengthM: number;
+  /** Texture slot an operator livery replaces, or -1 if the model has none. */
+  liveryTexture: number;
   parts: ModelPart[];
 }
 
@@ -113,7 +119,19 @@ export function parsePvm(
     geometry.computeBoundingSphere();
 
     const texture = part.texture >= 0 ? textures[part.texture] ?? null : null;
-    const transparent = part.opacity < 0.999;
+
+    /*
+     * Anything that turns is transparent from the start.
+     *
+     * Blades cross-fade into their blur disc as the rate climbs, so their
+     * opacity is animated every frame. Setting `transparent` here rather than
+     * in the renderer matters because models are cached and shared: a consumer
+     * flipping the flag on a material it did not create leaves that change
+     * behind for whoever loads the type next, and `transparent` also changes
+     * the draw order, so the effect is not local.
+     */
+    const spins = part.role === 'prop' || part.role === 'mainRotor' || part.role === 'tailRotor';
+    const transparent = part.opacity < 0.999 || spins || part.role === 'disc';
 
     const material = new MeshLambertMaterial({
       color: new Color(part.color[0], part.color[1], part.color[2]),
@@ -139,6 +157,7 @@ export function parsePvm(
       name: part.name,
       geometry,
       material,
+      textureIndex: part.texture,
       origin: part.origin,
       axis: part.axis,
     });
@@ -149,7 +168,35 @@ export function parsePvm(
     source: header.source,
     license: header.license,
     lengthM: header.lengthM,
+    liveryTexture: header.liveryTexture ?? -1,
     parts,
+  };
+}
+
+/**
+ * The same model in a different operator's paint.
+ *
+ * Geometry is shared, not copied. A livery changes one texture slot and
+ * nothing else, so re-parsing the buffer per airline would upload thirty
+ * thousand triangles to the GPU again for a change of colour — and a session
+ * that passes half a dozen different 777s would do it half a dozen times.
+ * Only the materials of the parts actually wearing the livery are cloned.
+ *
+ * The original is left untouched, because it is the cache entry every other
+ * caller is sharing.
+ */
+export function withLivery(model: LoadedModel, texture: Texture): LoadedModel {
+  if (model.liveryTexture < 0) return model;
+
+  return {
+    ...model,
+    parts: model.parts.map((part) => {
+      if (part.textureIndex !== model.liveryTexture) return part;
+      const material = part.material.clone();
+      material.map = texture;
+      material.needsUpdate = true;
+      return { ...part, material };
+    }),
   };
 }
 
@@ -159,12 +206,4 @@ export function texturesOf(buffer: ArrayBuffer): string[] {
   const headerLength = view.getUint32(4, true);
   const json = new TextDecoder().decode(new Uint8Array(buffer, 8, headerLength));
   return (JSON.parse(json.replace(/\0+$/, '')) as ModelHeader).textures;
-}
-
-export function disposeModel(model: LoadedModel): void {
-  for (const part of model.parts) {
-    part.geometry.dispose();
-    part.material.map?.dispose();
-    part.material.dispose();
-  }
 }

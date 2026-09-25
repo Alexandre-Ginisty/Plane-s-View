@@ -10,19 +10,10 @@
  * It is hidden in cockpit view (the camera is inside it) and shown in every
  * external view. Rebuilt only when the type changes, which is once per flight.
  *
- * ## What moves
- *
- * The model is four buffers under one group (see `@/render/aircraft`), and two
- * of them are conditional rather than static:
- *
- *   - the **undercarriage** appears below circuit height and retracts above it
- *   - the **propellers and rotors** turn, at a rate taken from the inferred
- *     flight regime, cross-fading into a blur disc once they are turning fast
- *     enough for the blades to alias
- *
- * Neither is decoration. A turboprop with static propellers is the first thing
- * anyone who likes aeroplanes will notice, and an airliner cruising with its
- * gear down is the second.
+ * The undercarriage and the spinning surfaces are conditional rather than
+ * static, and neither is decoration: a turboprop with static propellers is the
+ * first thing anyone who likes aeroplanes will notice, and an airliner cruising
+ * with its gear down is the second.
  */
 
 import {
@@ -53,7 +44,7 @@ import {
   type AirframeShape,
   type Spinner,
 } from './aircraft';
-import { loadModelFor } from './aircraft/library';
+import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
@@ -143,21 +134,24 @@ export class OwnAircraft {
   }
 
   /**
-   * Make sure the right model is on screen for this type.
+   * Two sources, in order. The procedural model is built synchronously and
+   * shown at once; the real airframe, if the library has one, replaces it when
+   * its megabyte arrives. Waiting for the download would put a hole in the
+   * middle of the screen at the moment the user stepped inside.
    *
-   * Two sources, in that order. The procedural model is built synchronously
-   * and shown at once; the real airframe, if the library has one, replaces it
-   * when its megabyte has arrived. Waiting for the download instead would put
-   * a hole in the middle of the screen at the moment the user stepped inside.
-   *
-   * Deliberately *not* gated on the detail preference. A model is about a
-   * megabyte, once per type, and then it is in the browser cache; the terrain
-   * behind it streams tens of megabytes in the same minute. It is also the
-   * subject of the shot. Withholding it to save a fraction of the terrain
-   * budget would be the wrong economy.
+   * Deliberately *not* gated on the detail preference: a megabyte once per
+   * type, then cached, against the tens of megabytes of terrain behind it in
+   * the same minute — and this is the subject of the shot.
    */
-  private ensureModel(typeCode: string | null, category: string | null): void {
-    const key = `${typeCode ?? ''}|${category ?? ''}`;
+  private ensureModel(
+    typeCode: string | null,
+    category: string | null,
+    operator: string | null,
+  ): void {
+    // The operator is part of the key, because it decides the livery. Without
+    // it, stepping from an Air France 777 into a British Airways one kept the
+    // first aircraft's paint.
+    const key = `${typeCode ?? ''}|${category ?? ''}|${operator ?? ''}`;
     if (this.builtFor === key) return;
 
     this.teardown();
@@ -168,14 +162,13 @@ export class OwnAircraft {
     this.shape = model.shape;
     this.applyProcedural(model);
 
-    void loadModelFor(typeCode).then((loaded) => {
+    void loadModelFor(typeCode, operator, category).then((loaded) => {
       // The user may have moved on while it was downloading.
       if (!loaded || this.builtFor !== key) return;
       this.applyLoaded(loaded);
     });
   }
 
-  /** Add a mesh to the scaled model group, with the conventions it needs. */
   private attach(mesh: Mesh): Mesh {
     mesh.frustumCulled = false;
     this.model.add(mesh);
@@ -235,11 +228,9 @@ export class OwnAircraft {
   }
 
   /**
-   * Swap in a real airframe from the library.
-   *
    * The procedural model is torn down first rather than hidden: the two would
-   * otherwise occupy the same space and z-fight against each other, which is
-   * a far worse artefact than either model on its own.
+   * otherwise occupy the same space and z-fight, which is a far worse artefact
+   * than either model on its own.
    */
   private applyLoaded(loaded: LoadedModel): void {
     this.clearMeshes();
@@ -283,12 +274,12 @@ export class OwnAircraft {
         angle: 0,
       });
       // The blur disc is only ever shown against the blades, so it starts off.
+      // `transparent` is already set by the parser — see the note there on why
+      // a consumer must not flip it on a shared material.
       if (disc) {
-        (disc.material as MeshBasicMaterial).transparent = true;
         (disc.material as MeshBasicMaterial).opacity = 0;
         disc.visible = false;
       }
-      part.material.transparent = true;
     }
 
     this.finishModel();
@@ -301,13 +292,10 @@ export class OwnAircraft {
   }
 
   /**
-   * Place the model for this frame.
-   *
    * `visible` is false in cockpit view: drawing the fuselage the camera sits
-   * inside fills the screen with the inside of a hull.
-   *
-   * `terrainHeightAt` puts the model on the ground rather than through it when
-   * the aircraft is taxiing or parked — see `@/render/ground`.
+   * inside fills the screen with the inside of a hull. `terrainHeightAt` puts
+   * the model on the ground rather than through it when the aircraft is
+   * taxiing or parked — see `@/render/ground`.
    */
   update(
     sample: SampledAircraft,
@@ -319,7 +307,7 @@ export class OwnAircraft {
     this.scene.visible = visible;
     if (!visible) return;
 
-    this.ensureModel(typeCode, sample.latest.category);
+    this.ensureModel(typeCode, sample.latest.category, operatorOf(sample.latest.callsign));
 
     let altM = sample.altFt * FEET_TO_METRES;
     const terrainM = terrainHeightAt?.(sample.lat, sample.lon) ?? 0;
@@ -347,7 +335,6 @@ export class OwnAircraft {
     this.animateSpinners(dt, regime.power);
   }
 
-  /** Turn every propeller and rotor, and fade blades into blur discs. */
   private animateSpinners(dt: number, power: number): void {
     if (this.spinners.length === 0 || !this.shape) return;
     const shape = this.shape;
@@ -390,11 +377,9 @@ export class OwnAircraft {
   }
 
   /**
-   * Point the model's key light along the real sun vector.
-   *
    * The light rides with the aircraft rather than sitting at a fixed world
-   * position: at planetary scale a "far away" light placed once would drift
-   * out of alignment as the floating origin moves.
+   * position: at planetary scale a "far away" light placed once would drift out
+   * of alignment as the floating origin moves.
    */
   setSun(direction: Vector3): void {
     this.sun.position.copy(this.group.position).addScaledVector(direction, 4000);
@@ -404,8 +389,6 @@ export class OwnAircraft {
   }
 
   /**
-   * Drop the meshes without touching the type.
-   *
    * Split from `teardown` because swapping the procedural model for the real
    * one keeps the type and the airframe shape — only the geometry changes.
    */

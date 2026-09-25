@@ -29,6 +29,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import sharp from 'sharp';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -39,6 +40,18 @@ import { applyTransform, flatten, parseAc3d } from './ac3d.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
 const CACHE = join(HERE, '.cache');
+
+/**
+ * Texture ceiling, pixels on the long edge.
+ *
+ * Simulator liveries are authored at 4096 for a cockpit walk-around. This app
+ * draws the aeroplane at a few hundred pixels — the widest it is ever seen is
+ * the front page, and the model is normalised to unit length even there — so
+ * everything above 2048 is detail that is downsampled on the GPU on every
+ * frame after being downloaded once. The raw set came to 88 MB, which is not a
+ * thing to put in a repository or in front of a phone tether.
+ */
+const MAX_TEXTURE_PX = 2048;
 const OUT = join(ROOT, 'public', 'models');
 
 const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
@@ -62,8 +75,23 @@ const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
 const DISCARD =
   /\.int$|interior|cabin|cockpit|flightdeck|panel|seat|yoke|pedestal|instrument|jack|tug|pushback|stair|chock|cone$|service|crew|human|pilot|shadow|\.hide|\.spot$|beam|halo|flare/i;
 
-/** Undercarriage, hidden above circuit height. */
-const GEAR = /^(gear|wheel|geardoor|bogie|strut|tyre|tire)/i;
+/**
+ * Undercarriage, hidden above circuit height.
+ *
+ * Deliberately *not* anchored, which the first version was. Model authors put
+ * the side before the part far more often than after it, so `^gear` misses
+ * `rightgear.hyd2` and `^wheel` misses `NoseWheel` — and on the 787 that is
+ * every gear part there is. The result was an airliner whose wheels were
+ * welded to the fuselage: down at cruise, and no longer retractable, in the
+ * app as well as anywhere else the model is drawn.
+ *
+ * The texture rule below catches the rest. Aircraft authors put the whole
+ * undercarriage on one sheet, so a part painted with it is gear whatever the
+ * object happens to be called — which is how the main bogies (`Mesh.395` and
+ * friends) are found at all.
+ */
+const GEAR = /(gear|wheel|bogie|tyre|tire|oleo)/i;
+const GEAR_TEXTURE = /(gear|wheel|bogie|tyre|tire)/i;
 
 /** Turning parts, emitted as spinners the renderer drives. */
 const PROP = /^prop(?!disc)/i;
@@ -103,10 +131,292 @@ export const AIRCRAFT = [
     types: ['B77W', 'B77L', 'B773', 'B772', 'B77F'],
     lengthM: 73.9,
     credit: '777 — FlightGear FGAddon, GPL-2.0',
+    /*
+     * Operator liveries.
+     *
+     * The 777 is the one aircraft in the hangar whose liveries are filed under
+     * ICAO airline designators, which is exactly what the first three letters
+     * of an ADS-B callsign are. That makes the correct airline reachable
+     * rather than guessable, and it is what fixes the complaint that started
+     * this: a single baked-in JAL paint scheme was being shown on every 777 in
+     * the sky, including everyone else's.
+     *
+     * `neutral` is the fallback and it matters more than any single airline.
+     * Falling back to *another* operator's livery would be worse than having
+     * none — a plain white aircraft is honest about not knowing, and a Qatar
+     * 777 painted as Emirates is not.
+     */
+    liveries: {
+      dir: 'Models/Liveries-300ER',
+      /** The texture in the base model that a livery replaces. */
+      replaces: 'paint1.png',
+      neutral: 'white',
+      /*
+       * The busiest 777 operators, plus the file each one is under — the
+       * upstream names are not all bare designators. Curated rather than
+       * exhaustive because every entry is about half a megabyte, and the
+       * long tail is answered perfectly well by `neutral`.
+       */
+      byOperator: {
+        AAL: 'AAL',
+        ACA: 'ACA-New-livery',
+        AFL: 'AFL',
+        AFR: 'AFR-New-livery',
+        ANA: 'ANA',
+        ANZ: 'ANZ',
+        BAW: 'BAW',
+        CCA: 'CCA',
+        CES: 'CES',
+        CPA: 'CPA',
+        CSN: 'CSN',
+        ETD: 'ETD',
+        EVA: 'EVA',
+        GIA: 'GIA',
+        JAL: 'JAL-one',
+        KLM: 'KLM-New-livery',
+        MSR: 'MSR',
+        PIA: 'PIA',
+        QTR: 'QTR',
+        SAA: 'SAA',
+        SIA: 'SIA',
+        SVA: 'SVA',
+        SWR: 'SWR',
+        THY: 'THY',
+        UAE: 'UAE',
+        VOZ: 'VOZ',
+      },
+    },
+  },
+  {
+    id: 'b763',
+    path: '767-300',
+    model: 'Models/767-300.ac',
+    types: ['B763', 'B762', 'B764', 'B76F'],
+    lengthM: 54.9,
+    credit: '767-300 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'b752',
+    path: '757-200',
+    model: 'Models/757-200.ac',
+    types: ['B752', 'B753'],
+    lengthM: 47.3,
+    credit: '757-200 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'crj7',
+    path: 'CRJ700-family',
+    model: 'Models/CRJ700.ac',
+    types: ['CRJ7', 'CRJ9', 'CRJX', 'CRJ2', 'CRJ1'],
+    lengthM: 32.3,
+    credit: 'CRJ700 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'e145',
+    path: 'Embraer-ERJ-145',
+    model: 'Models/erj145.ac',
+    types: ['E145', 'E135', 'E140', 'E45X'],
+    lengthM: 29.9,
+    credit: 'ERJ-145 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'at72',
+    path: 'ATR-72-500',
+    model: 'Models/ATR-72-500.ac',
+    types: ['AT72', 'AT75', 'AT76', 'AT73', 'AT45', 'AT46', 'AT43'],
+    lengthM: 27.2,
+    credit: 'ATR 72-500 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'md80',
+    path: 'MD-80',
+    model: 'Models/mesh_airframe.ac',
+    types: ['MD82', 'MD83', 'MD88', 'MD81', 'MD90'],
+    lengthM: 45.1,
+    credit: 'MD-80 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'b190',
+    path: 'b1900d',
+    model: 'Models/b1900d.ac',
+    types: ['B190', 'BE19'],
+    lengthM: 17.6,
+    credit: 'Beechcraft 1900D — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'be20',
+    path: 'Beechcraft-King-Air',
+    model: 'Models/kingair.ac',
+    types: ['BE20', 'BE9L', 'BE10', 'B350'],
+    lengthM: 14.2,
+    credit: 'King Air — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'c208',
+    path: 'Cessna-208-Caravan',
+    model: 'Models/caravan.ac',
+    types: ['C208', 'C20T'],
+    lengthM: 12.6,
+    credit: 'Cessna 208 Caravan — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'pc12',
+    path: 'Pilatus-PC-12',
+    model: 'Models/pc12.ac',
+    types: ['PC12'],
+    lengthM: 14.4,
+    credit: 'Pilatus PC-12 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'd228',
+    path: 'do228',
+    model: 'Models/do228.ac',
+    types: ['D228'],
+    lengthM: 16.6,
+    credit: 'Dornier 228 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'l410',
+    path: 'Let-L410',
+    model: 'Models/l410.ac',
+    types: ['L410'],
+    lengthM: 14.4,
+    credit: 'Let L-410 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'c750',
+    path: 'CitationX',
+    model: 'Models/CitationX.ac',
+    types: ['C750', 'C56X', 'C68A', 'C525', 'C510'],
+    lengthM: 22.0,
+    credit: 'Citation X — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'c172',
+    path: 'c172r',
+    model: 'Models/c172-dpm.ac',
+    types: ['C172', 'C182', 'C152', 'C150', 'C177'],
+    lengthM: 8.28,
+    credit: 'Cessna 172 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'da40',
+    path: 'DA40',
+    model: 'Models/da40.ac',
+    types: ['DA40', 'DA42', 'DV20'],
+    lengthM: 8.06,
+    credit: 'Diamond DA40 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'ec35',
+    path: 'ec135',
+    model: 'Models/ec135.ac',
+    types: ['EC35', 'EC45', 'H135', 'H145'],
+    lengthM: 10.9,
+    rotorcraft: true,
+    credit: 'Eurocopter EC135 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'bo05',
+    path: 'bo105',
+    model: 'Models/bo105.ac',
+    types: ['BO05', 'EC20', 'H120'],
+    lengthM: 11.9,
+    rotorcraft: true,
+    credit: 'Bo 105 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'r44',
+    path: 'R44',
+    model: 'Models/r44.ac',
+    types: ['R44', 'R22', 'R66'],
+    lengthM: 9.0,
+    rotorcraft: true,
+    credit: 'Robinson R44 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 's76c',
+    path: 'Sikorsky-76C',
+    model: 'Models/s76c.ac',
+    types: ['S76', 'S92', 'A139', 'AW39'],
+    lengthM: 16.0,
+    rotorcraft: true,
+    credit: 'Sikorsky S-76C — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'as32',
+    path: 'as332',
+    model: 'Models/as332.ac',
+    types: ['AS32', 'H225', 'EC25', 'S61'],
+    lengthM: 19.5,
+    rotorcraft: true,
+    credit: 'Aerospatiale AS332 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'uh1',
+    path: 'UH-1',
+    model: 'Models/uh1.ac',
+    types: ['UH1', 'B412', 'B212', 'B206', 'B407', 'B429'],
+    lengthM: 12.9,
+    rotorcraft: true,
+    credit: 'UH-1 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'b738',
+    path: '737-800',
+    model: 'Models/737-800.ac',
+    types: ['B738', 'B737', 'B739', 'B38M', 'B39M', 'B736', 'B735', 'B733', 'B734', 'B73H'],
+    lengthM: 39.5,
+    credit: '737-800 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'f27',
+    path: 'Fokker-F.27',
+    model: 'Models/f27.ac',
+    types: ['F27', 'F50'],
+    lengthM: 25.1,
+    credit: 'Fokker F.27 — FlightGear FGAddon, GPL-2.0',
   },
 ];
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Downscale and re-encode a texture.
+ *
+ * WebP rather than PNG: these are photographic paint schemes, not line art, and
+ * lossless PNG spends most of its bytes on noise the eye cannot see at this
+ * size. Quality 82 is where the difference stops being findable by flicking
+ * between the two at full zoom, and it is roughly a tenth of the bytes.
+ *
+ * `withoutEnlargement` matters — a 512-pixel placards sheet must not be blown
+ * up to 2048 on the way through.
+ */
+async function shrink(data, base) {
+  try {
+    const encoded = await sharp(data)
+      .resize({
+        width: MAX_TEXTURE_PX,
+        height: MAX_TEXTURE_PX,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 82 })
+      .toBuffer();
+    return { data: encoded, name: `${base.replace(/\.[^.]+$/, '')}.webp` };
+  } catch {
+    /*
+     * Pass it through untouched.
+     *
+     * A handful of FGAddon textures are in formats this encoder does not read
+     * — old interlaced PNGs and the occasional mislabelled file. Losing the
+     * whole aircraft over a texture that the *browser* can very likely still
+     * decode is the wrong trade, and if it cannot, the pipeline already draws
+     * that part in flat colour rather than failing.
+     */
+    return { data, name: base };
+  }
+}
 
 async function fetchCached(url, file) {
   const target = join(CACHE, file);
@@ -140,12 +450,13 @@ function toAppAxes(v) {
   return [-v[2], -v[0], v[1]];
 }
 
-function roleOf(name) {
+function roleOf(name, texture) {
   if (PROPDISC.test(name)) return 'disc';
   if (PROP.test(name)) return 'prop';
   if (TAILROTOR.test(name)) return 'tailRotor';
   if (ROTOR.test(name)) return 'mainRotor';
   if (GEAR.test(name)) return 'gear';
+  if (texture && GEAR_TEXTURE.test(texture)) return 'gear';
   return 'hull';
 }
 
@@ -270,12 +581,12 @@ export async function convert(entry, { quiet = false } = {}) {
       continue;
     }
 
-    const role = roleOf(object.name);
     const tris = triangulate(object, transform);
     if (tris.length === 0) continue;
 
     const material = object.surfaces[0]?.material ?? 0;
     const texture = object.texture;
+    const role = roleOf(object.name, texture);
     if (texture && !textures.includes(texture)) textures.push(texture);
 
     // Spinners are kept whole and separate: each one turns about its own hub.
@@ -310,6 +621,32 @@ export async function convert(entry, { quiet = false } = {}) {
       `${entry.id}: model is ${measured.toFixed(2)} m along the fuselage axis but the type is ` +
         `${entry.lengthM} m (${(error * 100).toFixed(1)}% out) — axes or units are wrong`,
     );
+
+  /*
+   * And the wings.
+   *
+   * The length check alone passes a fuselage with no wings, because a fuselage
+   * is exactly as long as the aeroplane. Several FGAddon aircraft keep the
+   * wings, stabilisers and engines in separate `.ac` files that the simulator
+   * assembles from XML offsets — the 737-800 is one — and converting only the
+   * main file yields a tube, correctly scaled, with nothing sticking out.
+   *
+   * No fixed-wing aircraft has a span under 60% of its length; most airliners
+   * are near parity and gliders are several times over. A tube measures about
+   * 10%, so the two populations are nowhere near each other and the threshold
+   * needs no per-type data.
+   */
+  if (!entry.rotorcraft) {
+    const span = box[0][1] - box[0][0];
+    const ratio = span / measured;
+    if (ratio < 0.6) {
+      throw new Error(
+        `${entry.id}: span is only ${(ratio * 100).toFixed(0)}% of length ` +
+          `(${span.toFixed(1)} m across ${measured.toFixed(1)} m) — the wings are ` +
+          `probably in a separate file this converter does not assemble`,
+      );
+    }
+  }
   }
 
   /*
@@ -461,9 +798,10 @@ export async function convert(entry, { quiet = false } = {}) {
     }
 
     const hash = createHash('sha1').update(data).digest('hex').slice(0, 8);
-    const name = `${entry.id}-${hash}-${base.replace(/[^\w.-]/g, '_')}`;
-    await writeFile(join(OUT, name), data);
-    textureFiles.push({ name, bytes: data.length });
+    const encoded = await shrink(data, base.replace(/[^\w.-]/g, '_'));
+    const name = `${entry.id}-${hash}-${encoded.name}`;
+    await writeFile(join(OUT, name), encoded.data);
+    textureFiles.push({ name, bytes: encoded.data.length });
   }
 
   // Renumber around anything that could not be found.
@@ -471,6 +809,43 @@ export async function convert(entry, { quiet = false } = {}) {
   const remap = textureFiles.map((t) => (t ? kept.push(t) - 1 : -1));
   for (const part of parts) part.texture = part.texture >= 0 ? remap[part.texture] ?? -1 : -1;
   if (missing.length) say(`  ${entry.id}: no texture found for ${missing.join(', ')}`);
+
+  /*
+   * --- operator liveries ----------------------------------------------------
+   *
+   * Emitted as loose files beside the model rather than packed into it: they
+   * are alternatives, only ever one is wanted, and a visitor who never flies a
+   * Qatar 777 should never download Qatar's paint. The renderer swaps the one
+   * texture slot the livery occupies and keeps every geometry it already has.
+   */
+  const liveries = {};
+  let liveryTexture = -1;
+
+  if (entry.liveries) {
+    const slot = textures.findIndex((t) => t.replace(/^.*[\\/]/, '') === entry.liveries.replaces);
+    liveryTexture = slot >= 0 ? remap[slot] ?? -1 : -1;
+
+    if (liveryTexture < 0) {
+      say(`  ${entry.id}: livery slot ${entry.liveries.replaces} not in the model — skipped`);
+    } else {
+      const wanted = { NEUTRAL: entry.liveries.neutral, ...entry.liveries.byOperator };
+      for (const [operator, file] of Object.entries(wanted)) {
+        try {
+          const data = await fetchCached(
+            `${FGADDON}/${entry.path}/${entry.liveries.dir}/${file}.png`,
+            `${entry.id}/livery-${file}.png`,
+          );
+          const encoded = await shrink(data, `${operator}.png`);
+          const name = `${entry.id}-livery-${encoded.name}`;
+          await writeFile(join(OUT, name), encoded.data);
+          liveries[operator] = name;
+        } catch {
+          say(`  ${entry.id}: livery ${operator} (${file}) unavailable`);
+        }
+      }
+      say(`  ${entry.id}: ${Object.keys(liveries).length} liveries`);
+    }
+  }
 
   /*
    * --- attribution ----------------------------------------------------------
@@ -529,6 +904,8 @@ export async function convert(entry, { quiet = false } = {}) {
     notices,
     lengthM: +measured.toFixed(3),
     textures: kept.map((t) => t.name),
+    /** Texture slot an operator livery replaces, or -1 if the model has none. */
+    liveryTexture,
     parts,
   };
 
@@ -548,7 +925,7 @@ export async function convert(entry, { quiet = false } = {}) {
       `(dropped ${discarded.toLocaleString()} interior verts)`,
   );
 
-  return { header, bytes: blob.length, textureFiles: kept, triangles, notices };
+  return { header, bytes: blob.length, textureFiles: kept, triangles, notices, liveries };
 }
 
 /** The attribution page shipped beside the models. */
@@ -589,12 +966,71 @@ async function main() {
   const wanted = process.argv.slice(2);
   const list = wanted.length ? AIRCRAFT.filter((a) => wanted.includes(a.id)) : AIRCRAFT;
 
-  const index = {};
+  /*
+   * The catalogue.
+   *
+   * `types` maps an ICAO type designator to a model id; `liveries` maps a model
+   * id to the operator paint schemes that exist for it. Two maps rather than
+   * one nested structure because the client reads them at different moments —
+   * the type is needed to decide whether to download anything at all, and the
+   * livery only once the operator is known.
+   */
+  /*
+   * What to draw when the exact type has no model.
+   *
+   * Six hundred designators exist and two dozen have a converted airframe, so
+   * the common case is a miss — and until now a miss meant the procedural
+   * generator, which is a decent silhouette and unmistakably not a photograph
+   * of an aeroplane. A real model of the wrong variant is closer to the truth
+   * than an accurate drawing of a generic one: an unknown narrowbody jet looks
+   * far more like a 737 than like anything a mesh generator produces.
+   *
+   * Keyed by airframe kind rather than by type, because that is the most the
+   * client knows about a designator it has never heard of. Gliders have no
+   * entry on purpose — the generated one is a long thin wing and a pod, which
+   * is genuinely what they all look like, and no glider in the hangar is a
+   * better stand-in for the rest than that.
+   */
+  const FALLBACKS = {
+    jet: 'b738',
+    turboprop: 'at72',
+    piston: 'c172',
+    rotorcraft: 'ec35',
+  };
+
+  const index = { types: {}, liveries: {}, fallback: {} };
   const rows = [];
+  const skipped = [];
   for (const entry of list) {
-    const { notices } = await convert(entry);
-    for (const type of entry.types) index[type] = entry.id;
+    /*
+     * One aircraft failing must not take the catalogue with it.
+     *
+     * The bounding-box check exists to catch a model whose wings live in a
+     * separate file, or whose axes are wrong — both of which produce an
+     * aeroplane scaled to nonsense. With a handful of aircraft, throwing was
+     * the right response. With two dozen, it means one bad entry in the middle
+     * of the list silently costs every entry after it, and the run that
+     * reports the problem is also the run that shipped nothing.
+     */
+    let converted;
+    try {
+      converted = await convert(entry);
+    } catch (error) {
+      console.log(`  ${entry.id}: SKIPPED — ${error instanceof Error ? error.message : String(error)}`);
+      skipped.push(entry.id);
+      continue;
+    }
+    const { notices, liveries } = converted;
+    index.types[entry.id] = index.types[entry.id] ?? entry.id;
+    for (const type of entry.types) index.types[type] = entry.id;
+    if (Object.keys(liveries).length > 0) index.liveries[entry.id] = liveries;
     rows.push({ ...entry, notices });
+  }
+
+  // Only offer a fallback that actually converted this run.
+  for (const [kind, id] of Object.entries(FALLBACKS)) {
+    if (rows.some((row) => row.id === id)) index.fallback[kind] = id;
+    else console.log(`  fallback for ${kind} (${id}) did not convert — omitted`);
   }
 
   await writeFile(join(OUT, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
@@ -607,6 +1043,7 @@ async function main() {
   if (gpl) await writeFile(join(OUT, 'LICENSE-GPL-2.0.txt'), gpl);
 
   console.log(`wrote index.json, CREDITS.md and ${rows.length} model(s) to public/models`);
+  if (skipped.length) console.log(`skipped: ${skipped.join(', ')}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

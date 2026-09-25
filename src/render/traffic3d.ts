@@ -115,14 +115,11 @@ export class Traffic3D {
   private readonly color = new Color();
   private readonly dummy = new Object3D();
   /**
-   * Scratch basis, reused.
-   *
-   * This used to be `new Matrix4()` inside the per-aircraft loop — a thousand
-   * throwaway matrices every frame, sixty thousand a second, all of which the
-   * garbage collector has to walk. It never showed up as a frame-time spike
-   * because it is not one: it shows up as a periodic multi-millisecond GC
-   * pause, which in a first-person view is exactly the stutter that makes the
-   * whole thing feel cheap.
+   * Scratch basis, reused. This used to be `new Matrix4()` inside the
+   * per-aircraft loop — sixty thousand throwaway matrices a second for the
+   * collector to walk. Not a frame-time spike but a periodic multi-millisecond
+   * GC pause, which in a first-person view is the stutter that makes the whole
+   * thing feel cheap.
    */
   private readonly basis = new Matrix4();
 
@@ -149,15 +146,11 @@ export class Traffic3D {
   }
 
   /**
-   * Rebuild the instance buffers.
-   *
-   * `cameraEcef` is used for range culling and for the apparent-size ramp;
-   * `excludeHex` drops the aircraft the camera is riding in, which would
-   * otherwise fill the cockpit view with its own fuselage.
-   *
-   * `terrainHeightAt` is what stops the aircraft on the ground being drawn
-   * *under* it — see `@/render/ground`. It is optional so the layer still
-   * works before the globe exists.
+   * `cameraEcef` drives range culling and the apparent-size ramp; `excludeHex`
+   * drops the aircraft the camera is riding in, which would otherwise fill the
+   * cockpit view with its own fuselage. `terrainHeightAt` stops aircraft on the
+   * ground being drawn *under* it (see `@/render/ground`), and is optional so
+   * the layer still works before the globe exists.
    */
   update(
     samples: readonly SampledAircraft[],
@@ -243,27 +236,24 @@ export class Traffic3D {
   /**
    * Which silhouette, and how big.
    *
-   * Both answers come from the same place — `shapeFor` — so a helicopter is
-   * never drawn with an airliner's length, and this layer can never disagree
-   * with the detailed model `OwnAircraft` builds for the very same type. The
-   * old code answered the two questions separately and sized every aircraft
-   * from the emitter category alone, which is a five-bucket guess: a Phenom
-   * 300 and a Cessna 152 are both `A1`.
+   * Both answers come from `shapeFor`, so a helicopter is never drawn with an
+   * airliner's length and this layer cannot disagree with the model
+   * `OwnAircraft` builds for the same type. The old code answered the two
+   * separately and sized from the emitter category alone, a five-bucket guess:
+   * a Phenom 300 and a Cessna 152 are both `A1`.
    *
    * ## What is cached and what is not
    *
-   * A verdict reached from a **type code** is final and memoised: an airframe
-   * does not change type mid-flight, and a thousand aircraft at 60 fps is
-   * otherwise 120 000 registry lookups a second.
+   * A verdict from a **type code** is final and memoised: type does not change
+   * mid-flight, and a thousand aircraft at 60 fps is otherwise 120 000 registry
+   * lookups a second.
    *
-   * A verdict reached from the **category alone** is deliberately *not*
-   * cached. The registry fills in asynchronously, so remembering the
-   * provisional answer is what froze an aircraft into the wrong shape for the
-   * rest of the session — and the previous code did exactly that for any
-   * aircraft whose category was present and not `A7`, which is nearly all of
-   * them, so a helicopter broadcasting `A1` stayed a jet for ever. Re-deriving
-   * costs one allocation for the few per cent of traffic with no type code
-   * yet, and it upgrades the instant the lookup lands.
+   * A verdict from the **category alone** is deliberately *not* cached. The
+   * registry fills in asynchronously, so remembering the provisional answer is
+   * what froze an aircraft into the wrong shape for the session — a helicopter
+   * broadcasting `A1` stayed a jet for ever. Re-deriving costs one allocation
+   * for the few per cent with no type code yet, and upgrades the instant the
+   * lookup lands.
    */
   private classify(sample: SampledAircraft): Airframe {
     const memo = this.airframes.get(sample.hex);

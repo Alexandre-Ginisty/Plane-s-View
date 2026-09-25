@@ -11,7 +11,7 @@
  * place (`TileNode.uvInto`) and this module stays purely in tile space.
  */
 
-import { DEG2RAD, MERCATOR_MAX_LAT, RAD2DEG, clamp, wrapLongitude } from './units';
+import { DEG2RAD, MERCATOR_MAX_LAT, RAD2DEG, clamp } from './units';
 
 // ---------------------------------------------------------------------------
 // Web Mercator
@@ -28,7 +28,7 @@ export function latToMercatorY(latDeg: number): number {
   return 0.5 - Math.log(Math.tan(Math.PI / 4 + lat / 2)) / (2 * Math.PI);
 }
 
-export function mercatorXToLon(x: number): number {
+function mercatorXToLon(x: number): number {
   return x * 360 - 180;
 }
 
@@ -57,8 +57,7 @@ export function tileBounds(z: number, x: number, y: number): TileBounds {
     west: mercatorXToLon(x / n),
     east: mercatorXToLon((x + 1) / n),
     north: mercatorYToLat(y / n),
-    south: mercatorYToLat((y + 1) / n),
-  };
+    south: mercatorYToLat((y + 1) / n) };
 }
 
 /**
@@ -78,16 +77,7 @@ export function tileCenterLatLon(z: number, x: number, y: number): { lat: number
   const n = 1 << z;
   return {
     lat: mercatorYToLat((y + 0.5) / n),
-    lon: mercatorXToLon((x + 0.5) / n),
-  };
-}
-
-/** The tile containing a geodetic point at a given zoom. */
-export function tileForLonLat(lonDeg: number, latDeg: number, z: number): TileCoord {
-  const n = 1 << z;
-  const x = clamp(Math.floor(lonToMercatorX(wrapLongitude(lonDeg)) * n), 0, n - 1);
-  const y = clamp(Math.floor(latToMercatorY(latDeg) * n), 0, n - 1);
-  return { z, x, y };
+    lon: mercatorXToLon((x + 0.5) / n) };
 }
 
 /** Stable string key for maps and IndexedDB. */

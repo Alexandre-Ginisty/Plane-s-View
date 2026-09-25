@@ -13,3 +13,7 @@ yarn-error.log*
 .DS_Store
 .idea/
 *.local
+
+# The model converter's download cache. Re-fetched from FGAddon on demand;
+# nine megabytes of someone else's SVN mirror does not belong in this repo.
+/tools/fgmodel/.cache

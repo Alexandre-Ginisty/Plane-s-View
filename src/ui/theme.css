@@ -25,6 +25,19 @@
  *    network request this app does not otherwise need, and the brief is that
  *    nothing is mandatory.
  *
+ * ## Light mode
+ *
+ * Every colour is a token on `:root`, so the light theme is a second block
+ * that redefines them and nothing else changes. It is a genuine daylight
+ * scheme rather than an inversion: inverting a holographic panel gives cyan
+ * text on white, which fails contrast at every size. The structure colour
+ * becomes a deep slate that reads on paper-white, the accent darkens to hold
+ * 4.5:1 against it, and the glow becomes a shadow — light does not glow.
+ *
+ * The 3D views are unaffected and deliberately so. The globe is photographic
+ * satellite imagery; there is no light version of the Alps, and tinting it
+ * would only make the imagery wrong. What switches is the chrome around it.
+ *
  * Colours here are mirrored in `palette.ts`, which the WebGL and MapLibre
  * layers read. Change one, change both.
  */
@@ -63,6 +76,44 @@
 
   color-scheme: dark;
 }
+
+/*
+ * Daylight.
+ *
+ * Applied by `data-theme="light"` on the document element, which is set from
+ * the stored preference before the app mounts — see `theme.ts`. An attribute
+ * rather than a media query alone, because the choice has to be overridable:
+ * the system preference is the default, not the verdict.
+ */
+:root[data-theme='light'] {
+  --bg: #eef2f7;
+  --bg-panel: rgba(255, 255, 255, 0.86);
+  --bg-panel-solid: #ffffff;
+  --bg-elevated: rgba(255, 255, 255, 0.95);
+  --border: rgba(24, 58, 82, 0.2);
+  --border-strong: rgba(24, 58, 82, 0.42);
+
+  --text: #10212e;
+  --text-dim: #3f5b70;
+  --text-faint: #6d8698;
+
+  /* Darkened to hold 4.5:1 on white. The dark accents are unreadable here. */
+  --accent: #0b6d92;
+  --accent-dim: #7fa8bd;
+  --accent-warm: #a35b00;
+  --ok: #0a7a4b;
+  --warn: #a35b00;
+  --error: #b3162a;
+
+  --shadow: 0 6px 24px rgba(20, 42, 60, 0.16);
+  /* Light does not glow. A halo on white is a smudge. */
+  --glow: 0 1px 3px rgba(20, 42, 60, 0.12);
+
+  color-scheme: light;
+}
+
+/* Scanlines are a projection artefact. On paper they are just dirt. */
+:root[data-theme='light'] .panel::before { display: none; }
 
 * { box-sizing: border-box; }
 

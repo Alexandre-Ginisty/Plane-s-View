@@ -32,7 +32,7 @@
 /** Semi-major axis (equatorial radius), metres. */
 export const WGS84_A = 6378137.0;
 /** Flattening. */
-export const WGS84_F = 1 / 298.257223563;
+const WGS84_F = 1 / 298.257223563;
 /** Semi-minor axis (polar radius), metres. */
 export const WGS84_B = WGS84_A * (1 - WGS84_F);
 /** First eccentricity squared. */

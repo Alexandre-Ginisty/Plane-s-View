@@ -56,7 +56,7 @@ const EVICT_TARGET_FRACTION = 0.9;
 export function evictDistantTiles(ctx: EvictionContext): void {
   if (ctx.nodes.size <= ctx.maxResidentTiles) return;
 
-  // Rule 5: anything drawn this frame, and every ancestor of it (needed for
+  // Rule 6: anything drawn this frame, and every ancestor of it (needed for
   // texture inheritance), is untouchable.
   const protectedNodes = new Set<TileNode>();
   for (const node of ctx.renderSet) {

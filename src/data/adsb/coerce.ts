@@ -49,7 +49,7 @@ export function feedClockToMs(value: unknown): number | null {
  * clock. Trusting it would silently age out every aircraft, so beyond a
  * generous tolerance we fall back to local time.
  */
-export const MAX_FEED_CLOCK_SKEW_MS = 10 * 60_000;
+const MAX_FEED_CLOCK_SKEW_MS = 10 * 60_000;
 
 export function usableFeedClock(feedNowMs: number | null, receivedAt: number): number | null {
   if (feedNowMs === null) return null;

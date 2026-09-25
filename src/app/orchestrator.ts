@@ -5,13 +5,6 @@
  * a `requestAnimationFrame`: one loop means one place where ordering is
  * decided, and ordering matters — the camera must move before the quadtree
  * selects tiles for it, or every tile is chosen for where the camera *was*.
- *
- * Per frame, in order:
- *   1. sample the traffic store at the exact frame time
- *   2. move the camera (which may rebase the floating origin)
- *   3. update the quadtree against the new camera
- *   4. rebuild the instanced traffic buffer
- *   5. publish a throttled snapshot to the UI store
  */
 
 import { Vector3 } from 'three';
@@ -189,14 +182,10 @@ export class Orchestrator {
     }
 
     /*
-     * No "pick an aircraft" toast.
-     *
-     * It fired on every boot, which means every reload, and it sits in the
-     * same strip as the genuine warnings about the feed and the connection —
-     * so an instruction the user already followed once reads as something
-     * having gone wrong. What it said is on the aircraft panel ("Step inside
-     * this aircraft") at the moment it is actually true, and in the key panel
-     * under `?` for anyone looking for it.
+     * No "pick an aircraft" toast: it fired on every reload, in the same strip
+     * as the genuine feed and connection warnings, so an instruction the user
+     * already followed read as something having gone wrong. The aircraft panel
+     * says it at the moment it is true, and `?` has it for anyone looking.
      */
   }
 
@@ -280,14 +269,9 @@ export class Orchestrator {
         this.ownAircraft.setSun(this.sunVec);
       }
 
-      /*
-       * The engines.
-       *
-       * Driven from the same inferred regime as the propellers (see
-       * `@/state/regime`): if the sound said climb power while the propellers
-       * said idle, the contradiction would be more noticeable than either
-       * being wrong on its own.
-       */
+      // Engines driven from the same inferred regime as the propellers (see
+      // `@/state/regime`): sound saying climb power while the propellers said
+      // idle would be more noticeable than either being wrong on its own.
       const airframe = pov.airframe;
       if (airframe) this.audio.update(airframe, flightRegime(flying), app.cameraMode);
     }
@@ -320,7 +304,6 @@ export class Orchestrator {
     updateSunlight(engine, globe, this.sunVec, this.upVec, lat, lon);
   }
 
-  /** Warm the tile cache along the aircraft's projected path. */
   private maybePrefetch(dt: number, sample: SampledAircraft): void {
     this.prefetchAccumulator += dt;
     if (this.prefetchAccumulator < 2) return;
@@ -345,11 +328,9 @@ export class Orchestrator {
   }
 
   /**
-   * Track the followed aircraft directly by hex.
-   *
-   * The area query is centred on it, but a fast aircraft can still outrun the
-   * circle between polls, and losing the aircraft you are sitting in is the
-   * one failure the user will not forgive.
+   * The area query is centred on the followed aircraft, but a fast one can
+   * still outrun the circle between polls, and losing the aircraft you are
+   * sitting in is the one failure the user will not forgive.
    */
   private maybeFollow(dt: number, hex: string): void {
     this.followAccumulator += dt;
@@ -366,7 +347,6 @@ export class Orchestrator {
       .catch(() => undefined);
   }
 
-  /** Push a throttled snapshot into the reactive store. */
   private publish(dt: number, selected: SampledAircraft | null, tracked: number): void {
     this.uiAccumulator += dt;
     if (this.uiAccumulator < 1 / UI_REFRESH_HZ) return;
@@ -377,6 +357,7 @@ export class Orchestrator {
     if (!engine || !globe) return;
 
     app.selected = selected;
+    if (this.pov) app.viewHeadingDeg = this.pov.viewHeadingDeg;
     publishTelemetry({
       engine,
       globeStats: globe.getStats(),
@@ -403,8 +384,6 @@ export class Orchestrator {
   // -------------------------------------------------------------------------
 
   /**
-   * Select an aircraft, or clear the selection.
-   *
    * The dossier lookup is awaited but token-guarded: a user clicking through a
    * busy map faster than adsbdb answers would otherwise see a panel filled in
    * by whichever request happened to return last.
@@ -423,7 +402,6 @@ export class Orchestrator {
     await loadSelection(hex, sample, ++this.dossierToken, () => this.dossierToken, this.map);
   }
 
-  /** Step into the selected aircraft. */
   enterPov(): void {
     const hex = app.selectedHex;
     if (!hex) return;
@@ -468,15 +446,10 @@ export class Orchestrator {
   /**
    * Leave this aircraft for a random one somewhere else in the world.
    *
-   * The button this serves used to be labelled "Pick another aircraft" and
-   * simply dropped back to the map, which is not picking anything — it is
-   * asking the user to go and do it. Now it does what it says: finds an
-   * airliner at altitude on the other side of the planet and puts you in it.
-   *
-   * Everything is guarded on the token rather than on a boolean, because the
-   * search takes a second or two over several regions and the user can press
-   * it again, press Escape, or select something on the map in the meantime;
-   * whichever action is newest wins and the older searches land nowhere.
+   * Guarded on a token rather than a boolean: the search takes a second or two
+   * over several regions and the user can press it again, press Escape, or
+   * select something on the map in the meantime. Whichever action is newest
+   * wins and the older searches land nowhere.
    */
   async shuffleAircraft(): Promise<void> {
     if (app.shuffling) return;
@@ -540,12 +513,9 @@ export class Orchestrator {
   }
 
   /**
-   * Turn the engine note on or off.
-   *
    * Async because starting an AudioContext is, and because the browser may
-   * simply refuse — which is not an error worth a toast. The user pressed a
-   * speaker icon and nothing happened; a notice explaining autoplay policy
-   * would be the app blaming the browser at them.
+   * simply refuse — not an error worth a toast. A notice explaining autoplay
+   * policy would be the app blaming the browser at the user.
    */
   async setSound(on: boolean): Promise<void> {
     if (on) {
@@ -557,13 +527,11 @@ export class Orchestrator {
   }
 
   /**
-   * Change the detail ceiling, and remember it.
-   *
-   * Applied through the monitor rather than straight to the globe, because the
-   * ceiling has to reach everything the profile drives — the loader's
-   * concurrency and timeouts, the feed radius, the prefetch horizon — not just
-   * the zoom. Pushing it at the globe alone would leave the app asking for
-   * thirty parallel requests to serve a zoom-16 picture.
+   * Applied through the monitor rather than straight to the globe: the ceiling
+   * has to reach everything the profile drives — loader concurrency and
+   * timeouts, feed radius, prefetch horizon — not just the zoom. Pushing it at
+   * the globe alone would leave the app asking for thirty parallel requests to
+   * serve a zoom-16 picture.
    */
   setQuality(preference: QualityPreference): void {
     app.quality = preference;
@@ -571,14 +539,11 @@ export class Orchestrator {
     networkMonitor.setQuality(preference);
     this.globe?.applyProfile(networkMonitor.profile);
     /*
-     * Relief is the user's call, not the connection's.
-     *
-     * It has to be applied separately from the profile because it is not a
-     * bandwidth decision at all: the elevation tile is downloaded and decoded
-     * either way, and what changes is how much of it is turned into vertices.
-     * That is CPU and GPU. Tying it to the measured grade would refuse a
-     * detailed mesh to somebody on a fast machine and a slow link, who can
-     * afford it perfectly well.
+     * Relief is the user's call, not the connection's: it is not a bandwidth
+     * decision at all. The elevation tile is downloaded and decoded either
+     * way; what changes is how much of it becomes vertices, which is CPU and
+     * GPU. Tying it to the measured grade would refuse a detailed mesh to
+     * somebody on a fast machine and a slow link.
      */
     this.globe?.setRelief(preference === 'high' ? 'boosted' : 'standard');
   }

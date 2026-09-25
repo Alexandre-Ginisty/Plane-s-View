@@ -1,41 +1,39 @@
 /**
- * First-person camera.
- *
- * Rides the selected aircraft. Five modes, all built from the same body frame:
- * cockpit (inside, looking out), wing (on the wingtip), chase, orbit and
- * tower (a fixed ground observer watching it pass).
+ * First-person camera. Every mode is built from the same body frame; the list
+ * lives in `frame.ts`.
  *
  * ## Why the camera is smoothed *again*
  *
- * The track is already Kalman-filtered, so it is tempting to place the camera
- * directly on its output. That produces a view that is technically correct and
- * unwatchable: the filter's job is to estimate where the aircraft is, not to
- * be pleasant to sit inside, and its small continuous corrections read as a
- * permanent tremor when they are one metre from your eye. A second, much
- * softer critically-damped smoothing on the camera pose removes it without
- * introducing noticeable lag.
+ * The track is already Kalman-filtered, so placing the camera directly on its
+ * output is tempting and unwatchable: the filter's job is to estimate where
+ * the aircraft is, not to be pleasant to sit inside, and its small continuous
+ * corrections read as a permanent tremor one metre from your eye. A second,
+ * much softer smoothing on the camera pose removes it without noticeable lag.
  *
  * ## Terrain clearance
  *
- * Every mode is lifted above the sampled terrain height. A camera placed on a
- * reported altitude that is barometric, or on an aircraft on the ground at an
- * elevated airport, would otherwise end up inside a mountain — and being
- * inside terrain renders as a full-screen texture, which looks like a crash
- * rather than a camera placement.
+ * Every external mode is lifted above the sampled terrain height. A camera on
+ * a barometric altitude, or on an aircraft parked at an elevated airport, ends
+ * up inside a mountain — which renders as a full-screen texture and looks like
+ * a crash rather than a camera placement.
  */
 
 import { Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
-import { DEG2RAD, FEET_TO_METRES, clamp, geodeticToEcef, type Vec3 } from '@/core/math/geo';
+import { DEG2RAD, FEET_TO_METRES, clamp, type Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
 import { shapeFor, type AirframeShape } from '@/render/aircraft';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from '@/render/ground';
-import { aircraftFrame, type AircraftFrame, type CameraMode } from './frame';
+import { aircraftFrame, bearingOf, type AircraftFrame, type CameraMode } from './frame';
+import { placeCamera } from './placement';
+import type { PovState } from './state';
+
+export type { PovState } from './state';
 
 export { CAMERA_MODES, aircraftFrame } from './frame';
-export type { AircraftFrame, CameraMode, CameraModeInfo } from './frame';
+export type { AircraftFrame, CameraMode } from './frame';
 
 /** Metres of clearance the camera keeps above terrain. */
 const TERRAIN_CLEARANCE_M = 8;
@@ -43,18 +41,15 @@ const TERRAIN_CLEARANCE_M = 8;
 /**
  * Drag sensitivity, as a multiple of one-to-one with the cursor.
  *
- * The old figures were flat constants — 0.005 rad per pixel for orbit, 0.004
- * for free look — which at this field of view is roughly *five times* the
- * angle the pixel under the cursor actually moved through. Dragging therefore
- * threw the view about far faster than the hand expected, and no amount of
+ * These used to be flat constants — 0.005 rad/px — roughly *five times* the
+ * angle the pixel under the cursor actually moved through. No amount of
  * smoothing fixes a gain that is simply wrong; it only makes the overshoot
  * arrive late as well.
  *
- * Orbit is exactly one-to-one: the point you grabbed stays under the cursor,
- * which is what makes an orbit control feel attached to the object rather
- * than to a slider. Free look gets a little more, because you cannot drag
- * across three screen widths to look over your shoulder — at 2.2 a quarter
- * turn is about two thirds of a screen.
+ * Orbit is exactly one-to-one, so the point you grabbed stays under the
+ * cursor. Free look gets more, because you cannot drag across three screen
+ * widths to look over your shoulder — at 2.2 a quarter turn is two thirds of
+ * a screen.
  */
 const ORBIT_DRAG_GAIN = 1;
 const LOOK_DRAG_GAIN = 2.2;
@@ -62,51 +57,57 @@ const LOOK_DRAG_GAIN = 2.2;
 /**
  * How hard the *aircraft's own motion* is damped, per mode, seconds.
  *
- * This is the only thing that gets damped. See the note on `update`: the
- * user's own input is applied afterwards, undamped, because smoothing input is
- * not smoothing — it is lag.
+ * ## Zero in every external view, and that is the point
  *
- * The cockpit is tight because you are bolted to the airframe and a soft
- * follow there reads as the aeroplane sliding around you. The external views
- * are slower because their lag becomes a gentle arc rather than a wobble: the
- * aim is recomputed from wherever the camera actually ended up, so the subject
- * cannot drift out of frame however far behind the body is.
+ * These used to be 0.1-0.12, on the reasoning that damping the anchor hides
+ * the track filter's jitter. In a view whose subject is the aeroplane it does
+ * the exact opposite, and it took a report of "l'avion tremble" to see why.
+ *
+ * An external camera is placed at `anchor + offset` and aimed back at
+ * `anchor`, while the model is drawn at the aircraft's true position. Where
+ * the aeroplane lands on screen is therefore governed by
+ * `aircraft - smoothedAnchor` — the *residual* of the damping. Damping does
+ * not remove that residual; damping is what creates it. Every wobble in the
+ * filter becomes a wobble of the subject against a stationary frame, which is
+ * the most visible place it could possibly be put.
+ *
+ * With no damping the anchor is the drawn position exactly, so the aeroplane
+ * is pinned to the centre of frame by construction and cannot move relative to
+ * the camera at all. The residual has not vanished — it now moves the *world*
+ * instead, and a few metres of terrain shift seen from a kilometre away is
+ * invisible, where the same few metres on the subject are not.
+ *
+ * The cockpit keeps its damping, because there the camera *is* the subject:
+ * the residual moves the whole view, and that is the one case the smoothing
+ * was actually written for.
  */
 const ANCHOR_TAU: Record<CameraMode, number> = {
   cockpit: 0.035,
-  chase: 0.12,
-  wing: 0.12,
-  orbit: 0.1,
-  tower: 0.1,
+  chase: 0,
+  wing: 0,
+  orbit: 0,
 };
 
 /**
  * Why the anchor is *predicted* forward before it is corrected.
  *
- * `ANCHOR_TAU` on its own is a first-order lag, and a first-order lag
- * following a *moving* target never catches it: the steady-state error is
- * speed times the time constant, which at 480 knots and 0.1 s is **twenty-five
- * metres**. On an airliner that is most of a fuselage, and it showed exactly
- * as you would expect — every external view aims at the damped anchor while
- * the model is drawn at the true position, so the aeroplane sat permanently
- * off to one side of views whose entire purpose is to centre it. The faster
- * the aircraft, the further out of frame.
+ * A first-order lag following a *moving* target never catches it: the
+ * steady-state error is speed times the time constant, which at 480 knots and
+ * 0.1 s is **twenty-five metres** — most of a fuselage. Every external view
+ * aims at the damped anchor while the model is drawn at the true position, so
+ * the aeroplane sat permanently off to one side of views whose entire purpose
+ * is to centre it.
  *
- * The fix is to advance the anchor along the aircraft's own velocity each
- * frame and let the damping act only on what is left over. The velocity is
- * taken from the feed — ground speed along the track, plus the vertical rate —
- * rather than learned from successive positions, and that choice matters:
+ * So the anchor advances along the aircraft's own velocity each frame and the
+ * damping acts only on what is left. The velocity comes from the feed rather
+ * than from successive positions, and that choice matters: an alpha-beta
+ * filter learning the rate from the residual was tried first and is quietly
+ * unsafe. `dt` is clamped to 100 ms so a backgrounded tab cannot teleport the
+ * world, but *positions* keep advancing with wall clock, so every stall hands
+ * the filter a several-hundred-metre jump labelled one tenth of a second.
+ * Measured here at 4741 m/s against a true 216.
  *
- * An alpha-beta filter that learns the rate from the residual was tried first
- * and is quietly unsafe here. `dt` is clamped to 100 ms so a backgrounded tab
- * cannot teleport the world, but the *positions* keep advancing with wall
- * clock, so every stall hands the filter a jump of several hundred metres
- * labelled as one tenth of a second. It faithfully concludes the aircraft is
- * doing four thousand metres a second, and the camera is flung off into
- * space. Measured, in this application, at 4741 m/s against a true 216.
- *
- * Reading the speed the aircraft is broadcasting cannot diverge, because
- * nothing accumulates.
+ * Reading the broadcast speed cannot diverge, because nothing accumulates.
  */
 
 /**
@@ -157,12 +158,10 @@ function lookQuaternion(forward: Vector3, up: Vector3, out: Quaternion): Quatern
 /**
  * The aircraft's velocity in ECEF, from what it is broadcasting.
  *
- * Ground speed is along the *track*, and `frame.forward` is along the
- * *heading*; the two differ by the drift angle, a few degrees in a strong
- * crosswind. Projecting the body axis onto the horizontal and using that is
- * therefore slightly wrong — by speed times the sine of the drift angle, which
- * is under a metre of residual for the damping to absorb, against the
- * twenty-five it exists to remove.
+ * Ground speed is along the *track*, `frame.forward` along the *heading*; the
+ * two differ by the drift angle. Using the body axis is therefore wrong by
+ * speed times the sine of that angle — under a metre for the damping to
+ * absorb, against the twenty-five it exists to remove.
  */
 function velocityOf(sample: SampledAircraft, frame: AircraftFrame, out: Vector3): Vector3 {
   const groundMps = sample.groundSpeedKt * 0.514_444;
@@ -186,17 +185,6 @@ function isSubjectLocked(mode: CameraMode): boolean {
   return mode !== 'cockpit';
 }
 
-
-export interface PovState {
-  mode: CameraMode;
-  /** Orbit yaw / pitch, radians, relative to the aircraft's forward axis. */
-  orbitYaw: number;
-  orbitPitch: number;
-  orbitDistance: number;
-  /** Additional look-around within cockpit and chase views. */
-  lookYaw: number;
-  lookPitch: number;
-}
 
 export class PovController {
   readonly state: PovState = {
@@ -225,8 +213,20 @@ export class PovController {
   /** Angle one pixel of drag subtends, from the live camera. */
   private radPerPx = FALLBACK_RAD_PER_PX;
 
-  /** Ground viewpoint for tower mode, chosen when the mode is entered. */
-  private towerAnchor: Vec3 | null = null;
+  /**
+   * Compass bearing the camera is actually looking along, degrees.
+   *
+   * Not the aircraft's heading. The HUD strip sits over the *view*, so it has
+   * to describe the view: free look turns the head without turning the
+   * aeroplane, and in the external modes the camera is not pointing along the
+   * airframe at all. Feeding it the heading made the strip disagree with the
+   * window it was drawn on.
+   */
+  private viewHeading = 0;
+
+  get viewHeadingDeg(): number {
+    return this.viewHeading;
+  }
 
   constructor(private readonly origin: FloatingOrigin) {}
 
@@ -235,15 +235,12 @@ export class PovController {
     this.state.mode = mode;
     this.state.lookYaw = 0;
     this.state.lookPitch = 0;
-    if (mode !== 'tower') this.towerAnchor = null;
   }
 
   /**
-   * How much angle a pixel is worth, reported by the frame loop.
-   *
-   * Drag gain has to come from the live camera, not a constant: the same
-   * fifty pixels mean a different rotation at a different field of view or
-   * window height, and a fixed number is right for exactly one window size.
+   * Drag gain has to come from the live camera, not a constant: the same fifty
+   * pixels mean a different rotation at a different field of view or window
+   * height, and a fixed number is right for exactly one window size.
    */
   setViewport(radiansPerPixel: number): void {
     if (Number.isFinite(radiansPerPixel) && radiansPerPixel > 0) {
@@ -251,7 +248,6 @@ export class PovController {
     }
   }
 
-  /** Mouse drag: look around in cockpit/chase, orbit in orbit mode. */
   applyDrag(dx: number, dy: number): void {
     // Any drag cancels a return to centre: the hand wins over the animation.
     this.recentring = false;
@@ -279,24 +275,19 @@ export class PovController {
   }
 
   /**
-   * Return the free look to centre.
-   *
-   * Eased over a few frames rather than snapped. Snapping it was a teleport:
-   * the view was looking over the wing one frame and dead ahead the next, with
-   * nothing on screen to explain what moved, which reads as a glitch rather
-   * than as a control. The easing is the one place a user-driven value is
-   * damped, and it is damped precisely because the user is *not* driving it —
-   * they asked for it to be put back.
+   * Eased over a few frames rather than snapped. Snapping was a teleport: over
+   * the wing one frame, dead ahead the next, with nothing on screen to explain
+   * what moved. This is the one place a user-driven value is damped, and it is
+   * damped precisely because the user is *not* driving it — they asked for it
+   * to be put back.
    */
   recentre(): void {
     this.recentring = true;
   }
 
   /**
-   * Position the camera for this frame.
-   *
-   * `terrainHeightAt` lets the controller keep the camera out of the ground in
-   * the external views, which otherwise clip into hillsides on approach.
+   * `terrainHeightAt` keeps the camera out of the ground in the external
+   * views, which otherwise clip into hillsides on approach.
    */
   update(
     camera: PerspectiveCamera,
@@ -304,20 +295,17 @@ export class PovController {
     dt: number,
     terrainHeightAt?: (lat: number, lon: number) => number,
   ): AircraftFrame {
-    /*
-     * The airframe first, because everything else is measured against it: the
-     * camera offsets, and how far off the ground the aircraft itself sits.
-     */
+    // Everything else is measured against the airframe: the camera offsets,
+    // and how far off the ground the aircraft itself sits.
     const shape = this.airframeOf(sample);
 
     /*
      * Put the aircraft on the ground before framing it.
      *
-     * An aircraft on the surface reports no usable altitude at all, and the
-     * zero that stands in for it is the ellipsoid — seventy metres under
-     * Heathrow, a hundred and sixty-five under Charles de Gaulle. Stepping
-     * into one put the cockpit inside the planet, looking at the underside of
-     * the terrain. See `@/render/ground`.
+     * An aircraft on the surface reports no usable altitude, and the zero
+     * standing in for it is the ellipsoid — seventy metres under Heathrow, a
+     * hundred and sixty-five under Charles de Gaulle. Stepping into one put
+     * the cockpit inside the planet. See `@/render/ground`.
      */
     let altM = sample.altFt * FEET_TO_METRES;
     if (terrainHeightAt && (sample.latest.onGround || altM < GROUND_CHECK_CEILING_M)) {
@@ -337,39 +325,37 @@ export class PovController {
      * Damp the aircraft, then add the user. In that order, and never together.
      *
      * Everything used to go through one smoothing pass: the mode placed a
-     * camera, the user's drag moved that camera, and the *result* was eased
-     * towards over 40-140 ms. So the damping meant for the track filter's
-     * jitter was also sitting on the mouse. Dragging in orbit moved the
-     * desired position and the view crawled after the cursor a seventh of a
-     * second behind; in the cockpit the free look was slerped on an 80 ms
-     * constant, so the head turned late and then kept turning after the hand
-     * stopped. That is the "la cam ça lag" — not frame rate, and not the
-     * filter. Input latency built in on purpose, for a reason that only ever
-     * applied to the data.
+     * camera, the drag moved it, and the *result* was eased over 40-140 ms —
+     * so the damping meant for the track filter's jitter also sat on the
+     * mouse. The head turned late and kept turning after the hand stopped.
+     * That was "la cam ça lag": input latency built in on purpose, for a
+     * reason that only ever applied to the data.
      *
-     * Now the damping is confined to the two things that actually carry noise
-     * — where the aircraft is, and how it is oriented — and the camera is
-     * constructed *out* from those each frame. User input is applied to the
-     * result at full rate, so a drag is one-to-one with the hand and the
-     * aeroplane still rides smoothly underneath it.
+     * Damping is now confined to the two things that carry noise — where the
+     * aircraft is and how it is oriented — and the camera is constructed *out*
+     * from those each frame, with input applied to the result at full rate.
      */
     const firstFrame = !this.initialised;
     const bodyQuaternion = lookQuaternion(frame.forward, frame.up, _bodyQuat);
 
-    if (firstFrame) {
+    const anchorTau = ANCHOR_TAU[this.state.mode];
+
+    if (firstFrame || anchorTau === 0) {
+      // Pinned to the drawn position. See the note above `ANCHOR_TAU`.
       this.smoothedAnchor.copy(aircraft);
-      this.smoothedBody.copy(bodyQuaternion);
-      this.initialised = true;
+      if (firstFrame) {
+        this.smoothedBody.copy(bodyQuaternion);
+        this.initialised = true;
+      }
     } else {
       // Carry the anchor along the aircraft's own velocity, then damp only the
       // discrepancy that is left. See the note above `ANCHOR_TAU`.
       this.smoothedAnchor.addScaledVector(velocityOf(sample, frame, _velocity), dt);
       _residual.copy(aircraft).sub(this.smoothedAnchor);
-      this.smoothedAnchor.addScaledVector(
-        _residual,
-        1 - Math.exp(-dt / ANCHOR_TAU[this.state.mode]),
-      );
+      this.smoothedAnchor.addScaledVector(_residual, 1 - Math.exp(-dt / anchorTau));
+    }
 
+    if (!firstFrame) {
       this.smoothedBody.slerp(bodyQuaternion, 1 - Math.exp(-dt / BODY_TAU));
     }
 
@@ -402,61 +388,16 @@ export class PovController {
     // where an A380's tail would be.
     const size = shape.length;
 
-    switch (this.state.mode) {
-      case 'cockpit': {
-        // Eye point: forward of the centre of mass, a little above the axis.
-        position
-          .copy(anchor)
-          .addScaledVector(sForward, size * 0.42)
-          .addScaledVector(sUp, size * 0.07);
-        forward.copy(sForward);
-        break;
-      }
-
-      case 'chase': {
-        position
-          .copy(anchor)
-          .addScaledVector(sForward, -size * 2.6)
-          .addScaledVector(frame.localUp, size * 0.7);
-        // Chase uses the local vertical, not the body's: a chase camera that
-        // rolls with the aircraft is disorienting rather than immersive.
-        up.copy(frame.localUp);
-        break;
-      }
-
-      case 'wing': {
-        position
-          .copy(anchor)
-          .addScaledVector(sRight, -size * 1.3)
-          .addScaledVector(sUp, size * 0.12)
-          .addScaledVector(sForward, -size * 0.1);
-        break;
-      }
-
-      case 'orbit': {
-        const { orbitYaw, orbitPitch, orbitDistance } = this.state;
-        const offset = _offset
-          .set(0, 0, 0)
-          .addScaledVector(sForward, Math.cos(orbitPitch) * Math.cos(orbitYaw))
-          .addScaledVector(sRight, Math.cos(orbitPitch) * Math.sin(orbitYaw))
-          .addScaledVector(frame.localUp, Math.sin(orbitPitch))
-          .normalize()
-          .multiplyScalar(orbitDistance);
-
-        position.copy(anchor).add(offset);
-        up.copy(frame.localUp);
-        break;
-      }
-
-      case 'tower': {
-        // A fixed point on the ground, placed once, ahead of and beside the
-        // aircraft so it flies past rather than away.
-        this.towerAnchor ??= this.pickTowerAnchor(sample, terrainHeightAt);
-        position.set(this.towerAnchor[0], this.towerAnchor[1], this.towerAnchor[2]);
-        up.copy(position).normalize();
-        break;
-      }
-    }
+    placeCamera(
+      this.state.mode,
+      this.state,
+      anchor,
+      { forward: sForward, right: sRight, up: sUp },
+      frame,
+      size,
+      _offset,
+      { position, forward, up },
+    );
 
     // Terrain clearance for the external views. The cockpit deliberately does
     // not get this: if the aircraft is below the terrain the data says so, and
@@ -500,25 +441,24 @@ export class PovController {
     camera.quaternion.copy(lookQuaternion(forward, up, _desiredQuat));
     camera.updateMatrixWorld();
 
+    this.viewHeading = bearingOf(forward, frame, this.viewHeading);
+
     return frame;
   }
 
-  /**
-   * The airframe the camera is framing.
-   *
-   * From the type code where there is one, falling back to the emitter
-   * category — the same source `Traffic3D` and `OwnAircraft` use, which is the
-   * point: the camera used to sit where a 40 m aircraft's cockpit would be
-   * while the model in front of it was 15 m long, because this read the
-   * five-bucket category and they read the type. Memoised because the answer
-   * cannot change while the same aircraft is being flown, and this runs every
-   * frame.
-   */
   /** The airframe currently being framed, for anything that has to match it. */
   get airframe(): AirframeShape | null {
     return this.shape;
   }
 
+  /**
+   * From the type code where there is one, falling back to the emitter
+   * category — the same source `Traffic3D` and `OwnAircraft` use, which is the
+   * point: the camera used to sit where a 40 m aircraft's cockpit would be
+   * while the model in front of it was 15 m long, because this read the
+   * five-bucket category and they read the type. Memoised because the answer
+   * cannot change while one aircraft is being flown, and this runs every frame.
+   */
   private airframeOf(sample: SampledAircraft): AirframeShape {
     if (this.shapeHex !== sample.hex || !this.shape) {
       this.shape = shapeFor(registry.knownTypeCode(sample.hex), sample.latest.category ?? null);
@@ -560,26 +500,8 @@ export class PovController {
     return Math.sqrt(num / den);
   }
 
-  private pickTowerAnchor(
-    sample: SampledAircraft,
-    terrainHeightAt?: (lat: number, lon: number) => number,
-  ): Vec3 {
-    // A couple of kilometres ahead and to the side, on the ground.
-    const aheadDeg = 0.02;
-    const bearing = sample.trackDeg * DEG2RAD;
-    const lat = sample.lat + aheadDeg * Math.cos(bearing);
-    const lon =
-      sample.lon +
-      (aheadDeg * Math.sin(bearing)) / Math.max(0.05, Math.cos(sample.lat * DEG2RAD)) +
-      0.012;
-
-    const ground = terrainHeightAt?.(lat, lon) ?? 0;
-    return geodeticToEcef(lat, lon, ground + 25);
-  }
-
   reset(): void {
     this.initialised = false;
-    this.towerAnchor = null;
     this.orbitDistanceTarget = this.state.orbitDistance;
   }
 }

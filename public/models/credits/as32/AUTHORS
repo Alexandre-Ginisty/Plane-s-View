@@ -1,0 +1,6 @@
+as332 — FlightGear FGAddon
+
+Authors: HB-GRAL (AS-332), Melchior Franz (XML/NASAL from BO105), Maik Justus (FDM)
+
+Licensed GPL-2.0 as part of FGAddon. Attribution taken from the
+aircraft's FlightGear -set.xml, which is the only notice upstream carries.

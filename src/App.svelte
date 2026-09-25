@@ -10,8 +10,11 @@
   import { onMount } from 'svelte';
   import { Orchestrator } from '@/app/orchestrator';
   import { app } from '@/state/appStore.svelte';
+  import { resolveTheme, watchSystemTheme } from '@/ui/theme';
   import { CAMERA_MODES } from '@/render/pov';
   import AircraftPanel from '@/ui/AircraftPanel.svelte';
+  import Landing from '@/ui/intro/Landing.svelte';
+  import ThemeToggle from '@/ui/ThemeToggle.svelte';
   import Diagnostics from '@/ui/Diagnostics.svelte';
   import Hud from '@/ui/Hud.svelte';
   import LayerPicker from '@/ui/LayerPicker.svelte';
@@ -24,6 +27,20 @@
   let orchestrator = $state<Orchestrator | null>(null);
   let booting = $state(true);
   let bootError = $state<string | null>(null);
+
+  /**
+   * The front page, shown over an app that is already starting.
+   *
+   * Not a route and not a gate on boot: the orchestrator runs behind it, so the
+   * seconds someone spends reading are the seconds the first terrain and the
+   * first traffic snapshot take. Entering then lands on a warm app instead of
+   * on the spinner this used to open with.
+   *
+   * Skipped when the URL says so, which is what makes the app linkable —
+   * `?go` drops straight in, and anything sharing a specific view will want
+   * that.
+   */
+  let showLanding = $state(!new URLSearchParams(location.search).has('go'));
 
   let dragging = false;
   let lastX = 0;
@@ -48,6 +65,15 @@
     app.showLegend = true;
   }
 
+  /*
+   * Seed the store from what `main.ts` already put on the document, then keep
+   * following the system while the visitor has not overridden it. Reading it
+   * back rather than resolving again is what guarantees the two agree.
+   */
+  app.theme = resolveTheme();
+
+  onMount(() => watchSystemTheme((theme) => app.setTheme(theme, true)));
+
   onMount(() => {
     const instance = new Orchestrator();
     instance
@@ -66,6 +92,10 @@
   });
 
   function onKeydown(event: KeyboardEvent): void {
+    // The landing page owns the keyboard while it is up; it has its own
+    // handler, and letting these through would switch camera modes in an app
+    // the visitor cannot see.
+    if (showLanding) return;
     const target = event.target as HTMLElement | null;
     if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
     const o = orchestrator;
@@ -160,8 +190,12 @@
     <span></span><span></span><span></span><span></span>
   </div>
 
+  {#if showLanding && !bootError}
+    <Landing ready={!booting} onEnter={() => (showLanding = false)} />
+  {/if}
+
   {#if booting}
-    <div class="boot">
+    <div class="boot" class:hidden={showLanding}>
       <div class="spinner" aria-hidden="true"></div>
       <p>Finding aircraft near you…</p>
     </div>
@@ -176,6 +210,7 @@
       <header class="toolbar">
         <h1>Planes<span>View</span></h1>
         <LayerPicker {orchestrator} />
+        <ThemeToggle compact />
         <button class="chip" onclick={() => (app.showLegend = !app.showLegend)}>
           Key <span class="kbd">H</span>
         </button>
@@ -194,6 +229,8 @@
 
 <style>
   main { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+  .boot.hidden { opacity: 0; pointer-events: none; }
 
   .surface {
     position: absolute;

@@ -178,8 +178,8 @@ describe('PovController framing', () => {
     expect(worst).toBeLessThan(0.005);
   });
 
-  it('keeps it centred in chase and tower too', () => {
-    for (const mode of ['chase', 'tower'] as const) {
+  it('keeps it centred in chase and orbit too', () => {
+    for (const mode of ['chase', 'orbit'] as const) {
       const { pov, camera, origin } = rig();
       const s = parked();
       pov.setMode(mode);

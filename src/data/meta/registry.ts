@@ -39,7 +39,7 @@ function isFresh<T>(slot: Slot<T> | undefined, ttl: number, now: number): boolea
   return slot.state === 'hit' || now - slot.at < ttl;
 }
 
-export class MetadataRegistry {
+class MetadataRegistry {
   private readonly airframes = new LruCache<string, Slot<AircraftMeta>>({ maxEntries: 4000 });
   private readonly routes = new LruCache<string, Slot<FlightRoute> & { at: number }>({
     maxEntries: 3000,

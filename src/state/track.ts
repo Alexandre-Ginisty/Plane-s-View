@@ -65,6 +65,41 @@ const REANCHOR_DISTANCE_M = 150_000;
 
 const TRAIL_CAPACITY = 240;
 
+/**
+ * How quickly a filter correction is absorbed into the drawn position, seconds.
+ *
+ * ## The teleport this removes
+ *
+ * Between fixes the drawn position is `peek(dt)` — a smooth constant-velocity
+ * extrapolation, and it looks it. Then a report lands and `updatePosition`
+ * applies the whole Kalman correction to `x` in one statement, so the very next
+ * frame draws the aircraft somewhere else. The motion is smooth, smooth, jump,
+ * smooth, smooth, jump, once per report. From orbit, on an aircraft filling a
+ * third of the screen, that is the most visible thing in the view.
+ *
+ * The correction is not wrong — it is the filter doing its job. What is wrong
+ * is applying it to the *picture* instantaneously. So the filter keeps its
+ * exact answer and the renderer carries a decaying offset: at the instant of
+ * the update the drawn position is unchanged, and over the next half second it
+ * slides onto the corrected track. Nothing is invented and nothing is delayed;
+ * the discontinuity is spread over frames the eye reads as motion.
+ *
+ * Half a second is long enough that a typical few-metre correction is
+ * imperceptible and short enough that the drawn position is never meaningfully
+ * behind the filter — at 250 m/s the worst case is a fraction of a fuselage.
+ */
+const CORRECTION_TAU = 0.5;
+
+/**
+ * Largest correction worth absorbing, metres. Past this, snap.
+ *
+ * A re-seeded filter (rule 2 above: a re-registered hex, a feed switch) is not
+ * a correction, it is a different aircraft position. Sliding a kilometre would
+ * draw a trajectory nothing flew, and it would take visibly longer than the
+ * time constant because the eye tracks the residual, not the exponential.
+ */
+const MAX_ABSORBED_M = 400;
+
 export interface TrailPoint {
   lat: number;
   lon: number;
@@ -135,6 +170,21 @@ export class AircraftTrack {
   private smoothedHeading: number;
   private smoothedRoll = 0;
   private smoothedPitch = 0;
+
+  /**
+   * Correction still being absorbed, in the local frame. See `CORRECTION_TAU`.
+   *
+   * Added to the filter's answer and decayed every rendered frame, so it is a
+   * property of the picture rather than of the estimate. `sampleAt` with no
+   * smoothing — the path tests and anything asking "where is it really" — sees
+   * straight through it.
+   */
+  private offsetE = 0;
+  private offsetN = 0;
+  private offsetU = 0;
+
+  /** The last position actually drawn, and when. Null until the first frame. */
+  private rendered: { atMs: number; e: number; n: number; u: number } | null = null;
 
   private readonly trail: TrailPoint[] = [];
 
@@ -276,10 +326,38 @@ export class AircraftTrack {
     this.latest = s;
     this.lastFixTime = s.fixTime;
     this.pushTrail(s);
+    this.absorbCorrection();
 
     if (Math.abs(this.east.x) > REANCHOR_DISTANCE_M || Math.abs(this.north.x) > REANCHOR_DISTANCE_M) {
       this.reanchor(s.lat, s.lon);
     }
+  }
+
+  /**
+   * Hold the drawn position still across a filter correction.
+   *
+   * Called once the measurement has been folded in. The offset is set so that
+   * re-evaluating the *new* filter at the moment of the last drawn frame
+   * reproduces exactly what was drawn then; `sampleAt` decays it from there.
+   */
+  private absorbCorrection(): void {
+    const last = this.rendered;
+    if (last === null) return;
+
+    const dt = clamp((last.atMs - this.filterTime) / 1000, 0, MAX_EXTRAPOLATION_SEC);
+    const e = last.e - this.east.peek(dt);
+    const n = last.n - this.north.peek(dt);
+    const u = last.u - this.up.peek(dt);
+
+    if (Math.hypot(e, n, u) > MAX_ABSORBED_M) {
+      this.offsetE = 0;
+      this.offsetN = 0;
+      this.offsetU = 0;
+      return;
+    }
+    this.offsetE = e;
+    this.offsetN = n;
+    this.offsetU = u;
   }
 
   /**
@@ -305,9 +383,20 @@ export class AircraftTrack {
     // Past the cap, freeze rather than invent a trajectory.
     const dt = clamp((now - this.filterTime) / 1000, 0, MAX_EXTRAPOLATION_SEC);
 
-    const e = this.east.peek(dt);
-    const n = this.north.peek(dt);
-    const altM = this.up.peek(dt);
+    // Decay first, so the offset the caller sees is the one for *this* frame
+    // rather than the previous one's.
+    if (smoothingDt > 0) {
+      const remaining = Math.exp(-smoothingDt / CORRECTION_TAU);
+      this.offsetE *= remaining;
+      this.offsetN *= remaining;
+      this.offsetU *= remaining;
+    }
+
+    const e = this.east.peek(dt) + this.offsetE;
+    const n = this.north.peek(dt) + this.offsetN;
+    const altM = this.up.peek(dt) + this.offsetU;
+
+    if (smoothingDt > 0) this.rendered = { atMs: now, e, n, u: altM };
 
     const lat = clamp(this.anchorLat + n / this.mPerDegLat, -90, 90);
     const lon = wrapLongitude(this.anchorLon + e / this.mPerDegLon);

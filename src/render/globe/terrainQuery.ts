@@ -91,7 +91,7 @@ export function sampleTerrainHeight(
 /**
  * Warm the cache along a predicted path.
  *
- * Rule 6, and the single most effective trick in the whole system: by the
+ * Rule 7, and the single most effective trick in the whole system: by the
  * time the aircraft reaches a tile, it was requested tens of seconds ago and
  * is already on disk. What the user perceives as "never loading" is mostly
  * this.

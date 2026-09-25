@@ -1,40 +1,24 @@
 /**
  * Connection quality monitor and streaming profile.
  *
- * ## Why this exists
- *
- * Every streaming constant in this app used to be a single number tuned on a
- * good connection: 128 parallel tile requests, refine to zoom 17, accept 6 px
- * of screen-space error. On a fast link those numbers are right. On a weak one
- * they are actively destructive, and in a way that is worth spelling out
- * because it is counter-intuitive:
+ * Every streaming constant used to be one number tuned on a good connection:
+ * 128 parallel requests, refine to zoom 17, accept 6 px of error. On a weak
+ * link those are actively destructive, in a counter-intuitive way:
  *
  * **Asking for more makes you get less.** 128 parallel requests over a 500
- * kB/s link give each request 4 kB/s. A 40 kB satellite tile then needs ten
- * seconds, so *every* tile misses the 12 s timeout at roughly the same moment,
- * the whole batch fails together, and the retry logic asks for 128 more. The
- * ground never finishes at any zoom level — which is exactly the "sol charge
- * pas bien" symptom. With twelve requests in flight each gets 40 kB/s, every
- * tile lands in a second, and the picture fills in ring by ring.
+ * kB/s link give each 4 kB/s, so a 40 kB tile needs ten seconds and *every*
+ * tile misses the 12 s timeout at once; the batch fails together and the retry
+ * asks for 128 more. That is the "sol charge pas bien" symptom. With twelve in
+ * flight each gets 40 kB/s and the picture fills in ring by ring.
  *
- * The same logic applies to depth. Refining to z17 on a weak link means the
- * quadtree spends the whole pipe on tiles four levels below what it could
- * actually finish, so the viewer sits looking at z11 blur while z17 requests
- * time out behind it. Capping the depth to what the link can deliver produces
- * a complete, coarser picture — which looks far better than an incomplete
+ * Depth is the same. Refining to z17 on a weak link spends the whole pipe four
+ * levels below what could finish, so the viewer looks at z11 blur while z17
+ * requests time out behind it. A complete coarse picture beats an incomplete
  * sharp one.
  *
- * So the profile is not a "quality setting". It is a statement about what this
- * connection can actually deliver, and every consumer derives its numbers from
- * it.
- *
- * ## How the measurement works
- *
- * Passively, from tile requests that were going to happen anyway — no
- * synthetic traffic, because a monitor that costs bandwidth on a weak link is
- * self-defeating. `probe()` exists for an *active* latency measurement, and is
- * used only at startup (when there is no passive data yet) and while the link
- * is already known to be degraded.
+ * So this is not a "quality setting" but a statement about what the connection
+ * can deliver, and every consumer derives its numbers from it. How it is
+ * measured is `monitor.ts`.
  */
 
 /** Coarse classification of what the link can deliver. */
@@ -68,12 +52,11 @@ export interface StreamingProfile {
  *
  * ## Concurrency, and why these numbers are so much smaller than they were
  *
- * They used to be 128 / 72 / 28 / 10, on the reasoning that HTTP/2 lifts the
- * six-connections-per-host limit so more streams must mean more throughput.
- * The first half is true and the conclusion does not follow. Streams to one
- * host share one connection, so what fills the pipe is the bandwidth-delay
- * product divided by the size of a tile — past that, extra streams add
- * queueing at the far end and nothing else.
+ * They used to be 128 / 72 / 28 / 10, reasoning that HTTP/2 lifts the
+ * six-connections-per-host limit so more streams mean more throughput. The
+ * premise is true and the conclusion does not follow: streams to one host
+ * share one connection, so what fills the pipe is the bandwidth-delay product
+ * divided by the tile size, and past that extra streams only add queueing.
  *
  * Measured against the real imagery host on a 5G tether, 24 tiles a run:
  *
@@ -84,31 +67,26 @@ export interface StreamingProfile {
  * | 16        | 763 kB/s   | 244 ms      |
  * | 40        | 762 kB/s   | 377 ms      |
  *
- * The link is full somewhere around twelve. Everything past that bought zero
- * extra bytes and cost 1.5x the per-tile latency, and per-tile latency is not
- * cosmetic here: a tile that takes 377 ms instead of 244 is a tile the camera
- * may have flown past before it lands, which is then abandoned and re-fetched
- * — congestion manufacturing more demand.
+ * The link is full around twelve. Past that, zero extra bytes for 1.5x the
+ * per-tile latency — and latency is not cosmetic: a tile taking 377 ms instead
+ * of 244 may be one the camera flew past before it landed, abandoned and
+ * re-fetched, congestion manufacturing more demand.
  *
- * So these follow the bandwidth-delay product for a ~16 kB tile at each
- * grade's assumed capacity and round trip, rounded up for jitter and for the
- * 404-and-fall-through to a second provider. `fast` assumes fibre, where the
- * same arithmetic genuinely does allow thirty.
+ * So these follow the bandwidth-delay product for a ~16 kB tile at each grade's
+ * assumed capacity and round trip, rounded up for jitter and for the
+ * 404-and-fall-through to a second provider. `fast` assumes fibre.
  *
- * The old numbers were not arbitrary — they were compensating for a quadtree
- * that demanded sixty-four times the tiles it could show (see `REFINE_TEXELS`)
- * and so always had hundreds queued. With the demand honest, the queue runs
- * at zero and the pipe is what needs filling, not the backlog.
+ * The old numbers were compensating for a quadtree demanding sixty-four times
+ * the tiles it could show (see `REFINE_TEXELS`), so hundreds were always
+ * queued. With the demand honest, the pipe needs filling, not the backlog.
  */
 const PROFILES: Record<NetworkGrade, Omit<StreamingProfile, 'grade'>> = {
   fast: {
     concurrency: 32,
-    // 19 is Esri's own ceiling, and the ceiling only ever binds near the
-    // ground: the screen-space error stops refining as soon as the imagery
-    // reaches one pixel per texel, which at cruise happens around zoom 13.
-    // Capping at 18 therefore cost nothing in the air and left the last
-    // visible level blurry on approach and on the ground, which is where the
-    // detail is being looked at hardest.
+    // 19 is Esri's own ceiling, and it only binds near the ground: refinement
+    // stops once imagery reaches one pixel per texel, which at cruise is about
+    // zoom 13. Capping at 18 cost nothing in the air and left the last visible
+    // level blurry on approach, where detail is looked at hardest.
     maxZoom: 19,
     screenSpaceError: 1,
     prefetchSeconds: 120,

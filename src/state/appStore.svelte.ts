@@ -15,12 +15,13 @@
 import type { ProviderHealth } from '@/data/adsb/client';
 import { DEFAULT_QUALITY, type NetworkReadout, type QualityPreference, type StreamingProfile } from '@/net/quality';
 import type { CameraMode } from '@/render/pov';
+import { applyTheme, saveTheme, type Theme } from '@/ui/theme';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
 import type { SampledAircraft } from '@/state/traffic';
 
-export type ViewMode = 'map' | 'pov';
+type ViewMode = 'map' | 'pov';
 
-export interface RuntimeStats {
+interface RuntimeStats {
   fps: number;
   /** Our own update + draw cost, ms. The number that shows real headroom. */
   renderMs: number;
@@ -53,7 +54,34 @@ class AppStore {
   /** Live state of the selected aircraft, refreshed every frame in POV. */
   selected = $state<SampledAircraft | null>(null);
 
+  /**
+   * Dark or daylight. Seeded before the first paint — see `ui/theme.ts`.
+   *
+   * Held here rather than read from the DOM so every component sees the same
+   * value reactively; the attribute on `<html>` is what the CSS reads, and
+   * `setTheme` is the one place that keeps the two in step.
+   */
+  theme = $state<Theme>('dark');
+
+  /**
+   * @param followSystem Clear the stored override instead of writing one, so
+   * the page goes back to tracking the operating system.
+   */
+  setTheme(theme: Theme, followSystem = false): void {
+    this.theme = theme;
+    applyTheme(theme);
+    if (!followSystem) saveTheme(theme);
+  }
+
   cameraMode = $state<CameraMode>('cockpit');
+  /**
+   * Compass bearing the camera is looking along, degrees.
+   *
+   * The view's, not the aircraft's: free look turns the head without turning
+   * the aeroplane, so a strip fed the heading describes a window the user is
+   * not looking through.
+   */
+  viewHeadingDeg = $state(0);
   imageryId = $state('esri');
   /** The user's detail ceiling. A ceiling, not a level — see `preference.ts`. */
   quality = $state<QualityPreference>(DEFAULT_QUALITY);

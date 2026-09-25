@@ -20,7 +20,7 @@ import {
   SURFACE_CATEGORIES,
 } from './typeTable';
 
-export type { AirframeKind, AirframeShape, EngineMount } from './typeTable';
+export type { AirframeShape } from './typeTable';
 import type { AirframeShape } from './typeTable';
 
 /**

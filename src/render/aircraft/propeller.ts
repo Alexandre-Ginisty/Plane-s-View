@@ -1,12 +1,11 @@
 /**
  * Propellers, and the spinner they turn on.
  *
- * Built as their own geometry rather than as part of the airframe, because a
- * propeller that does not turn is worse than no propeller at all: a stopped
- * disc on an aircraft doing 280 knots reads as a failure, and every aviation
- * enthusiast in the audience will notice it before anything else on the model.
- * Separating it lets `OwnAircraft` spin the mesh at a rate taken from the
- * actual flight regime.
+ * Their own geometry rather than part of the airframe, because a propeller
+ * that does not turn is worse than none: a stopped disc on an aircraft doing
+ * 280 knots reads as a failure, and anyone who likes aeroplanes notices it
+ * first. Separating it lets `OwnAircraft` spin the mesh at a rate taken from
+ * the actual flight regime.
  *
  * Geometry is built in the plane perpendicular to **+Y** (the aircraft's
  * forward axis), centred on the hub, so the mesh spins about its own local +Y
@@ -68,7 +67,6 @@ function loft(b: MeshBuilder, inner: Station, outer: Station, cap: boolean): voi
 }
 
 export interface PropellerOptions {
-  /** Number of blades. */
   blades: number;
   /** Tip radius, in the same length-normalised units as the airframe. */
   radius: number;
@@ -95,7 +93,7 @@ export interface PropellerOptions {
  * dead radial, which is what a modern six-bladed scimitar prop looks like and
  * what stops the four-bladed case reading as a child's windmill.
  */
-export function createPropellerGeometry(options: PropellerOptions): BufferGeometry {
+function createPropellerGeometry(options: PropellerOptions): BufferGeometry {
   const { blades, radius, chord, spinner, detail } = options;
   const twist = options.twist ?? 1;
   const b = new MeshBuilder();
@@ -156,18 +154,16 @@ export function propellerRpm(kind: 'turboprop' | 'piston', power: number): numbe
 /**
  * The blur disc that stands in for a turning propeller.
  *
- * A propeller at 2400 rpm is forty revolutions a second. Sampled at 60 Hz that
- * is aliasing of the worst kind — the wagon-wheel effect — and the blades
- * appear to crawl, stop, or run backwards. Every flight simulator ever written
- * solves it the same way, because it is also what a camera and an eye do:
- * above a few hundred rpm the blades stop being blades and become a
- * translucent disc with a faint shimmer.
+ * A propeller at 2400 rpm is forty revolutions a second; sampled at 60 Hz the
+ * blades crawl, stop, or run backwards. Every simulator solves it the way a
+ * camera and an eye do: above a few hundred rpm the blades stop being blades
+ * and become a translucent disc with a faint shimmer.
  *
  * So the spinner carries both. `OwnAircraft` cross-fades between them on rate,
  * and the blade mesh is spun at a deliberately capped rate while it is still
  * visible, since a rate that aliases is worse than a rate that is wrong.
  */
-export function createPropellerDisc(radius: number, segments = 36): BufferGeometry {
+function createPropellerDisc(radius: number, segments = 36): BufferGeometry {
   const b = new MeshBuilder();
   const inner = radius * 0.18;
 

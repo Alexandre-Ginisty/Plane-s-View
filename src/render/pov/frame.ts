@@ -26,13 +26,14 @@ import { Quaternion, Vector3 } from 'three';
 import {
   DEG2RAD,
   FEET_TO_METRES,
+  RAD2DEG,
   enuBasis,
   geodeticToEcef,
   type Vec3,
 } from '@/core/math/geo';
 import type { SampledAircraft } from '@/state/traffic';
 
-export type CameraMode = 'cockpit' | 'chase' | 'wing' | 'orbit' | 'tower';
+export type CameraMode = 'cockpit' | 'chase' | 'wing' | 'orbit';
 
 export interface CameraModeInfo {
   id: CameraMode;
@@ -45,7 +46,6 @@ export const CAMERA_MODES: readonly CameraModeInfo[] = [
   { id: 'chase', label: 'Chase', hint: 'Behind and above, following the tail' },
   { id: 'wing', label: 'Wing', hint: 'Off the left wingtip, looking back in' },
   { id: 'orbit', label: 'Orbit', hint: 'Free look around the aircraft — drag to rotate' },
-  { id: 'tower', label: 'Tower', hint: 'Fixed ground viewpoint watching it pass' },
 ];
 
 export interface AircraftFrame {
@@ -57,6 +57,9 @@ export interface AircraftFrame {
   up: Vector3;
   /** Local vertical (ellipsoid normal), independent of attitude. */
   localUp: Vector3;
+  /** Local horizontal reference, for turning a direction into a bearing. */
+  east: Vector3;
+  north: Vector3;
 }
 
 const _east = new Vector3();
@@ -104,5 +107,21 @@ export function aircraftFrame(sample: SampledAircraft, altOverrideM?: number): A
   up.applyQuaternion(_quat).normalize();
   const right = _right.clone().applyQuaternion(_quat).normalize();
 
-  return { position, forward, right, up, localUp };
+  return { position, forward, right, up, localUp, east: _east.clone(), north: _north.clone() };
+}
+
+/**
+ * The compass bearing a direction is pointing, degrees clockwise from north.
+ *
+ * Measured against the local horizontal plane, which is the only place a
+ * bearing means anything: a view angled at the ground still points somewhere
+ * on the compass, and that somewhere is its horizontal component. A view
+ * looking straight down has none, and the caller's previous answer is the only
+ * honest thing to show — hence `fallbackDeg`.
+ */
+export function bearingOf(direction: Vector3, frame: AircraftFrame, fallbackDeg: number): number {
+  const north = direction.dot(frame.north);
+  const east = direction.dot(frame.east);
+  if (Math.hypot(north, east) < 1e-4) return fallbackDeg;
+  return ((Math.atan2(east, north) * RAD2DEG) % 360 + 360) % 360;
 }

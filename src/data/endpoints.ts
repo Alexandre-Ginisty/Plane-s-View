@@ -37,13 +37,13 @@
 import relayTargets from '../../relay-targets.json';
 
 /** True when the build was told to skip the relay. */
-export const DIRECT_FEEDS = import.meta.env['VITE_DIRECT_FEEDS'] === '1';
+const DIRECT_FEEDS = import.meta.env['VITE_DIRECT_FEEDS'] === '1';
 
 /**
  * Path prefix the relay listens on. Kept relative so the app works from a
  * sub-path deployment (GitHub Pages project sites) without reconfiguration.
  */
-export const FEED_PREFIX = 'feeds';
+const FEED_PREFIX = 'feeds';
 
 /**
  * Upstream origins, one per relayed service.
@@ -59,7 +59,7 @@ export type RelayTarget =
   | 'opensky'
   | 'planespotters';
 
-export const UPSTREAM = relayTargets as Record<RelayTarget, string>;
+const UPSTREAM = relayTargets as Record<RelayTarget, string>;
 
 /**
  * Build a URL for a relayed service. `path` must start with `/`.

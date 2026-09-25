@@ -7,10 +7,6 @@
  * cannot work: at startup, when there is no data yet, and while the link is
  * already degraded, where too few transfers complete for the window to notice
  * a recovery.
- *
- * The two judgement calls worth knowing about are in `throughput` (wall-clock
- * span, not summed durations) and `reclassify` (degrade immediately, upgrade
- * slowly). Both are explained where they are implemented.
  */
 
 import {
@@ -54,25 +50,17 @@ const UPGRADE_HOLD_MS = 6000;
  * stop counting as evidence about the link, ms.
  *
  * You cannot measure a capacity you never asked for. Once the quadtree is
- * served it stops requesting, and the few stragglers that trickle through are
- * small objects dominated by round-trip time rather than bandwidth: an 8 kB
- * tile answered in 200 ms reads as 40 kB/s on a link that would happily carry
- * fifty times that. Graded literally, that is `poor`.
- *
- * Observed live, and this is the failure that matters: the cockpit finished
- * streaming, the queue drained to zero, and the monitor then walked itself
- * good -> slow -> poor on an idle link with 204 ms latency and no failures.
- * `poor` clamps the ceiling to z14 and concurrency to 10, so the app degraded
- * its own ground quality *because* it had succeeded — and then could not climb
- * back, since recovering needs measurements that only arrive when it asks for
- * more, which the clamped profile prevents. A self-locking loop.
+ * served it stops requesting, and the stragglers are small objects dominated
+ * by round-trip time: an 8 kB tile answered in 200 ms reads as 40 kB/s on a
+ * link that would carry fifty times that. Observed live, the monitor walked
+ * itself good -> slow -> poor on an idle link with 204 ms latency and no
+ * failures — and `poor` then clamps concurrency, so recovering needs
+ * measurements the clamp itself prevents. A self-locking loop.
  *
  * Demand is reported by the loader rather than inferred from the samples,
  * because the two look identical from here: a serial trickle on a fast idle
  * link and a saturated slow link both produce one small slow request at a
- * time. Only the queue knows which it is. A monitor nobody reports to assumes
- * it is busy, which keeps this invisible to anything that just records
- * samples.
+ * time. Only the queue knows which it is.
  */
 const IDLE_GRACE_MS = 4000;
 
@@ -82,45 +70,60 @@ const IDLE_GRACE_MS = 4000;
  *
  * Idleness is not the only way to under-ask. Measured on a 5G tether against
  * the real imagery host, one request at a time returned 183 kB/s; six returned
- * 659; sixteen returned 763 and forty returned 762. The link never changed —
- * only how much of it was being used. So a window filled by a handful of
- * stragglers reports a quarter of the truth, and `IDLE_GRACE_MS` does not
- * catch it because the loader was not idle, merely nearly so.
+ * 659; sixteen 763 and forty 762. The link never changed — only how much of it
+ * was being used, and `IDLE_GRACE_MS` misses that because the loader was not
+ * idle, merely nearly so. The grade flapped slow -> good -> slow across the
+ * 450 kB/s boundary on a connection measuring 763.
  *
- * Observed live on that tether: capacity readings of 386 and 731 kB/s either
- * side of the 450 kB/s slow/good boundary, from a connection measuring 763.
- * The grade flapped slow -> good -> slow, and with it the detail target,
- * which is visible as the ground re-refining for no reason.
+ * Six is where those measurements reach ~85% of the plateau. Below it the
+ * reading is a lower bound and counts as no evidence, exactly as an idle
+ * window does; failures still count, since a request that errored was one we
+ * asked for.
  *
- * Six is the point where the measurements above reach ~85% of the plateau —
- * enough of the bandwidth-delay product in flight for the number to mean
- * something. Below it the reading is a lower bound and is treated as no
- * evidence, exactly as an idle window is. Failures are unaffected: a request
- * that errored was one we asked for, however few of them there were.
- *
- * Judged per sample, not from a high-water mark. A burst followed by a long
- * trickle never returns the loader to zero, so a peak would go on vouching
- * for samples taken minutes later under no load at all. Each transfer
- * remembers what else was outstanding when it landed, and the window's median
- * is what decides.
+ * Judged per sample, not from a high-water mark: a burst followed by a long
+ * trickle never returns the loader to zero, so a peak would go on vouching for
+ * samples taken minutes later under no load at all.
  */
 const MEASURABLE_DEMAND = 6;
 
 /**
  * Below this, a "transfer" did not touch the network, ms.
  *
- * The browser's own HTTP cache answers in a millisecond or two, and those
- * responses arrive through exactly the same code path as a real fetch. Counted
- * as measurements they report tens of megabytes a second, which is a true
- * statement about the cache and a false one about the link — and the link is
- * what the profile is steering by. Observed live: capacity readings swinging
- * between 236 kB/s and 7 MB/s between consecutive samples of one connection.
+ * The browser's own HTTP cache answers in a millisecond or two, through the
+ * same code path as a real fetch. Counted as measurements they report tens of
+ * megabytes a second — true about the cache, false about the link, which is
+ * what the profile steers by. Observed live: readings swinging between
+ * 236 kB/s and 7 MB/s between consecutive samples of one connection.
  *
  * They stay in the window, because a cache hit is still a successful outcome
  * and dropping it would inflate the failure ratio; they are simply not
  * evidence about bandwidth.
  */
 const CACHE_HIT_MS = 5;
+
+/**
+ * Dead band around every grade boundary, as a fraction of the boundary.
+ *
+ * Without one the boundaries are knife edges, and a link sitting near one does
+ * not sit on one side of it — it crosses back and forth. Observed on an
+ * ordinary home connection measuring around the 450 kB/s slow/good boundary:
+ * readings of 386 and 731 kB/s in consecutive windows, so the grade walked
+ * good -> slow -> good indefinitely while nothing about the link changed.
+ *
+ * Every consumer pays for that. The zoom ceiling moves, so the ground
+ * re-refines; the feed radius moves, so aircraft appear and vanish; and the
+ * user is told their connection dropped and recovered, repeatedly, on a link
+ * that was fine throughout. The `UPGRADE_HOLD_MS` timer cannot help, because
+ * each reading genuinely is a new grade — it delays the flapping rather than
+ * stopping it.
+ *
+ * 0.3 means a grade is left only once the measurement is 30% clear of the
+ * boundary on the far side, which is wider than the spread above. The cost is
+ * that a link settling just past a boundary keeps the more conservative grade;
+ * that is the right way to be wrong, since the conservative grade is the one
+ * that still works.
+ */
+const HYSTERESIS = 0.3;
 
 /** A sample plus what else the loader had outstanding when it landed. */
 interface WindowSample extends TransferSample {
@@ -149,7 +152,7 @@ export class NetworkMonitor {
 
   constructor(private readonly env: NetworkEnvironment = browserEnvironment) {}
 
-  /** Record a finished transfer. Cheap enough to call on every tile. */
+  /** Cheap enough to call on every tile. */
   record(sample: TransferSample): void {
     this.samples.push({
       ...sample,
@@ -172,15 +175,12 @@ export class NetworkMonitor {
     this.reclassify();
   }
 
-  /** Latest active round-trip measurement, if one has been taken. */
   setPing(ms: number | null): void {
     this.pingMs = ms;
     this.reclassify();
   }
 
   /**
-   * Measure round-trip latency directly.
-   *
    * Used when there is no passive data to work from — at startup, and while
    * the link is already known to be bad, where a fast probe is the only way to
    * notice that it recovered. `cache: 'no-store'` because a cached answer
@@ -223,7 +223,7 @@ export class NetworkMonitor {
    */
   private quality: QualityPreference = 'high';
 
-  /** Apply the user's detail ceiling. Emits if the effective profile moved. */
+  /** Emits only if the effective profile actually moved. */
   setQuality(preference: QualityPreference): void {
     if (this.quality === preference) return;
     const before = this.profile.grade;
@@ -241,12 +241,9 @@ export class NetworkMonitor {
   }
 
   /**
-   * What every consumer should actually stream at.
-   *
    * The measurement held under the user's ceiling — see `preference.ts`. The
-   * ceiling can only ever lower this: a preference cannot make a weak link
-   * carry more, and pretending otherwise is the exact failure the grades exist
-   * to prevent.
+   * ceiling can only ever lower it: a preference cannot make a weak link carry
+   * more, and pretending otherwise is the failure the grades exist to prevent.
    */
   get profile(): StreamingProfile {
     return profileFor(capGrade(this.grade, this.quality));
@@ -278,8 +275,6 @@ export class NetworkMonitor {
 
   /**
    * Bytes per second over the time the link was actually *busy*.
-   *
-   * Two wrong answers to avoid here, and they fail in opposite directions.
    *
    * Summing each request's duration counts the same wall-clock second once per
    * parallel request — and parallelism is the entire point of the loader — so
@@ -323,8 +318,6 @@ export class NetworkMonitor {
   }
 
   /**
-   * Tell the monitor how much work the loader is holding.
-   *
    * Called every time the loader pumps its queue. See `IDLE_GRACE_MS` — this
    * is what separates "the link is slow" from "we stopped asking", which the
    * transfer samples alone cannot distinguish.
@@ -357,16 +350,12 @@ export class NetworkMonitor {
    * Bytes per second the link delivered to a *single* request, median.
    *
    * The companion to `throughput`, and the one that survives an idle app.
-   * Aggregate throughput measures demand as much as capacity: once the
-   * quadtree has what it needs it stops asking, one small request trickles
-   * along at a time, and the aggregate collapses. Measured live, a healthy
-   * fibre link read 82 kB/s for exactly that reason and the app throttled
-   * itself to its lowest detail setting in response — while every tile was
-   * arriving in 134 ms and nothing was failing.
-   *
-   * A single request's own rate has no such problem: a 40 kB tile that lands
-   * in 130 ms proves 300 kB/s was available to it, however many other
-   * requests were or were not in flight.
+   * Aggregate throughput measures demand as much as capacity: measured live, a
+   * healthy fibre link read 82 kB/s once the quadtree stopped asking, and the
+   * app throttled itself to its lowest detail setting — while every tile was
+   * arriving in 134 ms and nothing was failing. A single request's own rate has
+   * no such problem: a 40 kB tile landing in 130 ms proves 300 kB/s was
+   * available to it, whatever else was in flight.
    */
   private streamRate(): number {
     const ok = this.samples.filter((s) => s.ok && s.bytes > 0 && s.ms > CACHE_HIT_MS);
@@ -376,13 +365,10 @@ export class NetworkMonitor {
   }
 
   /**
-   * Best estimate of what the link can carry.
-   *
-   * The larger of the two measures, because each is a *lower bound* that the
-   * other's blind spot does not share: with many requests in flight the
-   * aggregate is the truth and a single stream understates it; with one
-   * request in flight the single stream is the truth and the aggregate
-   * understates it. Neither can overstate.
+   * The larger of the two measures, because each is a *lower bound* the other's
+   * blind spot does not share: with many requests in flight the aggregate is
+   * the truth and a single stream understates it; with one in flight it is the
+   * other way round. Neither can overstate.
    */
   private capacity(): number {
     return Math.max(this.throughput(), this.streamRate());
@@ -394,8 +380,6 @@ export class NetworkMonitor {
   }
 
   /**
-   * Classify the link from the window, then apply the asymmetric hysteresis.
-   *
    * The thresholds are ordered worst-first and the first match wins, so a link
    * that is fast but failing lands in the failing bucket — which is correct:
    * throughput you cannot rely on is not throughput.
@@ -419,16 +403,13 @@ export class NetworkMonitor {
     const median = durations.length ? durations[Math.floor(durations.length / 2)]! : null;
 
     /*
-     * Many measurements beat one, even a cleaner one.
-     *
-     * A single probe is not confounded by payload size, which is why it looks
-     * like the better latency signal — but it is one sample, and the moment it
-     * matters most is the moment it is least trustworthy. Measured live: the
-     * startup probe fired alongside the first burst of tile requests, opened a
-     * fresh connection to a host nothing was yet talking to, and came back at
-     * 5.7 s on a fibre link. The app then throttled itself to `poor` on the
-     * strength of congestion it had caused itself, which is a feedback loop,
-     * not a measurement.
+     * Many measurements beat one, even a cleaner one. A single probe is not
+     * confounded by payload size, which is why it looks like the better
+     * latency signal — but the moment it matters most is the moment it is
+     * least trustworthy. Measured live: the startup probe fired alongside the
+     * first burst of tile requests, opened a fresh connection, and came back
+     * at 5.7 s on a fibre link; the app throttled itself to `poor` on the
+     * strength of congestion it had caused itself.
      *
      * So the passive median leads wherever it exists, and the probe is the
      * fallback for the two cases where nothing else can speak: before any
@@ -444,23 +425,19 @@ export class NetworkMonitor {
     }
 
     /*
-     * Graded on capacity, not on how long a request took. This is the one
-     * decision in the module that has to be got right, and the obvious answer
-     * is the wrong one.
-     *
-     * Per-request latency is the intuitive signal — it is literally "how long
-     * does a tile take" — and it is *not independent of the thing this profile
-     * controls*. With 72 requests in flight each one gets a seventy-second of
-     * the pipe, so latency reads in seconds; throttle to 10 and the same link
-     * reads in milliseconds. Measured live: 12 268 ms median at 63 in flight,
-     * 180 ms at 10, on one unchanged connection. Grading on that closes a loop
-     * between the measurement and the actuator, and the profile oscillates
-     * between extremes for ever without the link having changed at all.
+     * Graded on capacity, not on how long a request took, and the obvious
+     * answer is the wrong one. Per-request latency is *not independent of the
+     * thing this profile controls*: with 72 requests in flight each gets a
+     * seventy-second of the pipe, so latency reads in seconds; throttle to 10
+     * and the same link reads in milliseconds. Measured live: 12 268 ms median
+     * at 63 in flight, 180 ms at 10, on one unchanged connection. Grading on
+     * that closes a loop between the measurement and the actuator and the
+     * profile oscillates for ever.
      *
      * Aggregate capacity is invariant under concurrency, which makes it the
-     * only stable thing to steer by. Latency survives here solely as a coarse
-     * check on the very top grade, where committing to maximum detail on a
-     * link that is visibly struggling would be the expensive mistake.
+     * only stable thing to steer by. Latency survives solely as a coarse check
+     * on the top grade, where committing to maximum detail on a link that is
+     * visibly struggling would be the expensive mistake.
      */
     // Failures are always evidence — a request that errored was one we asked
     // for. Capacity is evidence only while there was something to deliver.
@@ -474,10 +451,42 @@ export class NetworkMonitor {
       return this.grade;
     }
 
-    if (readout.failures > 0.35 || readout.capacity < 120_000) return 'poor';
-    if (readout.failures > 0.15 || readout.capacity < 450_000) return 'slow';
-    if (readout.capacity < 2_000_000 || (latency !== null && latency > 400)) return 'good';
+    if (
+      readout.failures > this.worseThan(0.35, 'poor') ||
+      readout.capacity < this.betterThan(120_000, 'poor')
+    ) {
+      return 'poor';
+    }
+    if (
+      readout.failures > this.worseThan(0.15, 'slow') ||
+      readout.capacity < this.betterThan(450_000, 'slow')
+    ) {
+      return 'slow';
+    }
+    if (
+      readout.capacity < this.betterThan(2_000_000, 'good') ||
+      (latency !== null && latency > this.worseThan(400, 'good'))
+    ) {
+      return 'good';
+    }
     return 'fast';
+  }
+
+  /**
+   * A boundary on a "higher is better" quantity, widened to hold the current
+   * grade. `guards` is the grade on the low side of it. See `HYSTERESIS`.
+   */
+  private betterThan(nominal: number, guards: NetworkGrade): number {
+    return gradeRank(this.grade) > gradeRank(guards)
+      ? nominal * (1 - HYSTERESIS)
+      : nominal * (1 + HYSTERESIS);
+  }
+
+  /** The same, for a quantity where higher is worse: failures and latency. */
+  private worseThan(nominal: number, guards: NetworkGrade): number {
+    return gradeRank(this.grade) > gradeRank(guards)
+      ? nominal * (1 + HYSTERESIS)
+      : nominal * (1 - HYSTERESIS);
   }
 
   private reclassify(): void {
@@ -488,7 +497,6 @@ export class NetworkMonitor {
     }
 
     if (gradeRank(next) < gradeRank(this.grade)) {
-      // Downgrade: immediate, no hold.
       this.pendingUpgrade = null;
       this.commit(next);
       return;
@@ -498,13 +506,11 @@ export class NetworkMonitor {
 
     /*
      * The hold is on "better than now", not on one specific better grade.
-     *
-     * Restarting the clock every time the reading improves again sounds
-     * conservative and is actually a trap: a link recovering steadily reads
-     * slow, then good, then fast, and a per-grade hold would reset at each
-     * step and never commit to anything. What the hold is protecting against
-     * is a *brief* improvement, so it starts when the improvement starts and
-     * commits to whatever the reading says once it has lasted.
+     * Restarting the clock whenever the reading improves again sounds
+     * conservative and is a trap: a link recovering steadily reads slow, then
+     * good, then fast, and a per-grade hold would reset at each step and never
+     * commit. What it protects against is a *brief* improvement, so it starts
+     * when the improvement starts.
      */
     if (!this.pendingUpgrade) {
       this.pendingUpgrade = { grade: next, since: now };
@@ -523,14 +529,13 @@ export class NetworkMonitor {
     this.emit();
   }
 
-  /** Tell every consumer what the effective profile is now. */
   private emit(): void {
     const profile = this.profile;
     const readout = this.readout();
     for (const listener of this.listeners) listener(profile, readout);
   }
 
-  /** Test and recovery hook: forget the window and start judging again. */
+  /** Test and recovery hook. */
   reset(): void {
     this.samples.length = 0;
     this.pendingUpgrade = null;

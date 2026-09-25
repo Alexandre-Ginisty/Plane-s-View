@@ -18,7 +18,7 @@ import {
   type ReadsbResponse,
 } from './normalize';
 
-export interface ProviderResult {
+interface ProviderResult {
   states: AircraftState[];
   hints: InlineAirframeHint[];
 }

@@ -105,27 +105,44 @@ than a surface forecast.
 | click | select an aircraft |
 | `↵` | step inside the selected aircraft |
 | `Esc` | back to the map |
-| `1`–`5` | Cockpit / Chase / Wing / Orbit / Tower |
+| `1`–`4` | Cockpit / Chase / Wing / Orbit |
 | drag | look around |
 | `C` | recentre the view |
 | `D` | diagnostics (fps, render ms, tiles, queue) |
+| `H` | key and controls |
+
+Append `?go` to the URL to skip the landing page and open straight into the
+map — useful for a bookmark, and for anything sharing a specific view.
 
 ---
 
 ## Testing
 
 ```bash
-npm test          # 62 tests: geodesy, Mercator, Kalman, solar position,
-                  # feed-clock units, tile templates, Terrarium decoding
+npm test          # 369 tests
 npm run check     # svelte-check + TypeScript strict
 npm run build     # production build
+npx knip          # unused files, exports and dependencies
 ```
 
-The tests concentrate on the maths that is expensive to debug visually — WGS84
-round-trips to sub-millimetre, the ellipsoid normal's 0.19° deviation from the
-radial, filter convergence, and the two unit traps that cost the most time:
-Esri's `{z}/{y}/{x}` axis order, and feed clocks that are milliseconds on
-adsb.lol but seconds on adsb.fi.
+The tests concentrate on two things that are expensive to debug any other way.
+
+**Maths that is wrong plausibly rather than obviously** — WGS84 round-trips to
+sub-millimetre, the ellipsoid normal's 0.19° deviation from the radial, filter
+convergence, compass bearings against an east/north swap, and the two unit
+traps that cost the most time: Esri's `{z}/{y}/{x}` axis order, and feed clocks
+that are milliseconds on adsb.lol but seconds on adsb.fi.
+
+**Behaviour that only misbehaves on someone else's connection** — the network
+classifier's hysteresis, the rule that a grade change must persist before the
+user is told about it, and the frame-by-frame continuity of a drawn aircraft
+across a position update. Each of those was a real complaint first, and each
+test fails against the code that caused it.
+
+The relay is covered too (`functions/feeds/relay.test.ts`): it is the only code
+in this project a stranger can reach, so its allowlist is proved rather than
+asserted — path traversal, host smuggling, link-local addresses, and error
+messages that describe the infrastructure.
 
 ---
 
@@ -139,11 +156,32 @@ winglet style, undercarriage layout. It covers every designator the type table
 knows and is what makes a Dash 8 look like a Dash 8 rather than like a generic
 twin. Original work, under this project's licence.
 
-**Converted.** For the types that have one, `tools/fgmodel/convert.mjs` pulls a
-real textured airframe from the [FlightGear](https://www.flightgear.org/)
-add-on hangar and converts it to a compact binary the app loads on demand. The
-procedural model is shown immediately and the real one replaces it when it
-arrives, so nothing ever waits on a download.
+**Converted.** `tools/fgmodel/convert.mjs` pulls real textured airframes from
+the [FlightGear](https://www.flightgear.org/) add-on hangar and converts them
+to a compact binary the app loads on demand — **27 airframes covering 127 type
+designators**. The procedural model is shown immediately and the real one
+replaces it when it arrives, so nothing ever waits on a download.
+
+Two things make the substitution honest rather than merely plausible:
+
+- **Operator liveries.** The 777's paint schemes are filed upstream under ICAO
+  airline designators, which is exactly what the first three letters of an
+  ADS-B callsign are — so an Air France 777 is drawn in Air France colours.
+  When the operator has no livery the *neutral* white scheme is used, never
+  another airline's: a white aircraft is honest about not knowing, and a Qatar
+  777 painted as Emirates is not.
+- **Fallback by kind, never by type.** A designator with no model gets the
+  nearest converted airframe of the same kind — an unknown narrowbody gets a
+  737, an unknown helicopter gets an EC135 — and never one of a different
+  kind. A real model of the wrong variant reads as far more true than an
+  accurate drawing of a generic one.
+
+The converter validates what it produces: an aircraft whose model measures the
+wrong length, or whose span is under 60% of its length (the signature of wings
+kept in a separate file), is reported and skipped rather than shipped scaled to
+nonsense. Textures are downscaled to 2048 px and re-encoded as WebP, which took
+the model set from 88 MB to 31 MB with no visible difference at the size these
+are drawn.
 
 Run `node tools/fgmodel/convert.mjs` to regenerate `public/models`.
 
@@ -163,6 +201,38 @@ That reading is the ordinary one for a program that ships separately-licensed
 assets, but it *is* a reading. If you would rather not rely on it, delete
 `public/models`: the app works exactly as before with the procedural models,
 which is what it does today for every type the library does not cover.
+
+## Security
+
+Worth being exact about what is and is not achievable. **The code cannot be
+hidden**: a browser has to receive a script in order to run it, so anyone can
+read the bundle and modify it at runtime in DevTools. Obfuscation raises the
+cost and prevents nothing. What protects the source is the licence, not the
+build.
+
+What *is* done, and does change something:
+
+- **No source maps in production.** A source map is the entire original
+  TypeScript — every file, every comment — served next to the bundle and loaded
+  by DevTools automatically. Shipping one republishes the repository in a form
+  easier to read than the repository.
+- **A strict Content-Security-Policy** (`public/_headers`) listing every origin
+  the app is allowed to talk to, with `object-src 'none'`, `frame-ancestors
+  'none'` and `form-action 'none'`. An injected script is refused by the
+  browser rather than merely discouraged. This is only possible because the app
+  has no third-party scripts at all.
+- **A same-origin relay.** It used to answer `Access-Control-Allow-Origin: *`,
+  which let any site on the internet point its own client at this deployment
+  and spend its request budget — and, through it, the bandwidth that the ADS-B
+  feeds donate on the understanding that this project is the one using them.
+- **A relay that answers only GET**, pins its response content type so a
+  compromised upstream cannot decide what kind of document this origin serves,
+  and reports failures without naming the infrastructure behind them.
+
+There are no secrets in the bundle because there are none anywhere: no key, no
+account, no card is the premise, not a precaution.
+
+---
 
 ## Attribution
 

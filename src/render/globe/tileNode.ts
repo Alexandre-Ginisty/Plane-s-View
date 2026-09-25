@@ -37,19 +37,17 @@ export class TileNode {
   /**
    * Radius used to measure *distance* to the tile, as opposed to culling it.
    *
-   * `boundingRadius` has to contain Everest and the Dead Sea, because a
-   * bounding volume that clips real terrain culls tiles that are on screen.
-   * That envelope is 9.5 km tall, which is fine for a yes/no visibility test
-   * and ruinous for a distance: `distanceTo` subtracts the radius, so from a
-   * cockpit at 11 km every tile below reported itself 2 km away instead of
-   * 11 — five times too close, and screen-space error is inversely
-   * proportional to distance. The quadtree was refining two and a half extra
-   * levels over the whole visible world on the strength of mountains that
-   * were not there.
+   * `boundingRadius` has to contain Everest and the Dead Sea, because a volume
+   * that clips real terrain culls tiles that are on screen. That envelope is
+   * 9.5 km tall, which is fine for a yes/no test and ruinous for a distance:
+   * `distanceTo` subtracts the radius, so from a cockpit at 11 km every tile
+   * below reported itself 2 km away — five times too close, and screen-space
+   * error is inversely proportional to distance. The quadtree was refining two
+   * and a half extra levels over the whole visible world.
    *
-   * This one spans the tile's footprint at sea level only. It errs towards
-   * *more* distance and therefore less refinement, which is the safe
-   * direction: the cost of being wrong is a moment of blur, not a stall.
+   * This one spans the footprint at sea level only. It errs towards *more*
+   * distance and less refinement, which is the safe direction: the cost of
+   * being wrong is a moment of blur, not a stall.
    */
   readonly lodRadius: number;
   /** Ground span of the tile, metres — the basis of its geometric error. */

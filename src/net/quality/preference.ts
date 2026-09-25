@@ -39,7 +39,7 @@ export const DEFAULT_QUALITY: QualityPreference = 'low';
  * of the scale. It is spelled out rather than left as a special case so that
  * adding a grade above `fast` cannot silently change what `high` means.
  */
-export const QUALITY_CEILING: Record<QualityPreference, NetworkGrade> = {
+const QUALITY_CEILING: Record<QualityPreference, NetworkGrade> = {
   low: 'slow',
   high: 'fast',
 };
@@ -88,15 +88,5 @@ export function saveQualityPreference(value: QualityPreference, storage?: Storag
   } catch {
     // A preference that cannot be remembered is still a preference that works
     // for this session.
-  }
-}
-
-/** True the first time this browser has ever opened the app. */
-export function isFirstVisit(storage?: Storage): boolean {
-  try {
-    const store = storage ?? globalThis.localStorage;
-    return store?.getItem(STORAGE_KEY) === null;
-  } catch {
-    return false;
   }
 }

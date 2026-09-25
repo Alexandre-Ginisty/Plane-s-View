@@ -12,7 +12,6 @@
  */
 
 export interface LruOptions<K, V> {
-  /** Maximum number of entries. */
   maxEntries?: number;
   /** Maximum total size, in whatever unit `sizeOf` returns. */
   maxSize?: number;

@@ -53,7 +53,6 @@
  * @property {[number, number, number]} loc
  */
 
-const SURFACE_POLYGON = 0;
 
 /** Split a line into tokens, keeping quoted strings whole. */
 function tokenize(line) {
@@ -277,4 +276,3 @@ export function applyTransform(transform, v) {
   ];
 }
 
-export { SURFACE_POLYGON };

@@ -138,10 +138,9 @@ export function windLevel(regime: FlightRegime): number {
 /**
  * How much of all this you hear, by camera position.
  *
- * A flight deck is one of the quieter places on an aeroplane — it is ahead of
- * the engines and heavily insulated — while a wingtip camera is level with an
- * engine that is not insulated at all. Tower is a ground observer a couple of
- * kilometres away, which is mostly low frequency and mostly faint.
+ * A flight deck is one of the quieter places on an aeroplane — ahead of the
+ * engines and heavily insulated — while a wingtip camera is level with an
+ * engine that is not insulated at all.
  */
 export function perspectiveGain(mode: string): { engine: number; wind: number; cutoffHz: number } {
   switch (mode) {
@@ -153,8 +152,6 @@ export function perspectiveGain(mode: string): { engine: number; wind: number; c
       return { engine: 0.85, wind: 0.5, cutoffHz: 5_000 };
     case 'orbit':
       return { engine: 0.7, wind: 0.35, cutoffHz: 4_000 };
-    case 'tower':
-      return { engine: 0.35, wind: 0.1, cutoffHz: 900 };
     default:
       return { engine: 0.7, wind: 0.5, cutoffHz: 4_000 };
   }

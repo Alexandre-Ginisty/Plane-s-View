@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { NetworkMonitor, gradeRank, profileFor } from './index';
+import { NetworkMonitor, gradeRank, profileFor, type NetworkGrade } from './index';
 import type { NetworkEnvironment } from './environment';
 
 /** A clock and a connectivity flag the test drives directly. */
@@ -394,5 +394,85 @@ describe('NetworkMonitor demand', () => {
     monitor.refresh();
 
     expect(monitor.readout().grade).not.toBe('poor');
+  });
+});
+
+describe('hysteresis around the grade boundaries', () => {
+  /**
+   * The failure this pins is not a wrong grade, it is a grade that will not
+   * sit still. A link measuring near a boundary crosses it in both directions
+   * from one window to the next, and every crossing re-ranks the loader queue,
+   * moves the zoom ceiling, moves the feed radius and tells the user their
+   * connection changed. Nothing about the link did.
+   */
+
+  /** Bytes and duration that measure out to roughly `bps` on one stream. */
+  const atRate = (bps: number, ms: number): { ms: number; bytes: number; ok: true } => ({
+    ms,
+    bytes: Math.round((bps * ms) / 1000),
+    ok: true,
+  });
+
+  // A full window, so each call replaces the previous reading rather than
+  // being averaged into it. WINDOW is 48.
+  function runAt(monitor: NetworkMonitor, env: FakeEnv, bps: number, n = 48): void {
+    for (let i = 0; i < n; i++) {
+      env.time += 200;
+      monitor.record(atRate(bps, 200));
+    }
+  }
+
+  it('does not change grade when the link straddles a boundary', () => {
+    const env = fakeEnv();
+    const monitor = new NetworkMonitor(env);
+
+    // Settle clearly inside `good`.
+    runAt(monitor, env, 1_000_000);
+    env.time += UPGRADE_HOLD_TEST_MS;
+    runAt(monitor, env, 1_000_000);
+    expect(monitor.measuredGrade).toBe('good');
+
+    // Now oscillate either side of the 450 kB/s slow/good boundary, which is
+    // what an ordinary home connection actually measures like. Every one of
+    // these windows would have flipped the grade before the dead band.
+    for (const bps of [386_000, 731_000, 402_000, 640_000, 430_000]) {
+      runAt(monitor, env, bps);
+      env.time += UPGRADE_HOLD_TEST_MS;
+      runAt(monitor, env, bps);
+      expect(monitor.measuredGrade).toBe('good');
+    }
+  });
+
+  it('still degrades once the link is genuinely past the boundary', () => {
+    const env = fakeEnv();
+    const monitor = new NetworkMonitor(env);
+
+    runAt(monitor, env, 1_000_000);
+    expect(monitor.measuredGrade).toBe('good');
+
+    // Well clear of 450 kB/s * (1 - 0.3): a real slowdown, not a wobble.
+    runAt(monitor, env, 200_000);
+    expect(monitor.measuredGrade).toBe('slow');
+  });
+
+  it('makes the boundary sticky in whichever direction it is approached from', () => {
+    // The same measurement must be read differently depending on where the
+    // link already is — that is what a dead band *is*, and asserting it
+    // directly is the only way to catch the band being applied one-sided.
+    const settle = (from: number, then: number): NetworkGrade => {
+      const env = fakeEnv();
+      const monitor = new NetworkMonitor(env);
+      runAt(monitor, env, from);
+      env.time += UPGRADE_HOLD_TEST_MS;
+      runAt(monitor, env, from);
+      runAt(monitor, env, then);
+      env.time += UPGRADE_HOLD_TEST_MS;
+      runAt(monitor, env, then);
+      return monitor.measuredGrade;
+    };
+
+    // 500 kB/s is above the nominal 450 kB/s boundary but inside the band.
+    expect(settle(1_000_000, 500_000)).toBe('good');
+    expect(settle(150_000, 500_000)).toBe('slow');
   });
 });

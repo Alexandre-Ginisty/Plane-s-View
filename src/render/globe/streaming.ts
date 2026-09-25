@@ -6,11 +6,10 @@
  * frontier of tiles currently in flight, and it is the only place that touches
  * a node's `*State`, `*Gen`, `*Attempts` and `*RequestKey` fields.
  *
- * Separated from the quadtree because the two fail in completely different
- * ways and the bugs here were all ownership bugs — a buffer transferred twice,
- * a request never withdrawn, a state left wedged at `loading` — which are
- * exactly the bugs that hide when the code that owns a resource is spread
- * across nine hundred lines of unrelated selection logic.
+ * Separated from the quadtree because the bugs here were all ownership bugs —
+ * a buffer transferred twice, a request never withdrawn, a state wedged at
+ * `loading` — exactly the bugs that hide when the code owning a resource is
+ * spread across nine hundred lines of unrelated selection logic.
  *
  * ## The invariants
  *
@@ -69,12 +68,9 @@ export class TileStreamer {
   }
 
   /**
-   * Everything the two loaders need, rebuilt per call.
-   *
-   * Cheap (one object literal) and correct: `frame` and `imagery` both change
-   * under it, and a context cached at construction would hand every load the
-   * frame number and the imagery layer that were current when the globe was
-   * built.
+   * Rebuilt per call: one object literal, and `frame` and `imagery` both change
+   * under it. A context cached at construction would hand every load the frame
+   * number and imagery layer current when the globe was built.
    */
   private context(): LoadContext {
     return {
@@ -117,11 +113,9 @@ export class TileStreamer {
   }
 
   /**
-   * Switch imagery layer.
-   *
-   * The node-side half of this (dropping textures, resetting state) is the
-   * globe's, because it owns the tree; what belongs here is superseding the
-   * loads in flight for the layer being left behind.
+   * The node-side half (dropping textures, resetting state) belongs to the
+   * globe, which owns the tree; what belongs here is superseding the loads in
+   * flight for the layer being left behind.
    */
   setImagery(source: ImagerySource): void {
     this.imagery = source;
@@ -185,22 +179,18 @@ export class TileStreamer {
 
   /**
    * Spend the frame's load budget on the quads that look worst right now.
+   * Two rules, both learned from a cockpit at FL420:
    *
-   * Two rules, both learned the hard way from a cockpit at FL420:
-   *
-   * Worst-first, not nearest-first. Nearest-first sounds right — load what the
-   * viewer is closest to — but under a moving aircraft the nearest tiles churn
-   * continuously, so they take the whole budget every frame and the mid-field
-   * never gets any. The symptom is a sharp corridor of detail directly below
-   * the aircraft with stretched, blurry z8 either side of it. Screen-space
-   * error ranks by how wrong the picture actually looks instead, which is the
-   * thing we are trying to fix.
+   * Worst-first, not nearest-first. Under a moving aircraft the nearest tiles
+   * churn continuously, take the whole budget every frame and leave the
+   * mid-field nothing — a sharp corridor directly below the aircraft with
+   * stretched z8 either side. Screen-space error ranks by how wrong the picture
+   * actually looks.
    *
    * Whole quads, never partial. `visit` refuses to refine until all four
-   * children are ready (rule 3 — holes are worse than blur), so a quad with
-   * three of four funded renders exactly as it did before: the budget spent on
-   * it bought nothing. Skipping a quad that does not fit, rather than part-
-   * funding it, leaves that budget for a smaller quad behind it in the queue.
+   * children are ready (rule 3), so a quad with three of four funded renders
+   * exactly as before and the budget bought nothing. Skipping it leaves that
+   * budget for a smaller quad behind it in the queue.
    */
   flush(frontier: LoadFrontier): void {
     let budget = MAX_CONCURRENT_TILE_LOADS - this.loading.size;
@@ -224,17 +214,14 @@ export class TileStreamer {
   /**
    * Re-rank every outstanding request against where the camera is *now*.
    *
-   * `TileLoader` has always documented this — "the quadtree updates priorities
-   * every frame it re-evaluates" — and nothing ever called `setPriority`. A
-   * request was ranked once, by the view at the instant the tile was first
-   * wanted, and kept that rank until it was served. At 250 m/s the ordering is
-   * stale within a couple of seconds, so the queue steadily fills with tiles
-   * ranked for airspace already behind the aircraft, served ahead of the ground
-   * coming up.
+   * `TileLoader` always documented this and nothing ever called `setPriority`:
+   * a request was ranked once, by the view when the tile was first wanted, and
+   * kept that rank until served. At 250 m/s the ordering is stale within a
+   * couple of seconds, so the queue fills with tiles ranked for airspace
+   * already astern, served ahead of the ground coming up.
    *
-   * Bounded by the frontier, not by the tree: only nodes with a load actually
-   * in flight are here, and a queue entry the loader has already started is
-   * left alone because it cannot be re-ordered anyway.
+   * Bounded by the frontier, not the tree: only nodes with a load in flight are
+   * here, and one the loader has started cannot be re-ordered anyway.
    */
   reprioritise(): void {
     if (this.loading.size === 0) return;
@@ -279,14 +266,11 @@ export class TileStreamer {
   }
 
   /**
-   * Hand back this node's place in the loader queue.
-   *
    * `node.abort` only stops *our* continuation. The loader holds its own
    * controller per request, so a tile the camera left behind minutes ago went
-   * on downloading and went on occupying one of the loader's concurrency
-   * slots. With a few hundred tiles a minute falling off the back of a moving
-   * aircraft, that is the whole pipe — the ground ahead was queued behind
-   * ground that no longer existed on screen.
+   * on downloading and on occupying a concurrency slot. With a few hundred
+   * tiles a minute falling off the back of a moving aircraft that is the whole
+   * pipe — ground ahead queued behind ground no longer on screen.
    */
   withdraw(node: TileNode): void {
     if (node.geometryRequestKey !== null) {
@@ -306,13 +290,10 @@ export class TileStreamer {
 
 
   /**
-   * Start whatever this node still needs.
-   *
-   * A `failed` load is retried after a backoff rather than left alone for
-   * ever. Tile hosts 500 and time out routinely, and the old code turned one
-   * such blip into a tile that could never be refined into again — a blurry
-   * patch that stayed blurry for the rest of the session however long the
-   * aircraft circled over it.
+   * A `failed` load is retried after a backoff rather than left for ever. Tile
+   * hosts 500 and time out routinely, and the old code turned one such blip
+   * into a tile that could never be refined again — a blurry patch that stayed
+   * blurry however long the aircraft circled over it.
    */
   ensureContent(node: TileNode): void {
     const wantGeometry =
@@ -337,11 +318,10 @@ export class TileStreamer {
   /**
    * Record the outcome of a load, unless a newer one has taken over.
    *
-   * Every exit path goes through here, including the aborted ones. The old
-   * code returned early on `signal.aborted` without settling, which left the
-   * node in `this.loading` with its state wedged at `loading` — permanently
-   * consuming frontier budget, and permanently unrefinable, because
-   * `ensureContent` only ever restarts an `idle` load.
+   * Every exit path goes through here, the aborted ones included. The old code
+   * returned early on `signal.aborted` without settling, leaving the node in
+   * `this.loading` wedged at `loading` — permanently consuming frontier budget
+   * and permanently unrefinable, since `ensureContent` only restarts `idle`.
    */
   private finish(
     node: TileNode,

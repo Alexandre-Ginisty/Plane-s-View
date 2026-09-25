@@ -8,27 +8,23 @@
  *
  * ## How big the gaps were
  *
- * Measured against eight busy terminal areas (Paris, London, Frankfurt,
- * New York, Dubai, Amsterdam, Rome, San Francisco), 1622 aircraft reporting a
- * type code: **46% matched nothing** and fell back to a generic 40 m twin-jet.
- * The three most common misses were `A21N`, `B38M` and `A20N` — the A321neo,
- * the 737 MAX 8 and the A320neo, which between them are most of the narrowbody
+ * Measured against eight busy terminal areas, 1622 aircraft reporting a type
+ * code: **46% matched nothing** and fell back to a generic 40 m twin-jet. The
+ * commonest misses were `A21N`, `B38M` and `A20N` — most of the narrowbody
  * fleet flying today. The old table had `A32` and `B73`, and the re-engined
- * variants simply do not share those prefixes.
+ * variants do not share those prefixes.
  *
- * So the rows below are chosen from what is actually in the sky rather than
- * from what is interesting: the neos and the MAXes first, then the light
- * aircraft that fill any European Sunday afternoon (C152, DA40/DA42, DR400,
- * PC-12), then the business jets, which were the worst-served of all — a
- * Phenom 300 reporting emitter category A1 was being drawn as a straight-wing
- * piston single.
+ * So the rows below come from what is actually in the sky rather than what is
+ * interesting: the neos and MAXes, then the light aircraft that fill a European
+ * Sunday afternoon, then the business jets, worst-served of all — a Phenom 300
+ * reporting category A1 was drawn as a straight-wing piston single.
  *
  * Values are eyeballed from published dimensions rather than measured. Close
  * enough that the silhouette reads correctly at the distances this is seen
  * from, which is the only requirement.
  */
 
-export type AirframeKind = 'jet' | 'turboprop' | 'piston' | 'glider' | 'rotorcraft';
+type AirframeKind = 'jet' | 'turboprop' | 'piston' | 'glider' | 'rotorcraft';
 
 /**
  * Where the engines hang.
@@ -38,7 +34,7 @@ export type AirframeKind = 'jet' | 'turboprop' | 'piston' | 'glider' | 'rotorcra
  * T-tail *and* engines on the rear fuselage. Conflating them left every ATR,
  * every Dash 8 and every regional jet drawn with no engines at all.
  */
-export type EngineMount = 'wing' | 'tail' | 'none';
+type EngineMount = 'wing' | 'tail' | 'none';
 
 export interface AirframeShape {
   kind: AirframeKind;
@@ -422,12 +418,11 @@ export const EXACT: ReadonlyMap<string, Partial<AirframeShape>> = new Map([
 /**
  * Rotorcraft, by exact ICAO type designator.
  *
- * Exact, not prefix-matched, and that is a deliberate reversal of how the
- * fixed-wing table works. Helicopter designators collide head-on with
- * airliners: a `B4` prefix would claim the Bell 412 *and* the Boeing 747, `A1`
- * would claim the AW109 and the A318, `S7` the Sikorsky S-76 and nothing good.
- * Prefix matching is safe for the airliner families because they genuinely
- * share a prefix by design; here it would silently turn 747s into helicopters.
+ * Exact, not prefix-matched — a deliberate reversal of the fixed-wing table,
+ * because helicopter designators collide head-on with airliners: `B4` would
+ * claim the Bell 412 *and* the Boeing 747, `A1` the AW109 and the A318. Prefix
+ * matching is safe for airliner families, which share a prefix by design; here
+ * it would silently turn 747s into helicopters.
  *
  * `EC`, `H1` and `R` are the exceptions below: Airbus and Robinson designators
  * in those ranges are rotorcraft-only, and listing every variant would be a

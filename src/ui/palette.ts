@@ -52,6 +52,19 @@ export const HEX = {
   slate: 0x5d7186,
 } as const;
 
+/**
+ * The front page's aeroplane, which is lit rather than liveried.
+ *
+ * Deliberately not an airline's colours. The hero is the app's own object, and
+ * painting it in someone's livery would both misrepresent the aircraft the
+ * visitor is about to see and borrow a mark nobody granted.
+ */
+export const HERO = {
+  hull: 0xaebdcc,
+  trim: 0x16222f,
+  glow: 0x4fa8d8,
+} as const;
+
 /** What a traffic colour means, for the on-screen legend. */
 export const TRAFFIC_LEGEND: readonly { color: string; meaning: string }[] = [
   { color: PALETTE.green, meaning: 'Climbing' },

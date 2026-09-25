@@ -16,14 +16,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "idb-keyval": "^6.3.0",
     "maplibre-gl": "^6.10.0",
     "three": "^0.186.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.2",
     "@types/three": "^0.186.0",
+    "sharp": "^0.35.4",
     "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "typescript": "^5.9.3",

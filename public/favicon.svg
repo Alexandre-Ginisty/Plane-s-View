@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PlanesView">
+  <!--
+    An aircraft planform, nose up.
+
+    Drawn as a single path rather than as a glyph or a photograph, for two
+    reasons: it has to survive being rasterised to 16 pixels in a tab strip,
+    where anything with interior detail turns to mush, and it has to be legible
+    against both a light and a dark browser chrome. A filled silhouette with a
+    thick outline is the shape that does both.
+
+    `currentColor` is not used — a favicon is rendered outside the page, so it
+    has no cascade to inherit from and must carry its own colours.
+  -->
+  <rect width="64" height="64" rx="12" fill="#03060c"/>
+  <path
+    fill="#7fdfff"
+    d="M32 7c2.6 0 4.3 3.1 4.6 8.4l.2 6.2 20.4 12.1a2 2 0 0 1 1 1.7v3.3c0 .9-.9 1.5-1.7 1.2L36.9 34l-.5 11.6 7.2 5.2c.5.4.8 1 .8 1.6v2.1c0 .8-.8 1.4-1.6 1.2L32 52.6l-10.8 3.1c-.8.2-1.6-.4-1.6-1.2v-2.1c0-.6.3-1.2.8-1.6l7.2-5.2-.5-11.6L7.5 39.9c-.8.3-1.7-.3-1.7-1.2v-3.3a2 2 0 0 1 1-1.7l20.4-12.1.2-6.2C27.7 10.1 29.4 7 32 7Z"
+  />
+</svg>

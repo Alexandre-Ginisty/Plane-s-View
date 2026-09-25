@@ -3,12 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <title>PlanesView — live aircraft, from the cockpit</title>
     <meta
       name="description"
       content="Watch live air traffic on a photoreal globe, then step inside any aircraft for a first-person view."
     />
+    <!-- SVG first: it is the only one that stays sharp on a high-DPI tab strip
+         and in the bookmark bar. The PNGs are for the places that ignore it. -->
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="theme-color" content="#03060c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)" />
+
+    <!-- Open Graph, so a shared link is a card rather than a bare URL. -->
+    <meta property="og:title" content="PlanesView — live aircraft, from the cockpit" />
+    <meta
+      property="og:description"
+      content="Watch live air traffic on a photoreal globe, then step inside any aircraft for a first-person view. No account, no API key."
+    />
+    <meta property="og:type" content="website" />
+
     <link rel="preconnect" href="https://services.arcgisonline.com" crossorigin />
     <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
   </head>

@@ -10,6 +10,17 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
 import './ui/theme.css';
+import { applyTheme, resolveTheme } from './ui/theme';
+
+/*
+ * Before anything renders.
+ *
+ * A theme applied from a component runs after the first paint, so the page
+ * opens in whichever scheme the stylesheet declares and then changes — a white
+ * flash for a dark-mode visitor, or the reverse. This is the only point early
+ * enough for there to be nothing to flash.
+ */
+applyTheme(resolveTheme());
 
 function webgl2Available(): boolean {
   try {
