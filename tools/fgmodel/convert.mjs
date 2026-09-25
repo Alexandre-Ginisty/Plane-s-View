@@ -65,6 +65,25 @@ const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
  * full cabin and flight deck, which is most of the vertex count and is only
  * ever seen from a seat this app does not put you in.
  *
+ * The **cabin** is the other half of it, and the harder half to name. An
+ * airliner's interior is modelled because the simulator flies from inside it,
+ * and it is invisible from outside — until it is not. The 737-300 shipped with
+ * its bulkheads, floor, sidewalls and carpet, and one of those panels poked
+ * through the fuselage as a flat white plate beside the wing root. Nothing
+ * catches that but naming the parts, because from any other angle they are
+ * hidden and the model looks perfect.
+ *
+ * Some of it has to be judged by **texture** rather than by name. A landing
+ * light's halo is a card painted with a dedicated sprite sheet, and the 737's
+ * is called `Llightl` — no name rule reaches it, and it renders as a flat white
+ * plate beside the wing root, which is what was reported.
+ *
+ * That is the opposite conclusion to the one the undercarriage rule reached,
+ * and the difference is worth stating: a *livery* sheet is shared by unrelated
+ * surfaces, so `txt_hstab_gear` says nothing about what a part is. A sheet of
+ * halos is shared only by halos. The test is whether the texture names an
+ * effect or a material.
+ *
  * The **light beams** are the big one by consequence. Landing and taxi lights
  * are modelled as long translucent cones projecting from the airframe, and on
  * the 777 they reach sixty metres ahead of the nose — so the bounding box came
@@ -73,7 +92,7 @@ const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
  * this is the fix.
  */
 const DISCARD =
-  /\.int$|interior|cabin|cockpit|flightdeck|panel|seat|yoke|pedestal|instrument|jack|tug|pushback|stair|chock|cone$|service|crew|human|pilot|shadow|\.hide|\.spot$|beam|halo|flare/i;
+  /\.int$|interior|cabin|cockpit|flightdeck|panel|seat|yoke|pedestal|instrument|jack|tug|pushback|stair|chock|cone$|service|crew|human|pilot|shadow|\.hide|\.spot$|beam|halo|flare|bulkhead|sidewall|^wall|floor|carpet|ceiling|galley|lavatory|overhead|curtain|divider|partition|luggage|locker|handrail|armrest|tray|trolley/i;
 
 /**
  * Undercarriage, hidden above circuit height.
@@ -101,6 +120,9 @@ const DISCARD =
  */
 const GEAR = /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo)/i;
 
+/** Sprite sheets that only ever paint a special effect. See `DISCARD`. */
+const EFFECT_TEXTURE = /(halo|flare|glow|corona|lightbeam|light_beam)/i;
+
 /*
  * `gear` as a noun, not as an adjective.
  *
@@ -115,6 +137,16 @@ const PROP = /^prop(?!disc)/i;
 const PROPDISC = /^propdisc/i;
 const ROTOR = /^(mainrotor|rotor|blade)(?!.*tail)/i;
 const TAILROTOR = /^(tailrotor|rotortail)/i;
+
+/*
+ * Rotor names are only rotor names on a rotorcraft.
+ *
+ * A turbofan's fan is made of blades, and the 737-300 calls them exactly that
+ * — `Blades`, `Blades.001`. Read as a main rotor, they were handed to the
+ * spinner animator to be turned about a vertical axis through the aircraft's
+ * centre, which is not where a fan is or which way it turns. The aircraft
+ * declares whether it is a helicopter; nothing else needs to be guessed.
+ */
 
 export const AIRCRAFT = [
   {
@@ -478,16 +510,34 @@ async function readSetAuthors(path) {
   }
 }
 
+/** True when every vertex shares one coordinate: a zero-thickness sheet. */
+function isFlatSheet(tris) {
+  for (let axis = 0; axis < 3; axis++) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const tri of tris) {
+      for (const p of tri.v) {
+        lo = Math.min(lo, p[axis]);
+        hi = Math.max(hi, p[axis]);
+      }
+    }
+    if (hi - lo < 1e-6) return true;
+  }
+  return false;
+}
+
 /** FlightGear axes to ours. See the note at the top. */
 function toAppAxes(v) {
   return [-v[2], -v[0], v[1]];
 }
 
-function roleOf(name) {
+function roleOf(name, isRotorcraft) {
   if (PROPDISC.test(name)) return 'disc';
   if (PROP.test(name)) return 'prop';
-  if (TAILROTOR.test(name)) return 'tailRotor';
-  if (ROTOR.test(name)) return 'mainRotor';
+  if (isRotorcraft) {
+    if (TAILROTOR.test(name)) return 'tailRotor';
+    if (ROTOR.test(name)) return 'mainRotor';
+  }
   if (GEAR.test(name)) return 'gear';
   return 'hull';
 }
@@ -608,7 +658,7 @@ export async function convert(entry, { quiet = false } = {}) {
 
   for (const { object, transform } of flatten(root)) {
     if (object.verts.length === 0) continue;
-    if (DISCARD.test(object.name)) {
+    if (DISCARD.test(object.name) || (object.texture && EFFECT_TEXTURE.test(object.texture))) {
       discarded += object.verts.length;
       continue;
     }
@@ -616,9 +666,37 @@ export async function convert(entry, { quiet = false } = {}) {
     const tris = triangulate(object, transform);
     if (tris.length === 0) continue;
 
+    /*
+     * Drop the flat helper sheets — per object, before anything is merged.
+     *
+     * FlightGear models carry a cast-shadow plane and sometimes a fog card:
+     * quads with exactly zero extent in one axis, lying under or through the
+     * airframe. In a simulator that projects them onto the ground they are
+     * invisible; here they render as a flat plate across the wing, which is
+     * what the 777 was doing and what the 737-300 was still doing.
+     *
+     * The test used to run after grouping and only on untextured groups, and
+     * missed both ways round. Objects are merged by role, texture and
+     * material, so a helper sharing a sheet with real geometry arrived welded
+     * to it and no longer measured flat; and a helper that *is* textured — the
+     * 737's is painted with the white livery sheet — was never examined. Here
+     * it is one object at a time, whatever it is painted with.
+     *
+     * The test itself is unchanged and stays strict: exactly zero extent, not
+     * merely thin. A real surface on an aeroplane is never a perfectly planar
+     * sheet; a wing is thin, not zero.
+     */
     const material = object.surfaces[0]?.material ?? 0;
     const texture = object.texture;
-    const role = roleOf(object.name);
+    const role = roleOf(object.name, Boolean(entry.rotorcraft));
+
+    // A propeller's blur disc is a flat sheet on purpose — that is what a disc
+    // is — so it is the one thing this test must not be applied to.
+    if (role !== 'disc' && isFlatSheet(tris)) {
+      say(`  ${entry.id}: dropped flat helper "${object.name}"`);
+      discarded += object.verts.length;
+      continue;
+    }
     if (texture && !textures.includes(texture)) textures.push(texture);
 
     // Spinners are kept whole and separate: each one turns about its own hub.
@@ -815,35 +893,6 @@ export async function convert(entry, { quiet = false } = {}) {
     }
     computeNormals(group.tris);
     const mesh = index(group.tris);
-
-    /*
-     * Drop the flat helper sheets.
-     *
-     * FlightGear models carry a cast-shadow plane and sometimes a fog card:
-     * untextured quads with exactly zero extent in one axis, lying under or
-     * through the airframe. In a simulator that projects them onto the ground
-     * they are invisible; here they render as a large black wedge across the
-     * wing, which is what the 777 was doing — its was 62 m by 6 m and named
-     * `Fuselage.001`, so no name rule would have caught it.
-     *
-     * The test is geometric and safe: a real surface on an aeroplane is never
-     * a perfectly planar sheet with no texture. A wing is thin, not zero.
-     */
-    if (!group.texture) {
-      const extent = [0, 1, 2].map((axis) => {
-        let lo = Infinity;
-        let hi = -Infinity;
-        for (let i = axis; i < mesh.positions.length; i += 3) {
-          lo = Math.min(lo, mesh.positions[i]);
-          hi = Math.max(hi, mesh.positions[i]);
-        }
-        return hi - lo;
-      });
-      if (Math.min(...extent) < 1e-6) {
-        say(`  ${entry.id}: dropped flat helper "${group.name}" (${extent.map((e) => e.toFixed(2)).join(' x ')})`);
-        continue;
-      }
-    }
 
     // A spinner's geometry is moved to its own origin so it can be rotated in
     // place; everything else stays in airframe space.

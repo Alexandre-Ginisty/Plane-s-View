@@ -21,6 +21,16 @@ const DIR = 'public/models';
 interface Part {
   role: string;
   name: string;
+  /**
+   * Where the part sits, and why measuring without it is wrong.
+   *
+   * A spinner's vertices are stored around its own hub so it can be rotated in
+   * place, with the offset back to airframe space kept here. Measuring the raw
+   * positions therefore collapses every rotor blade onto the centreline —
+   * which is how a correctly normalised Bo 105 came out at 0.77 of unit
+   * length once its flat blur discs stopped padding the bounding box.
+   */
+  origin: [number, number, number];
   position: { offset: number; count: number };
 }
 
@@ -59,7 +69,7 @@ function extentOf(
     const start = model.payload + part.position.offset;
     for (let i = 0; i < part.position.count; i += 3) {
       for (let a = 0; a < 3; a++) {
-        const v = model.buffer.readFloatLE(start + (i + a) * 4);
+        const v = model.buffer.readFloatLE(start + (i + a) * 4) + (part.origin[a] ?? 0);
         min[a] = Math.min(min[a]!, v);
         max[a] = Math.max(max[a]!, v);
       }

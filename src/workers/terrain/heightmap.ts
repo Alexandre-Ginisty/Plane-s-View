@@ -45,6 +45,19 @@ export async function decodeHeightmap(bytes: ArrayBuffer): Promise<Heightmap> {
     for (let i = 0, p = 0; i < out.length; i++, p += channels) {
       out[i] = clampNoData(decodeTerrarium(data[p]!, data[p + 1]!, data[p + 2]!));
     }
+    /*
+     * The exact decoder gets the same repair as the fallback.
+     *
+     * It was left off here on the reasoning that this path has no rounding, so
+     * it cannot produce the 256 m step the despike looks for. True of
+     * *rounding* and not of everything else: a byte that arrives wrong — a
+     * truncated response, a bit flipped in transit, a cache serving half a
+     * file — lands in the red channel as a whole multiple of 256 m, which is
+     * precisely the signature. Unrepaired, one such texel is a spike that
+     * climbs out of the terrain into the sky, and that is what was reported.
+     */
+    despikeRedChannel(out, width, height);
+    clampToEarth(out);
     return { data: out, width, height };
   }
 
@@ -57,6 +70,37 @@ export async function decodeHeightmap(bytes: ArrayBuffer): Promise<Heightmap> {
  */
 function clampNoData(h: number): number {
   return h <= TERRARIUM_NODATA + 1 ? 0 : h;
+}
+
+/**
+ * The tallest and deepest the surface of the Earth gets, metres.
+ *
+ * Mirrors the envelope `@/render/globe/constants` culls against, restated here
+ * rather than imported because this runs in a worker and that module reaches
+ * into Three.
+ */
+const HIGHEST_M = 9_000;
+const LOWEST_M = -500;
+
+/**
+ * The last line of defence against a corrupt byte.
+ *
+ * Terrarium packs the top byte of the elevation into the red channel, so a
+ * single wrong byte is worth up to 32 512 m — a spike eight times the height
+ * of anything on Earth, climbing out of the ground into the sky. The despike
+ * above repairs the common case and cannot reach the tile's outermost row and
+ * column, where it has no four neighbours to compare against.
+ *
+ * Clamping is not a repair: an edge texel pinned to 9 000 m is still wrong and
+ * still visible. It is a bound on how wrong, and it turns an artefact that
+ * reaches orbit into one that reaches the height of a mountain.
+ */
+function clampToEarth(data: Float32Array): void {
+  for (let i = 0; i < data.length; i++) {
+    const h = data[i]!;
+    if (h > HIGHEST_M) data[i] = HIGHEST_M;
+    else if (h < LOWEST_M) data[i] = LOWEST_M;
+  }
 }
 
 /**
@@ -92,6 +136,7 @@ async function decodeViaCanvas(bytes: ArrayBuffer): Promise<Heightmap> {
   }
 
   despikeRedChannel(out, width, height);
+  clampToEarth(out);
   return { data: out, width, height };
 }
 

@@ -244,7 +244,7 @@ export class Orchestrator {
       globe.update(engine.camera, dt, engine.viewportHeight);
 
       this.cameraEcefVec.copy(engine.camera.position);
-      traffic3d.update(samples, this.cameraEcefVec, radiansPerPixel, app.selectedHex, (lat, lon) =>
+      traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
         globe.sampleHeight(lat, lon),
       );
 

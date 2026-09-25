@@ -176,6 +176,23 @@ Two things make the substitution honest rather than merely plausible:
   kind. A real model of the wrong variant reads as far more true than an
   accurate drawing of a generic one.
 
+### Other aircraft in the 3D view
+
+Almost none are drawn, and that is the feature. Traffic used to be rendered to
+120 km with anything under eleven screen pixels inflated so it stayed visible —
+the right rule for a chart and the wrong one for a window. The inflated marks
+were a crude twenty-triangle silhouette held at a size the aircraft does not
+have, scattered across a photographic sky.
+
+Aircraft are now drawn at **true scale**, never inflated, and only within 12 km
+— the range at which a 60 m airliner still subtends more than about a pixel.
+Past that they are absent, which is also what you see out of a real aeroplane.
+The few that remain are real converted airframes, one standing in for every
+fixed-wing type and one for every rotorcraft, instanced per part so the fleet
+costs a draw call per part rather than per aircraft.
+
+### Validation
+
 The converter validates what it produces, because a bad model is wrong in a way
 nothing else notices — it loads, it lights, it renders, and the aeroplane is
 simply missing a piece. An aircraft is reported and skipped, never shipped, if:
@@ -189,6 +206,14 @@ simply missing a piece. An aircraft is reported and skipped, never shipped, if:
 - a part classified as undercarriage sits in the upper half of the airframe,
   which means a lifting surface has been mislabelled and would be retracted
   above circuit height.
+
+It also drops what should never have been drawn: cabin interiors (an airliner's
+bulkheads and floor are modelled because the simulator flies from inside, and
+one of the 737's panels poked through the fuselage as a flat white plate), and
+zero-thickness helper sheets — shadow planes and fog cards that a simulator
+projects onto the ground and this renders as a plate across the wing. Both are
+judged per object before parts are merged, because a helper welded to real
+geometry no longer measures flat.
 
 The same properties are asserted against the *committed* models in
 `src/render/aircraft/models.test.ts`, because the converter only validates when

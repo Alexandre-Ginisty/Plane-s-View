@@ -41,17 +41,6 @@ export const PALETTE = {
   slate: '#5d7186',
 } as const;
 
-/** The same palette as 24-bit integers, for Three.js and MapLibre. */
-export const HEX = {
-  holo: 0x7fdfff,
-  holoDim: 0x3d7f9c,
-  amber: 0xffb02e,
-  green: 0x43f0a0,
-  red: 0xff3b4e,
-  ice: 0xe9f4ff,
-  slate: 0x5d7186,
-} as const;
-
 /**
  * The front page's aeroplane, which is lit rather than liveried.
  *

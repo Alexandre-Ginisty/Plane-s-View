@@ -1,25 +1,46 @@
 /**
- * Other aircraft, drawn in the 3D view.
+ * Other aircraft, drawn in the 3D view — and mostly not drawn at all.
  *
- * One `InstancedMesh` holds every visible aircraft. The alternative — a `Mesh`
- * each — costs a draw call and a matrix upload per aircraft, and with a
- * thousand of them in view that alone misses the frame budget. Here the whole
- * fleet is one draw call and one matrix buffer written in place.
+ * ## Why almost nothing is drawn
  *
- * Instances are also *scaled with distance*: at 40 km a real 60 m airliner is
- * well under a pixel and would simply vanish. Below a threshold the model is
- * inflated so it stays a readable mark, in the same way a chart symbol is not
- * drawn to scale. Above it, true size takes over and the transition is
- * continuous, so an aircraft you are approaching never visibly changes size.
+ * This used to draw every aircraft within 120 km, inflating anything below
+ * eleven screen pixels so it stayed visible. That is the right rule for a
+ * chart and the wrong one for a window: the inflated marks are a crude
+ * twenty-triangle silhouette held at a size the real aircraft does not have,
+ * scattered across a photographic sky. Reported, accurately, as flies on the
+ * windscreen.
+ *
+ * So the rule is now the one a window obeys. Aircraft are drawn at **true
+ * scale**, never inflated, and only within a range at which true scale is
+ * worth drawing. Past that they are simply absent — which is also what you see
+ * out of a real aeroplane, where the traffic a mile away is a speck you notice
+ * once and most of it you never see at all.
+ *
+ * ## Why the few that are drawn are real airframes
+ *
+ * Once nothing is inflated, everything still on screen is genuinely close, and
+ * at that range a marker geometry is indefensible. These use the converted
+ * FlightGear airframes — the same assets the aircraft you are riding uses.
+ *
+ * One model stands in for every fixed-wing type, and one for every rotorcraft.
+ * That is a real compromise and it is the right one: the alternative is a
+ * separate instanced buffer per type, which is a draw call per type on screen,
+ * to distinguish airframes that are a few pixels apart in outline at the only
+ * ranges this draws at.
+ *
+ * ## How a multi-part model is instanced
+ *
+ * A converted model is several parts with different materials, and an
+ * `InstancedMesh` holds one geometry. So there is one `InstancedMesh` per
+ * part, and all of them are written with the same matrices — the fleet costs
+ * a draw call per part rather than per aircraft.
  */
 
 import {
-  BufferGeometry,
-  Color,
   DynamicDrawUsage,
+  Group,
   InstancedMesh,
   Matrix4,
-  MeshLambertMaterial,
   Object3D,
   Quaternion,
   Scene,
@@ -29,132 +50,135 @@ import { FEET_TO_METRES, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
-import {
-  colorFor,
-  createAircraftMarkerGeometry,
-  createRotorcraftMarkerGeometry,
-} from './traffic/markers';
 import { isSurfaceVehicle, shapeFor } from './aircraft';
+import { loadModelFor } from './aircraft/library';
+import type { LoadedModel } from './aircraft/pvm';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 
-const MAX_INSTANCES = 2000;
+/**
+ * How close an aircraft has to be to be drawn at all, metres.
+ *
+ * Twelve kilometres. At that range a 60 m airliner subtends about 1.2 screen
+ * pixels — the point at which it stops being an aeroplane and becomes a mark,
+ * and the point this deliberately stops drawing. Inside it the model grows the
+ * way a real one does, and a genuine close pass fills the window.
+ *
+ * It is not a performance number. Drawing to 120 km cost almost nothing; what
+ * it cost was the look of the sky.
+ */
+const MAX_RANGE_M = 12_000;
 
 /**
- * Rotorcraft are a small fraction of any traffic picture, and they fly low and
- * slow, so far fewer are ever inside the 120 km range gate at once. A separate,
- * smaller buffer costs a few hundred kB less than mirroring the full capacity.
+ * Instances each layer can hold.
+ *
+ * Twelve kilometres of sky over a busy terminal area holds a few dozen
+ * aircraft, not a few thousand. The buffer is sized for the worst case anyone
+ * will meet rather than for the worst case that exists.
  */
-const MAX_ROTOR_INSTANCES = 256;
+const MAX_INSTANCES = 128;
 
-/** Beyond this, aircraft are not drawn in 3D at all. */
-const MAX_RANGE_M = 120_000;
-
-/**
- * Smallest on-screen length, in pixels, an aircraft is allowed to shrink to.
- * A 60 m airliner at 40 km subtends about 1.5 px at a typical field of view —
- * legible as a dot only by accident. Holding a floor of ~11 px keeps it a
- * readable mark without ever making a nearby aircraft look wrong.
- */
-const MIN_SCREEN_PX = 11;
-
-/** What one aircraft looks like: which instance layer, and how long it is. */
-interface Airframe {
-  rotor: boolean;
-  /** Overall length in metres, from the type's own shape. */
-  size: number;
-  /** How far the model's origin sits above the ground when parked, metres. */
-  clearance: number;
-}
+/** The type whose airframe stands in for every fixed-wing aircraft. */
+const FIXED_WING_STANDIN = 'B738';
+/** And for every helicopter. */
+const ROTORCRAFT_STANDIN = 'EC35';
 
 export interface TrafficRenderStats {
   drawn: number;
   culled: number;
 }
 
+/** What one aircraft looks like: which layer, how long, and how it sits. */
+interface Airframe {
+  rotor: boolean;
+  size: number;
+  clearance: number;
+}
+
 /**
- * One instanced mesh and its fill cursor.
+ * One converted model, instanced.
  *
- * Two of these, because a helicopter and an airliner cannot share a geometry
- * and `InstancedMesh` cannot switch geometry per instance. The cost is one
- * extra draw call for the entire rotorcraft fleet, which is nothing next to
- * every helicopter on screen reading as a jet.
+ * Every part gets its own `InstancedMesh` and they all carry the same matrices,
+ * so a fleet is a draw call per part instead of per aircraft. `count` is set
+ * once per frame after the fill, because `InstancedMesh.count` is what the
+ * renderer draws and leaving it at capacity draws the stale tail of the buffer.
  */
-class InstanceLayer {
-  readonly mesh: InstancedMesh;
+class InstancedModel {
+  readonly group = new Group();
+  private readonly meshes: InstancedMesh[] = [];
   count = 0;
 
-  constructor(geometry: BufferGeometry, material: MeshLambertMaterial, capacity: number) {
-    this.mesh = new InstancedMesh(geometry, material, capacity);
-    this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    this.mesh.count = 0;
+  constructor(model: LoadedModel, capacity: number) {
+    for (const part of model.parts) {
+      // The undercarriage is omitted rather than animated. Nothing within
+      // twelve kilometres is on the ground unless you are too, and a shared
+      // instance buffer cannot retract one aircraft's gear and not another's.
+      if (part.role === 'gear') continue;
+
+      const mesh = new InstancedMesh(part.geometry, part.material, capacity);
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.meshes.push(mesh);
+      this.group.add(mesh);
+    }
+  }
+
+  setMatrixAt(index: number, matrix: Matrix4): void {
+    for (const mesh of this.meshes) mesh.setMatrixAt(index, matrix);
   }
 
   commit(): void {
-    this.mesh.count = this.count;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    for (const mesh of this.meshes) {
+      mesh.count = this.count;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   dispose(): void {
-    this.mesh.geometry.dispose();
-    this.mesh.dispose();
+    for (const mesh of this.meshes) mesh.dispose();
+    // Geometries and materials belong to the shared model cache, which the
+    // aircraft you are riding is very likely using as well.
+    this.meshes.length = 0;
   }
 }
 
 export class Traffic3D {
   readonly scene = new Scene();
 
-  /**
-   * Lit, and *not* `vertexColors`.
-   *
-   * `vertexColors: true` was the bug that made every other aircraft in the sky
-   * a black speck. Per-instance colour on an `InstancedMesh` comes from
-   * `instanceColor`, which needs no flag; `vertexColors` additionally asks the
-   * shader for a per-*vertex* `color` attribute, and these geometries have
-   * none — so it read (0, 0, 0) and multiplied the instance colour to nothing.
-   * Aircraft rendered as flies against a bright sky.
-   *
-   * Lambert rather than basic, now that they are visible at all: an unlit
-   * marker is a flat cut-out whatever colour it is, and the whole reason these
-   * are shaped like aeroplanes is so they read as aeroplanes. They are lit by
-   * the same sun as the aircraft you are riding — `OwnAircraft` puts it in
-   * this scene — so a wing catches the light at the same angle yours does.
-   */
-  private readonly material = new MeshLambertMaterial({ toneMapped: false });
-  private readonly fixedWing: InstanceLayer;
-  private readonly rotorcraft: InstanceLayer;
+  private fixedWing: InstancedModel | null = null;
+  private rotorcraft: InstancedModel | null = null;
+  private disposed = false;
 
+  private readonly dummy = new Object3D();
+  private readonly basis = new Matrix4();
   private readonly quaternion = new Quaternion();
   private readonly position = new Vector3();
-  private readonly color = new Color();
-  private readonly dummy = new Object3D();
-  /**
-   * Scratch basis, reused. This used to be `new Matrix4()` inside the
-   * per-aircraft loop — sixty thousand throwaway matrices a second for the
-   * collector to walk. Not a frame-time spike but a periodic multi-millisecond
-   * GC pause, which in a first-person view is the stutter that makes the whole
-   * thing feel cheap.
-   */
-  private readonly basis = new Matrix4();
-
-  /** Settled silhouette verdicts, keyed by hex. See `classify`. */
   private readonly airframes = new Map<string, Airframe>();
-
   private stats: TrafficRenderStats = { drawn: 0, culled: 0 };
 
   constructor(private readonly origin: FloatingOrigin) {
-    this.fixedWing = new InstanceLayer(createAircraftMarkerGeometry(), this.material, MAX_INSTANCES);
-    this.rotorcraft = new InstanceLayer(
-      createRotorcraftMarkerGeometry(),
-      this.material,
-      MAX_ROTOR_INSTANCES,
-    );
-
-    this.scene.add(this.fixedWing.mesh);
-    this.scene.add(this.rotorcraft.mesh);
     this.scene.matrixAutoUpdate = false;
+
+    /*
+     * Nothing is drawn until the airframes arrive, and that is deliberate.
+     *
+     * The alternative is to draw the procedural model in the meantime, which
+     * is exactly the crude silhouette this replaced — shown briefly, at the
+     * only ranges where crude is most obvious. An empty sky for a second is
+     * the better wrong answer.
+     */
+    void this.adopt(FIXED_WING_STANDIN, (layer) => (this.fixedWing = layer));
+    void this.adopt(ROTORCRAFT_STANDIN, (layer) => (this.rotorcraft = layer));
+  }
+
+  private async adopt(typeCode: string, assign: (layer: InstancedModel) => void): Promise<void> {
+    const model = await loadModelFor(typeCode);
+    if (this.disposed || !model) return;
+
+    const layer = new InstancedModel(model, MAX_INSTANCES);
+    assign(layer);
+    this.scene.add(layer.group);
   }
 
   getStats(): Readonly<TrafficRenderStats> {
@@ -162,21 +186,19 @@ export class Traffic3D {
   }
 
   /**
-   * `cameraEcef` drives range culling and the apparent-size ramp; `excludeHex`
-   * drops the aircraft the camera is riding in, which would otherwise fill the
-   * cockpit view with its own fuselage. `terrainHeightAt` stops aircraft on the
-   * ground being drawn *under* it (see `@/render/ground`), and is optional so
-   * the layer still works before the globe exists.
+   * `cameraEcef` drives the range gate; `excludeHex` drops the aircraft the
+   * camera is riding in, which would otherwise fill the cockpit view with its
+   * own fuselage. `terrainHeightAt` stops aircraft on the ground being drawn
+   * *under* it — see `@/render/ground`.
    */
   update(
     samples: readonly SampledAircraft[],
     cameraEcef: Vector3,
-    radiansPerPixel: number,
     excludeHex: string | null,
     terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
-    this.fixedWing.count = 0;
-    this.rotorcraft.count = 0;
+    if (this.fixedWing) this.fixedWing.count = 0;
+    if (this.rotorcraft) this.rotorcraft.count = 0;
     let culled = 0;
 
     for (const sample of samples) {
@@ -188,7 +210,7 @@ export class Traffic3D {
 
       const airframe = this.classify(sample);
       const layer = airframe.rotor ? this.rotorcraft : this.fixedWing;
-      if (layer.count >= layer.mesh.instanceMatrix.count) continue;
+      if (!layer || layer.count >= MAX_INSTANCES) continue;
 
       let altM = sample.altFt * FEET_TO_METRES;
       // Only the aircraft that could possibly be inside the terrain pay for a
@@ -210,8 +232,7 @@ export class Traffic3D {
         ecef[2] - this.origin.current[2],
       );
 
-      const distance = this.position.distanceTo(cameraEcef);
-      if (distance > MAX_RANGE_M) {
+      if (this.position.distanceTo(cameraEcef) > MAX_RANGE_M) {
         culled++;
         continue;
       }
@@ -226,27 +247,23 @@ export class Traffic3D {
       this.quaternion.setFromRotationMatrix(this.basis);
       this.dummy.quaternion.copy(this.quaternion);
 
-      // Apparent-size floor. An object of length L at range d subtends
-      // L / d radians, and one pixel is `radiansPerPixel`, so holding
-      // MIN_SCREEN_PX pixels needs L >= MIN_SCREEN_PX * radiansPerPixel * d.
-      // Taking the max with true size means close aircraft are never inflated,
-      // and the two regimes meet continuously — no visible pop as you close in.
-      const trueSize = airframe.size;
-      const floorSize = MIN_SCREEN_PX * radiansPerPixel * distance;
-      const size = Math.max(trueSize, Math.min(floorSize, trueSize * 80));
-
-      this.dummy.scale.setScalar(size);
+      // True scale, always. The converted models are normalised to unit
+      // length, so this is the aircraft's own length in metres and nothing
+      // else — no floor, no ramp, no chart symbol.
+      this.dummy.scale.setScalar(airframe.size);
       this.dummy.updateMatrix();
 
-      layer.mesh.setMatrixAt(layer.count, this.dummy.matrix);
-      layer.mesh.setColorAt(layer.count, colorFor(sample, this.color));
+      layer.setMatrixAt(layer.count, this.dummy.matrix);
       layer.count++;
     }
 
-    this.fixedWing.commit();
-    this.rotorcraft.commit();
+    this.fixedWing?.commit();
+    this.rotorcraft?.commit();
 
-    this.stats = { drawn: this.fixedWing.count + this.rotorcraft.count, culled };
+    this.stats = {
+      drawn: (this.fixedWing?.count ?? 0) + (this.rotorcraft?.count ?? 0),
+      culled,
+    };
   }
 
   /**
@@ -294,9 +311,9 @@ export class Traffic3D {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.airframes.clear();
-    this.fixedWing.dispose();
-    this.rotorcraft.dispose();
-    this.material.dispose();
+    this.fixedWing?.dispose();
+    this.rotorcraft?.dispose();
   }
 }
