@@ -32,7 +32,7 @@
     aspect-ratio: 3 / 2;
     object-fit: cover;
     border: 1px solid var(--border);
-    background: #050a12;
+    background: var(--bg-panel-solid);
   }
   figcaption {
     margin-top: 4px;

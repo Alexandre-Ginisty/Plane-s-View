@@ -67,6 +67,8 @@ const FADE_S = 0.25;
 const GAP = 6;
 
 const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+/** A pin's name, as `theme.css` sets it — for measuring the room it takes. */
+const PIN_FONT = `500 12px ${FONT_STACK}`;
 const STYLE = {
   country: {
     font: `500 11px ${FONT_STACK}`,
@@ -99,6 +101,7 @@ export class PlaceLabels {
   /** Town cells by key: loaded, in flight, or known to be empty. */
   private readonly towns = new Map<string, Place[] | 'loading' | null>();
   private mergedFrom: Place[][] = [];
+  private obstacles: { lat: number; lon: number; name: string; width?: number }[] = [];
   private merged: Place[] = [];
   private readonly opacity = new Map<string, number>();
   private visible = true;
@@ -239,6 +242,43 @@ export class PlaceLabels {
     return this.merged;
   }
 
+  /**
+   * Name of the nearest named place within `maxKm`, or null.
+   *
+   * Searches the cities and whichever town cells are already loaded — at the
+   * zoom someone drops a pin at, the cells under the view almost always are.
+   * Towns win over a city only when clearly nearer — a third of the
+   * distance — so a pin in a suburb well out of town is named after the
+   * suburb, and one anywhere in the city after the city rather than
+   * whichever district happens to be closest.
+   */
+  nearestName(lat: number, lon: number, maxKm = 12): string | null {
+    const cosLat = Math.cos((lat * Math.PI) / 180);
+    let best: string | null = null;
+    let bestKm = maxKm;
+    const consider = (p: Place, bias: number): void => {
+      if (p.kind === 'country') return;
+      const dx = (p.lon - lon) * cosLat * 111.32;
+      const dy = (p.lat - lat) * 110.57;
+      const km = Math.hypot(dx, dy) * bias;
+      if (km < bestKm) {
+        bestKm = km;
+        best = p.text;
+      }
+    };
+    for (const p of this.places) consider(p, 1);
+    for (const cell of this.towns.values()) {
+      if (Array.isArray(cell)) for (const p of cell) consider(p, 3);
+    }
+    return best;
+  }
+
+    /** Pins on the map, which place names must keep clear of. */
+  setObstacles(pins: readonly { lat: number; lon: number; name: string }[]): void {
+    this.obstacles = pins.map((p) => ({ lat: p.lat, lon: p.lon, name: p.name }));
+    this.map.triggerRepaint();
+  }
+
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.map.triggerRepaint();
@@ -274,6 +314,14 @@ export class PlaceLabels {
     const north = bounds.getNorth();
 
     const placed: [number, number, number, number][] = [];
+    // The user's pins own their spot: a place name never sits under one.
+    ctx.font = PIN_FONT;
+    ctx.letterSpacing = '0px';
+    for (const o of this.obstacles) {
+      const pt = map.project([o.lon, o.lat]);
+      o.width ??= ctx.measureText(o.name).width;
+      placed.push([pt.x - 10, pt.y - 14, pt.x + o.width + 44, pt.y + 14]);
+    }
     const shown = new Set<string>();
     let fading = false;
 

@@ -14,16 +14,19 @@
   import { app } from '@/state/appStore.svelte';
   import { IMAGERY_SOURCES } from '@/tiles/sources';
   import type { Orchestrator } from '@/app/orchestrator';
+  import Icon from './Icon.svelte';
 
   let { orchestrator }: { orchestrator: Orchestrator } = $props();
 </script>
 
 <div class="layers">
   <button
-    class="chip"
+    class="tool"
+    class:on={app.showLayers}
     onclick={() => (app.showLayers = !app.showLayers)}
     aria-expanded={app.showLayers}
-  >Layers</button>
+    title="Imagery and map overlays"
+  ><Icon name="layers" /><span class="text">Layers</span></button>
 
   {#if app.showLayers}
     <div class="panel menu" role="menu">
@@ -60,14 +63,20 @@
   .layers { position: relative; }
   .menu {
     position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
+    top: calc(100% + 10px);
+    left: -3px;
     width: 280px;
     padding: 5px;
     display: flex;
     flex-direction: column;
     gap: 1px;
     z-index: 30;
+    animation: menu-in 0.22s var(--ease);
+    transform-origin: top left;
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to { opacity: 1; transform: none; }
   }
   .menu button {
     display: grid;
@@ -77,8 +86,8 @@
     border-radius: var(--radius-sm);
     text-align: left;
   }
-  .menu button:hover { background: rgba(127, 223, 255, 0.08); }
-  .menu button.active { background: rgba(127, 223, 255, 0.14); box-shadow: inset 2px 0 0 var(--accent); }
+  .menu button:hover { background: var(--hover-bg); }
+  .menu button.active { background: var(--active-bg); box-shadow: inset 2px 0 0 var(--accent); }
   .name { font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; }
   .zoom { font-size: 10px; color: var(--accent-dim); font-family: var(--mono); }
   .desc { grid-column: 1 / -1; font-size: 11px; color: var(--text-dim); }

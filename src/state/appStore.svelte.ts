@@ -44,6 +44,58 @@ function storeFlag(key: string, value: boolean): void {
 
 type ViewMode = 'map' | 'pov';
 
+/** Where the sandbox is: off, choosing a place, choosing an aircraft, or flying. */
+type SandboxPhase = 'off' | 'pick' | 'hangar' | 'flying';
+
+interface SandboxState {
+  phase: SandboxPhase;
+  spawn: { lat: number; lon: number; name: string } | null;
+  aircraftId: string;
+  score: number;
+  best: number;
+  kills: number;
+  streak: number;
+  crashes: number;
+  /** 0 while reloading, 1 ready. */
+  ready: number;
+  lock: string | null;
+  killCam: boolean;
+  crashed: boolean;
+  /** The last kill or impact, for the centre-screen announcement. */
+  banner: { id: number; title: string; detail: string; points: number } | null;
+  /** Recent kills, newest first. */
+  feed: { id: number; text: string; points: number }[];
+}
+
+/** A place the user marked on the map, to find again from the air. */
+export interface Pin {
+  id: string;
+  lat: number;
+  lon: number;
+  name: string;
+}
+
+const PINS_KEY = 'planesview.pins';
+
+function loadPins(): Pin[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINS_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(raw)) return [];
+    // Stored by an older build or edited by hand: keep only what is usable.
+    return raw.filter(
+      (p): p is Pin =>
+        typeof p === 'object' &&
+        p !== null &&
+        typeof p.id === 'string' &&
+        Number.isFinite(p.lat) &&
+        Number.isFinite(p.lon) &&
+        typeof p.name === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
 interface RuntimeStats {
   fps: number;
   /** Our own update + draw cost, ms. The number that shows real headroom. */
@@ -103,6 +155,44 @@ class AppStore {
    * where it allows it. See `App.svelte`.
    */
   cinema = $state(false);
+
+  /**
+   * The user's pins. Kept in `localStorage`, so a home town marked once is
+   * still marked next week — and only in this browser, which is the right
+   * scope for "where I live".
+   */
+  pins = $state<Pin[]>(loadPins());
+  /** While on, a click on the map drops a pin instead of selecting. */
+  pinMode = $state(false);
+
+  addPin(lat: number, lon: number, name: string): void {
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    this.pins = [...this.pins, { id, lat, lon, name }];
+    this.savePins();
+  }
+
+  removePin(id: string): void {
+    this.pins = this.pins.filter((p) => p.id !== id);
+    this.savePins();
+  }
+
+  renamePin(id: string, name: string): void {
+    this.pins = this.pins.map((p) => (p.id === id ? { ...p, name } : p));
+    this.savePins();
+  }
+
+  clearPins(): void {
+    this.pins = [];
+    this.savePins();
+  }
+
+  private savePins(): void {
+    try {
+      localStorage.setItem(PINS_KEY, JSON.stringify(this.pins));
+    } catch {
+      // Kept for this session only.
+    }
+  }
 
   /**
    * Dark or daylight. Seeded before the first paint — see `ui/theme.ts`.
@@ -192,6 +282,36 @@ class AppStore {
   showLayers = $state(false);
   /** Flight details panel in the cockpit view. */
   showFlightCard = $state(true);
+  /**
+   * True while the user is dragging the 3D view round. The details card steps
+   * aside for the drag and comes back when the button is released, so looking
+   * around is never looking at a panel.
+   */
+  lookingAround = $state(false);
+
+  /** Drag direction preference: false = the camera goes where the hand goes. */
+  invertY = $state(storedFlag('planesview.invertY', false));
+  setInvertY(on: boolean): void {
+    this.invertY = on;
+    storeFlag('planesview.invertY', on);
+  }
+
+  sandbox = $state<SandboxState>({
+    phase: 'off',
+    spawn: null,
+    aircraftId: 'viper',
+    score: 0,
+    best: 0,
+    kills: 0,
+    streak: 0,
+    crashes: 0,
+    ready: 1,
+    lock: null,
+    killCam: false,
+    crashed: false,
+    banner: null,
+    feed: [],
+  });
 
   private noticeId = 0;
 

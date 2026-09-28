@@ -32,7 +32,6 @@ export function clearSelection(map: SelectionMap | null): void {
   // the new aircraft's name — a plausible-looking number for the wrong place.
   app.weather = null;
   map?.updateTrail([]);
-  map?.updateRoute(null, null);
 }
 
 /**
@@ -45,7 +44,6 @@ export async function loadSelection(
   sample: SampledAircraft | null,
   token: number,
   current: () => number,
-  map: SelectionMap | null,
 ): Promise<void> {
   app.dossierLoading = true;
 
@@ -53,9 +51,6 @@ export async function loadSelection(
     const dossier = await registry.dossier(hex, sample?.latest.callsign ?? null);
     if (token !== current()) return; // superseded by a newer selection
     app.dossier = dossier;
-
-    const at = sample ? { lat: sample.lat, lon: sample.lon } : null;
-    map?.updateRoute(dossier.route, at);
   } finally {
     if (token === current()) app.dossierLoading = false;
   }

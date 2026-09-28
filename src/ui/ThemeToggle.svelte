@@ -10,7 +10,7 @@
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
 
-  let { compact = false }: { compact?: boolean } = $props();
+  let { compact = false, tool = false }: { compact?: boolean; tool?: boolean } = $props();
 
   const next = $derived(app.theme === 'dark' ? 'light' : 'dark');
 </script>
@@ -18,6 +18,7 @@
 <button
   class="theme-toggle"
   class:compact
+  class:tool
   onclick={(event) => app.setTheme(next, event.altKey)}
   aria-label={`Switch to ${next} theme`}
   title={`Switch to ${next} theme — alt-click to follow the system`}
@@ -56,6 +57,17 @@
   }
   .theme-toggle:hover { border-color: var(--border-strong); }
   .theme-toggle.compact { padding: 6px; }
+  /* Inside a dock: a plain tool like its neighbours, no frame of its own. */
+  .theme-toggle.tool {
+    height: 34px;
+    padding: 0 11px;
+    background: transparent;
+    border: 0;
+    color: var(--text-dim);
+  }
+  .theme-toggle.tool:hover { color: var(--accent); background: var(--hover-bg); }
+  svg { transition: transform 0.5s var(--ease); }
+  .theme-toggle:hover svg { transform: rotate(40deg); }
 
   svg {
     width: 15px;

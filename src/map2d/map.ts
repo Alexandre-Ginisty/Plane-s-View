@@ -15,6 +15,7 @@
 
 import {
   Map as MapLibreMap,
+  Marker,
   NavigationControl,
   ScaleControl,
   type GeoJSONSource,
@@ -34,14 +35,14 @@ import {
   AIRCRAFT_SOURCE,
   CLICK_TOLERANCE_PX,
   EMPTY_COLLECTION,
-  ROUTE_SOURCE,
   TRAIL_SOURCE,
   createAircraftIcon,
 } from './style';
 import { PlaceLabels } from './labels';
+import { MapPins } from './pins';
+import type { Pin } from '@/state/appStore.svelte';
 import { METRES_TO_NM, haversineMetres } from '@/core/math/geo';
 import type { SampledAircraft } from '@/state/traffic';
-import type { FlightRoute } from '@/data/types';
 
 export interface MapEvents {
   onSelect(hex: string | null): void;
@@ -52,6 +53,10 @@ export interface MapEvents {
     bounds: { south: number; west: number; north: number; east: number },
   ): void;
   onError?(message: string): void;
+  /** A pin dropped here, with the nearest place's name when there is one. */
+  onPlacePin(lat: number, lon: number, name: string): void;
+  onRemovePin(id: string): void;
+  onRenamePin(id: string, name: string): void;
 }
 
 export class SelectionMap {
@@ -60,6 +65,11 @@ export class SelectionMap {
   private imagery: ImagerySource = DEFAULT_IMAGERY;
   private labelsVisible = true;
   private labels: PlaceLabels | null = null;
+  private pins: MapPins | null = null;
+  private pinMode = false;
+  /** While set, a click picks a place for the sandbox instead of anything else. */
+  private pickHandler: ((lat: number, lon: number, name: string) => void) | null = null;
+  private spawnMarker: Marker | null = null;
   /**
    * Fetch a source, or null while the style is still parsing.
    *
@@ -114,7 +124,6 @@ export class SelectionMap {
             attribution: this.imagery.attribution,
           },
           borders: { type: 'geojson', data: '/map/borders.json' },
-          [ROUTE_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [TRAIL_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [AIRCRAFT_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
         },
@@ -215,6 +224,10 @@ export class SelectionMap {
 
     this.labels = new PlaceLabels(map);
     this.labels.setVisible(this.labelsVisible);
+    this.pins = new MapPins(map, {
+      remove: (id) => this.events.onRemovePin(id),
+      rename: (id, name) => this.events.onRenamePin(id, name),
+    });
 
     this.attachInteractions(map);
     this.emitMove();
@@ -224,13 +237,20 @@ export class SelectionMap {
   private attachInteractions(map: MapLibreMap): void {
     map.on('moveend', () => this.emitMove());
     map.on('click', (e: MapMouseEvent) => this.handleClick(e));
+    // Right-click drops a pin whatever mode the map is in.
+    map.on('contextmenu', (e: MapMouseEvent) => {
+      e.preventDefault();
+      this.placePin(e.lngLat.lat, e.lngLat.lng);
+    });
 
     map.on('mousemove', 'aircraft-layer', (e: MapLayerMouseEvent) => {
+      if (this.pinMode) return;
       map.getCanvas().style.cursor = 'pointer';
       const hex = e.features?.[0]?.properties?.['hex'];
       this.events.onHover(typeof hex === 'string' ? hex : null);
     });
     map.on('mouseleave', 'aircraft-layer', () => {
+      if (this.pinMode) return;
       map.getCanvas().style.cursor = '';
       this.events.onHover(null);
     });
@@ -250,6 +270,17 @@ export class SelectionMap {
   private handleClick(e: MapMouseEvent): void {
     const map = this.map;
     if (!map) return;
+
+    if (this.pickHandler) {
+      const { lat, lng } = e.lngLat;
+      this.pickHandler(lat, lng, this.labels?.nearestName(lat, lng, 40) ?? formatCoordinates(lat, lng));
+      return;
+    }
+
+    if (this.pinMode) {
+      this.placePin(e.lngLat.lat, e.lngLat.lng);
+      return;
+    }
 
     const t = CLICK_TOLERANCE_PX;
     const box: [[number, number], [number, number]] = [
@@ -289,6 +320,52 @@ export class SelectionMap {
       this.selectedHex = bestHex;
       this.events.onSelect(bestHex);
     }
+  }
+
+  private placePin(lat: number, lon: number): void {
+    const name = this.labels?.nearestName(lat, lon) ?? formatCoordinates(lat, lon);
+    this.events.onPlacePin(lat, lon, name);
+  }
+
+  /** While on, a click drops a pin instead of selecting an aircraft. */
+  setPinMode(on: boolean): void {
+    this.pinMode = on;
+    const canvas = this.map?.getCanvas();
+    if (canvas) canvas.style.cursor = on ? 'crosshair' : '';
+  }
+
+  /**
+   * Hand the next clicks to `handler` — the sandbox choosing where to start —
+   * or give them back with null.
+   */
+  setPickHandler(handler: ((lat: number, lon: number, name: string) => void) | null): void {
+    this.pickHandler = handler;
+    const canvas = this.map?.getCanvas();
+    if (canvas) canvas.style.cursor = handler ? 'crosshair' : this.pinMode ? 'crosshair' : '';
+  }
+
+  /** The sandbox's chosen start, as a pulsing target on the map; null clears it. */
+  showSpawn(at: { lat: number; lon: number } | null): void {
+    if (!at) {
+      this.spawnMarker?.remove();
+      this.spawnMarker = null;
+      return;
+    }
+    const map = this.map;
+    if (!map) return;
+    if (!this.spawnMarker) {
+      const el = document.createElement('div');
+      el.className = 'pv-spawn';
+      el.innerHTML = '<span></span><span></span><i></i>';
+      this.spawnMarker = new Marker({ element: el }).setLngLat([at.lon, at.lat]).addTo(map);
+    } else {
+      this.spawnMarker.setLngLat([at.lon, at.lat]);
+    }
+  }
+
+  setPins(pins: readonly Pin[]): void {
+    this.pins?.sync(pins);
+    this.labels?.setObstacles(pins);
   }
 
   /** Swap the basemap layer without rebuilding the map. */
@@ -392,31 +469,6 @@ export class SelectionMap {
     source.setData(data);
   }
 
-  /** Draw origin -> aircraft -> destination for the selected flight. */
-  updateRoute(route: FlightRoute | null, current: { lat: number; lon: number } | null): void {
-    const source = this.geojsonSource(ROUTE_SOURCE);
-    if (!source) return;
-
-    const coords: [number, number][] = [];
-    if (route?.origin?.lat != null && route.origin.lon != null) {
-      coords.push([route.origin.lon, route.origin.lat]);
-    }
-    if (current) coords.push([current.lon, current.lat]);
-    if (route?.destination?.lat != null && route.destination.lon != null) {
-      coords.push([route.destination.lon, route.destination.lat]);
-    }
-
-    const data: FeatureCollection<LineString> = {
-      type: 'FeatureCollection',
-      features:
-        coords.length < 2
-          ? []
-          : [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }],
-    };
-
-    source.setData(data);
-  }
-
   flyTo(lat: number, lon: number, zoom?: number): void {
     this.map?.flyTo({ center: [lon, lat], zoom: zoom ?? this.map.getZoom(), duration: 900 });
   }
@@ -439,7 +491,14 @@ export class SelectionMap {
     // on it, so a separate `disposed` flag would say the same thing twice.
     this.labels?.dispose();
     this.labels = null;
+    this.pins?.dispose();
+    this.pins = null;
     this.map?.remove();
     this.map = null;
   }
+}
+
+/** A pin's name when no place is near enough to lend it one. */
+function formatCoordinates(lat: number, lon: number): string {
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
 }

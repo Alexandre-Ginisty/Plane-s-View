@@ -91,13 +91,13 @@
     width: 1.5px;
     height: 7px;
     margin: 0 auto;
-    background: rgba(233, 244, 255, 0.7);
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+    background: var(--hud-mark);
+    box-shadow: var(--hud-mark-shadow);
   }
-  .tick.major .mark { height: 13px; background: var(--accent); }
-  .tick.cardinal .mark { background: var(--accent-warm); }
-  .tick-label { font-size: 11.5px; color: var(--text); font-weight: 600; letter-spacing: 0.06em; }
-  .tick.cardinal .tick-label { color: var(--accent-warm); }
+  .tick.major .mark { height: 13px; background: var(--hud-accent); }
+  .tick.cardinal .mark { background: var(--hud-warm); }
+  .tick-label { font-size: 11.5px; color: var(--hud-text); font-weight: 600; letter-spacing: 0.06em; }
+  .tick.cardinal .tick-label { color: var(--hud-warm); }
   .cursor {
     position: absolute;
     left: 50%;
@@ -107,7 +107,7 @@
     margin-left: -5px;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 8px solid var(--accent-warm);
+    border-top: 8px solid var(--hud-warm);
   }
   .readout {
     position: absolute;
@@ -117,8 +117,8 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    color: var(--accent-warm);
-    text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+    color: var(--hud-warm);
+    text-shadow: var(--hud-halo);
   }
 
   @media (max-width: 720px) {

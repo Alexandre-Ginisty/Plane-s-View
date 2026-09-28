@@ -42,8 +42,8 @@
     pointer-events: auto;
     animation: rise 0.22s ease-out;
   }
-  .notice.warn { border-left-color: var(--warn); color: #ffd7ab; }
-  .notice.error { border-left-color: var(--error); color: #ffc0cd; }
+  .notice.warn { border-left-color: var(--warn); color: var(--warn-text); }
+  .notice.error { border-left-color: var(--error); color: var(--error-text); }
   .notice button { color: inherit; opacity: 0.5; font-size: 16px; line-height: 1; }
   .notice button:hover { opacity: 1; }
 

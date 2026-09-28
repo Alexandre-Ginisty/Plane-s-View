@@ -70,8 +70,8 @@
     display: flex;
     flex-direction: column;
     padding: 10px 14px;
-    background: rgba(3, 8, 14, 0.5);
-    border: 1px solid var(--border);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
     backdrop-filter: blur(6px);
   }
   /* The cut corner points away from the screen edge on each side, so the pair
@@ -86,10 +86,10 @@
     align-items: flex-end;
     clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
   }
-  .tape .value { font-size: 27px; font-weight: 600; line-height: 1.15; color: var(--text); }
-  .tape .unit { font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; }
-  .tape .sub { font-size: 11.5px; color: var(--accent); margin-top: 3px; }
-  .tape .sub.dim { color: var(--text-dim); }
+  .tape .value { font-size: 27px; font-weight: 600; line-height: 1.15; color: var(--hud-text); }
+  .tape .unit { font-size: 9.5px; color: var(--hud-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+  .tape .sub { font-size: 11.5px; color: var(--hud-accent); margin-top: 3px; }
+  .tape .sub.dim { color: var(--hud-dim); }
 
   .environment {
     position: absolute;
@@ -100,9 +100,9 @@
     gap: 3px;
     font-size: 12.5px;
     padding: 9px 12px;
-    background: rgba(3, 8, 14, 0.5);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(4px);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    backdrop-filter: blur(6px);
   }
   .environment div { display: flex; gap: 8px; align-items: baseline; }
   .environment :global(.label) { width: 84px; flex-shrink: 0; }
@@ -110,8 +110,8 @@
     font-size: 8.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--accent-warm);
-    border: 1px solid rgba(255, 176, 46, 0.4);
+    color: var(--hud-warm);
+    border: 1px solid rgb(var(--warm-rgb) / 0.45);
     padding: 0 3px;
   }
 

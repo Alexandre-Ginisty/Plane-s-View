@@ -18,7 +18,6 @@ import { PALETTE } from '@/ui/palette';
 
 export const AIRCRAFT_SOURCE = 'aircraft';
 export const TRAIL_SOURCE = 'trail';
-export const ROUTE_SOURCE = 'route';
 export const AIRCRAFT_ICON = 'aircraft-icon';
 
 /** Half-width of the click hit box, pixels. Icons are ~18 px across. */
@@ -71,24 +70,16 @@ export function createAircraftIcon(size = 64): ImageData {
 export const EMPTY_COLLECTION: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 /**
- * The three aircraft-related layers, bottom to top.
+ * The aircraft-related layers, bottom to top.
  *
  * Declared as data so they can go straight into the initial style. Order
- * matters: the great-circle route sits under the flown trail, which sits under
- * the aircraft symbols.
+ * matters: the flown trail sits under the aircraft symbols.
+ *
+ * No predicted route. A dashed line from origin through the aircraft to the
+ * destination was drawn here, and it was a guess drawn as if it were a
+ * fact — straight segments no aircraft flies — cluttering the map it sat on.
  */
 export const AIRCRAFT_LAYERS: LayerSpecification[] = [
-  {
-    id: 'route-layer',
-    type: 'line',
-    source: ROUTE_SOURCE,
-    paint: {
-      'line-color': PALETTE.holo,
-      'line-width': 1.5,
-      'line-opacity': 0.55,
-      'line-dasharray': [2, 2],
-    },
-  },
   {
     id: 'trail-layer',
     type: 'line',

@@ -59,6 +59,35 @@ const TERRAIN_CLEARANCE_M = 8;
 const ORBIT_DRAG_GAIN = 1;
 const LOOK_DRAG_GAIN = 2.2;
 
+/*
+ * ## Which way a drag goes
+ *
+ * One rule for every view: **the camera goes where the hand goes.** Drag right
+ * and the view turns right (cockpit) or the camera swings round to the right
+ * of the aircraft (every outside view); drag down and the view drops, or the
+ * camera sinks.
+ *
+ * It used to be half of that. Horizontal drags followed the hand and vertical
+ * ones grabbed the world, so pulling the mouse down tipped the cockpit view up
+ * at the sky and lifted the orbit camera over the top — "quand je descends ça
+ * monte". Each axis on its own was a defensible convention; the pair was not.
+ * Anyone who wants the old vertical back has `invertY`.
+ *
+ * Chase and wing orbit too, rather than turning the head. Free look in an
+ * outside view swung the aircraft straight off the screen, which is never
+ * what dragging over the subject of the shot is for.
+ */
+
+/** How far below and above its home position an outside view may swing, radians. */
+const SWING_PITCH_MIN = -1.25;
+const SWING_PITCH_MAX = 0.45;
+
+/** Cockpit zoom: the narrowest field of view the wheel reaches, degrees. */
+const MIN_FOV_DEG = 16;
+
+/** How long a change of camera takes, seconds. */
+const MODE_TRANSITION_S = 0.85;
+
 /**
  * How hard the *aircraft's own motion* is damped, per mode, seconds.
  *
@@ -127,6 +156,24 @@ const BODY_TAU = 0.09;
 /** Time constant for the eased return to centre. See `recentre`. */
 const RECENTRE_TAU = 0.18;
 
+/**
+ * The flight between two aircraft, when switching from one to the other.
+ *
+ * Long enough to see where you are going and to keep your bearings, short
+ * enough never to feel like waiting: scaled with the distance, within these
+ * bounds, seconds.
+ */
+const TRANSITION_MIN_S = 1.4;
+const TRANSITION_MAX_S = 3.2;
+/** Seconds of transition per kilometre travelled, before the bounds apply. */
+const TRANSITION_S_PER_KM = 0.09;
+
+/** Smooth start, smooth arrival, no jerk at either end (quintic). */
+function smootherstep(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * x * (x * (x * 6 - 15) + 10);
+}
+
 /** Radians per pixel before the first frame has reported the real viewport. */
 const FALLBACK_RAD_PER_PX = (50 * DEG2RAD) / 800;
 
@@ -149,6 +196,10 @@ const _sUp = new Vector3();
 const _residual = new Vector3();
 const _velocity = new Vector3();
 const _horizontal = new Vector3();
+const _radial = new Vector3();
+const _startQuat = new Quaternion();
+const _swing = new Vector3();
+const _swingAxis = new Vector3();
 
 /** Orientation looking along `forward` with `up` as the vertical reference. */
 function lookQuaternion(forward: Vector3, up: Vector3, out: Quaternion): Quaternion {
@@ -207,8 +258,34 @@ export class PovController {
   private readonly smoothedBody = new Quaternion();
   private initialised = false;
 
+  /**
+   * The camera pose a switch started from, in absolute ECEF so a rebase of
+   * the floating origin mid-flight cannot move it. Null when not switching.
+   */
+  private transition: {
+    from: Vector3;
+    fromQuat: Quaternion;
+    elapsed: number;
+    duration: number;
+    arc: number;
+  } | null = null;
+
   /** Set by `recentre`; cleared once the view has arrived back at centre. */
   private recentring = false;
+
+  /** Flip vertical drags, for anyone who prefers to grab the world. */
+  invertY = false;
+
+  /** Outside views: how much nearer or further than home, eased towards. */
+  private swingZoom = 1;
+  private swingZoomTarget = 1;
+  /** Cockpit: the field of view the wheel has asked for, and the resting one. */
+  private fovTarget: number | null = null;
+  private baseFov: number | null = null;
+
+  /** Where the camera was last put, absolute ECEF, for a change of mode. */
+  private readonly lastPosition = new Vector3();
+  private readonly lastQuaternion = new Quaternion();
 
   /** Where the wheel has asked the orbit distance to go; eased towards. */
   private orbitDistanceTarget = 90;
@@ -244,11 +321,70 @@ export class PovController {
 
   constructor(private readonly origin: FloatingOrigin) {}
 
+  /**
+   * Fly the camera from where it is now to wherever the next frames place it.
+   *
+   * Call right after the controller has been pointed at a new aircraft. The
+   * normal camera logic keeps running underneath, so the destination is
+   * always the live one — the aircraft keeps moving during the flight, and
+   * the camera arrives exactly where it would have been anyway, with nothing
+   * to settle afterwards. The path is an arc, so a jump between two aircraft
+   * at the same height passes above the space between them instead of
+   * skimming straight across it.
+   */
+  beginTransition(
+    fromEcef: Vector3,
+    fromQuat: Quaternion,
+    toEcef: Vector3,
+    options: { duration?: number; arc?: number } = {},
+  ): void {
+    const km = fromEcef.distanceTo(toEcef) / 1000;
+    this.transition = {
+      from: fromEcef.clone(),
+      fromQuat: fromQuat.clone(),
+      elapsed: 0,
+      duration:
+        options.duration ??
+        Math.min(TRANSITION_MAX_S, Math.max(TRANSITION_MIN_S, TRANSITION_MIN_S + km * TRANSITION_S_PER_KM)),
+      arc: options.arc ?? Math.min(2500, km * 1000 * 0.12),
+    };
+  }
+
+  /** The camera's last pose, absolute ECEF, for handing to `beginTransition`. */
+  get pose(): { position: Vector3; quaternion: Quaternion } {
+    return { position: this.lastPosition, quaternion: this.lastQuaternion };
+  }
+
+  /** 0..1 through a switch, or null when not switching. */
+  get transitionProgress(): number | null {
+    const t = this.transition;
+    return t ? Math.min(1, t.elapsed / t.duration) : null;
+  }
+
+  /**
+   * Change view, and glide there.
+   *
+   * A cut between two views of the same aircraft throws away the one thing
+   * that tells you they are the same aircraft. The camera flies from where it
+   * was to the new placement over a moment instead — out of the cockpit and
+   * round behind the tail, rather than a jump.
+   */
   setMode(mode: CameraMode): void {
     if (this.state.mode === mode) return;
+    if (this.initialised && !this.transition) {
+      this.transition = {
+        from: this.lastPosition.clone(),
+        fromQuat: this.lastQuaternion.clone(),
+        elapsed: 0,
+        duration: MODE_TRANSITION_S,
+        arc: 0,
+      };
+    }
     this.state.mode = mode;
     this.state.lookYaw = 0;
     this.state.lookPitch = 0;
+    this.swingZoomTarget = 1;
+    this.fovTarget = this.baseFov;
   }
 
   /**
@@ -265,27 +401,59 @@ export class PovController {
   applyDrag(dx: number, dy: number): void {
     // Any drag cancels a return to centre: the hand wins over the animation.
     this.recentring = false;
-    if (this.state.mode === 'orbit') {
-      const k = this.radPerPx * ORBIT_DRAG_GAIN;
-      this.state.orbitYaw -= dx * k;
-      this.state.orbitPitch = clamp(this.state.orbitPitch + dy * k, -1.4, 1.4);
-    } else {
-      const k = this.radPerPx * LOOK_DRAG_GAIN;
-      this.state.lookYaw = clamp(this.state.lookYaw - dx * k, -Math.PI, Math.PI);
-      this.state.lookPitch = clamp(this.state.lookPitch + dy * k, -1.2, 1.2);
+    // See "Which way a drag goes" above.
+    const vy = this.invertY ? -dy : dy;
+    switch (this.state.mode) {
+      case 'orbit': {
+        const k = this.radPerPx * ORBIT_DRAG_GAIN;
+        this.state.orbitYaw -= dx * k;
+        this.state.orbitPitch = clamp(this.state.orbitPitch - vy * k, -1.3, 1.4);
+        return;
+      }
+      case 'cockpit': {
+        // Zoomed in, the same drag covers less of the world: keep the point
+        // under the cursor under the cursor.
+        const k = this.radPerPx * LOOK_DRAG_GAIN * this.zoomScale;
+        this.state.lookYaw = clamp(this.state.lookYaw - dx * k, -Math.PI, Math.PI);
+        this.state.lookPitch = clamp(this.state.lookPitch - vy * k, -1.2, 1.2);
+        return;
+      }
+      default: {
+        const k = this.radPerPx * ORBIT_DRAG_GAIN * 1.4;
+        this.state.lookYaw += dx * k;
+        this.state.lookPitch = clamp(this.state.lookPitch + vy * k, SWING_PITCH_MIN, SWING_PITCH_MAX);
+      }
     }
   }
 
+  /**
+   * The wheel, in every view: nearer and further outside, a narrower lens in
+   * the cockpit.
+   *
+   * It moves a *target*; `update` eases towards it. Applied directly, a
+   * trackpad's stream of small deltas reads as a stack of discrete steps
+   * rather than as a zoom.
+   */
   applyZoom(delta: number): void {
-    if (this.state.mode !== 'orbit') return;
-    // The wheel moves a *target*; `update` eases the real distance towards it.
-    // Applied directly, a trackpad's stream of small deltas reads as a stack
-    // of discrete steps rather than as a zoom.
-    this.orbitDistanceTarget = clamp(
-      this.orbitDistanceTarget * Math.exp(delta * 0.001),
-      25,
-      4000,
-    );
+    switch (this.state.mode) {
+      case 'orbit':
+        this.orbitDistanceTarget = clamp(this.orbitDistanceTarget * Math.exp(delta * 0.001), 25, 4000);
+        return;
+      case 'cockpit': {
+        if (this.baseFov === null) return;
+        const current = this.fovTarget ?? this.baseFov;
+        this.fovTarget = clamp(current * Math.exp(delta * 0.0008), MIN_FOV_DEG, this.baseFov);
+        return;
+      }
+      default:
+        this.swingZoomTarget = clamp(this.swingZoomTarget * Math.exp(delta * 0.001), 0.45, 4);
+    }
+  }
+
+  /** How much a cockpit zoom has narrowed the view: 1 at rest. */
+  private get zoomScale(): number {
+    if (this.baseFov === null || this.fovTarget === null) return 1;
+    return this.fovTarget / this.baseFov;
   }
 
   /**
@@ -379,13 +547,17 @@ export class PovController {
     const sRight = _sRight.set(1, 0, 0).applyQuaternion(this.smoothedBody);
 
     // Ease the wheel's target rather than jumping to it. See `applyZoom`.
-    this.state.orbitDistance +=
-      (this.orbitDistanceTarget - this.state.orbitDistance) * (1 - Math.exp(-dt / 0.12));
+    const zoomK = 1 - Math.exp(-dt / 0.12);
+    this.state.orbitDistance += (this.orbitDistanceTarget - this.state.orbitDistance) * zoomK;
+    this.swingZoom += (this.swingZoomTarget - this.swingZoom) * zoomK;
+    this.easeFov(camera, zoomK);
 
     if (this.recentring) {
       const k = 1 - Math.exp(-dt / RECENTRE_TAU);
       this.state.lookYaw -= this.state.lookYaw * k;
       this.state.lookPitch -= this.state.lookPitch * k;
+      this.swingZoomTarget = 1;
+      this.fovTarget = this.baseFov;
       if (Math.abs(this.state.lookYaw) < 1e-3 && Math.abs(this.state.lookPitch) < 1e-3) {
         this.state.lookYaw = 0;
         this.state.lookPitch = 0;
@@ -413,6 +585,12 @@ export class PovController {
       { position, forward, up },
     );
 
+    // Chase and wing: the drag swings the camera round the aircraft and the
+    // wheel moves it nearer or further, about the aircraft rather than the eye.
+    if (this.state.mode === 'chase' || this.state.mode === 'wing') {
+      this.swingAround(position, anchor, frame.localUp);
+    }
+
     // Terrain clearance for the external views. The cockpit deliberately does
     // not get this: if the aircraft is below the terrain the data says so, and
     // silently lifting the camera would hide a real problem.
@@ -432,8 +610,9 @@ export class PovController {
       forward.copy(anchor).sub(position).normalize();
     }
 
-    // Free look, applied about the view's own axes, at full rate.
-    if (this.state.lookYaw !== 0 || this.state.lookPitch !== 0) {
+    // Free look, applied about the view's own axes, at full rate. Cockpit
+    // only: every other view swings the camera instead (see `swingAround`).
+    if (!subjectLocked && (this.state.lookYaw !== 0 || this.state.lookPitch !== 0)) {
       _right.crossVectors(forward, up).normalize();
       _quat.setFromAxisAngle(up, this.state.lookYaw);
       forward.applyQuaternion(_quat);
@@ -444,6 +623,27 @@ export class PovController {
     // Keep the floating origin under the camera before writing render-space
     // coordinates, or the first frame after a rebase is placed against the old
     // origin and the world jumps.
+    lookQuaternion(forward, up, _desiredQuat);
+
+    // A switch between aircraft: blend from the old pose to the live new one.
+    const tr = this.transition;
+    if (tr) {
+      tr.elapsed += dt;
+      const t = Math.min(1, tr.elapsed / tr.duration);
+      const e = smootherstep(t);
+      _radial.copy(position).normalize();
+      position.lerpVectors(tr.from, position, e).addScaledVector(_radial, Math.sin(Math.PI * e) * tr.arc);
+      // The view turns a little ahead of the travel, so the destination is in
+      // front of you for most of the flight rather than swinging round at the
+      // end.
+      _startQuat.copy(tr.fromQuat);
+      _desiredQuat.copy(_startQuat.slerp(_desiredQuat, smootherstep(Math.min(1, t * 1.35))));
+      if (t >= 1) this.transition = null;
+    }
+
+    this.lastPosition.copy(position);
+    this.lastQuaternion.copy(_desiredQuat);
+
     const camEcef: Vec3 = [position.x, position.y, position.z];
     this.origin.maybeRebase(camEcef);
 
@@ -452,7 +652,7 @@ export class PovController {
       camEcef[1] - this.origin.current[1],
       camEcef[2] - this.origin.current[2],
     );
-    camera.quaternion.copy(lookQuaternion(forward, up, _desiredQuat));
+    camera.quaternion.copy(_desiredQuat);
     camera.updateMatrixWorld();
 
     this.viewHeading = bearingOf(forward, frame, this.viewHeading);
@@ -479,6 +679,38 @@ export class PovController {
       this.shapeHex = sample.hex;
     }
     return this.shape;
+  }
+
+  /**
+   * Swing an outside camera round the aircraft: yaw about the local vertical,
+   * pitch about the camera's own horizontal, then scale by the wheel.
+   *
+   * Positive yaw moves the camera to its right and positive pitch moves it
+   * down, which is what makes "the camera goes where the hand goes" true.
+   */
+  private swingAround(position: Vector3, anchor: Vector3, localUp: Vector3): void {
+    const { lookYaw, lookPitch } = this.state;
+    if (lookYaw === 0 && lookPitch === 0 && this.swingZoom === 1) return;
+    const offset = _swing.copy(position).sub(anchor);
+    if (lookYaw !== 0) offset.applyQuaternion(_quat.setFromAxisAngle(localUp, lookYaw));
+    if (lookPitch !== 0) {
+      // The camera's right: forward (towards the anchor) crossed with up.
+      _swingAxis.copy(offset).negate().cross(localUp);
+      if (_swingAxis.lengthSq() > 1e-9) {
+        offset.applyQuaternion(_quat.setFromAxisAngle(_swingAxis.normalize(), lookPitch));
+      }
+    }
+    position.copy(anchor).addScaledVector(offset, this.swingZoom);
+  }
+
+  /** Ease the cockpit lens towards the wheel's target. */
+  private easeFov(camera: PerspectiveCamera, k: number): void {
+    this.baseFov ??= camera.fov;
+    const target = this.state.mode === 'cockpit' ? (this.fovTarget ?? this.baseFov) : this.baseFov;
+    if (Math.abs(camera.fov - target) < 0.01) return;
+    camera.fov += (target - camera.fov) * k;
+    if (Math.abs(camera.fov - target) < 0.02) camera.fov = target;
+    camera.updateProjectionMatrix();
   }
 
   private liftAboveTerrain(
@@ -516,6 +748,11 @@ export class PovController {
 
   reset(): void {
     this.initialised = false;
+    this.swingZoom = this.swingZoomTarget = 1;
+    this.fovTarget = this.baseFov;
+    // A switch that was in flight belongs to the aircraft being left. A new
+    // one, if any, is started by the caller after this.
+    this.transition = null;
     this.ground.forget();
     this.orbitDistanceTarget = this.state.orbitDistance;
   }

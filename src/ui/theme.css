@@ -47,6 +47,8 @@
   --bg-panel: rgba(6, 13, 22, 0.82);
   --bg-panel-solid: #060d16;
   --bg-elevated: rgba(10, 22, 36, 0.92);
+  /* Cards laid over the landing page's hero. */
+  --bg-chapter: rgba(8, 18, 30, 0.62);
   --border: rgba(127, 223, 255, 0.22);
   --border-strong: rgba(127, 223, 255, 0.5);
 
@@ -62,6 +64,43 @@
   --ok: #43f0a0;
   --warn: #ffb02e;
   --error: #ff3b4e;
+  /* The same accents as channels, for tints: `rgb(var(--accent-rgb) / 0.1)`. */
+  --accent-rgb: 127 223 255;
+  --warm-rgb: 255 176 46;
+  --error-rgb: 255 59 78;
+  /* Text on a solid accent fill. */
+  --on-accent: #03121b;
+  /* Text for warnings and errors, tuned to their tinted backgrounds. */
+  --warn-text: #ffd7ab;
+  --error-text: #ffc0cd;
+  /* Surfaces a control sits on while hovered and while pressed. */
+  --hover-bg: rgb(var(--accent-rgb) / 0.08);
+  --active-bg: rgb(var(--accent-rgb) / 0.14);
+  --scanline: rgb(var(--accent-rgb) / 0.035);
+  /* The bottom bar fades the map out under its text. */
+  --status-fade: rgba(3, 5, 10, 0.92);
+  --kbd-bg: rgba(0, 0, 0, 0.3);
+
+  /*
+   * The HUD, over live imagery.
+   *
+   * Its own set, because it is the one surface whose background is not ours:
+   * the chrome everywhere else sits on a panel of known colour, the HUD sits
+   * on whatever the camera is pointed at.
+   */
+  --hud-text: #eef7ff;
+  --hud-dim: #b4d2e6;
+  --hud-label: #a8d8ee;
+  --hud-bg: rgba(3, 8, 14, 0.5);
+  --hud-border: rgba(127, 223, 255, 0.26);
+  --hud-accent: #7fdfff;
+  --hud-warm: #ffb02e;
+  --hud-halo: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+  --hud-mark: rgba(233, 244, 255, 0.72);
+  --hud-mark-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  --hud-drop: drop-shadow(0 0 4px rgba(0, 0, 0, 0.85));
+  --scrim: rgba(3, 6, 12, 0.88);
+  --scrim-soft: rgba(3, 6, 12, 0.55);
 
   /* Angular, not rounded: this is the single biggest cue in the whole theme. */
   --radius: 2px;
@@ -70,9 +109,12 @@
   --notch: 12px;
 
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --glow: 0 0 12px rgba(127, 223, 255, 0.18);
+  --glow: 0 0 12px rgb(var(--accent-rgb) / 0.18);
+  --glow-strong: 0 0 18px rgb(var(--accent-rgb) / 0.35);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* One easing for everything that moves: fast out, long settle. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   color-scheme: dark;
 }
@@ -84,36 +126,71 @@
  * the stored preference before the app mounts — see `theme.ts`. An attribute
  * rather than a media query alone, because the choice has to be overridable:
  * the system preference is the default, not the verdict.
+ *
+ * The same console, printed rather than projected: frosted white glass for the
+ * panels, a deep teal for structure where the dark theme has cyan light, and a
+ * burnt amber for actions. Every text colour holds 4.5:1 on the panel it sits
+ * on, and the tints are the same accents at a lower opacity, so hover and
+ * selection keep their meaning between the two themes.
  */
 :root[data-theme='light'] {
-  --bg: #eef2f7;
-  --bg-panel: rgba(255, 255, 255, 0.86);
-  --bg-panel-solid: #ffffff;
-  --bg-elevated: rgba(255, 255, 255, 0.95);
-  --border: rgba(24, 58, 82, 0.2);
-  --border-strong: rgba(24, 58, 82, 0.42);
+  --bg: #e9eff5;
+  --bg-panel: rgba(250, 252, 254, 0.88);
+  --bg-panel-solid: #fbfcfe;
+  --bg-elevated: rgba(255, 255, 255, 0.96);
+  --bg-chapter: rgba(255, 255, 255, 0.72);
+  --border: rgba(14, 64, 92, 0.18);
+  --border-strong: rgba(14, 64, 92, 0.42);
 
-  --text: #10212e;
-  --text-dim: #3f5b70;
-  --text-faint: #6d8698;
+  --text: #0c1c29;
+  --text-dim: #34506a;
+  --text-faint: #5a7389;
 
   /* Darkened to hold 4.5:1 on white. The dark accents are unreadable here. */
-  --accent: #0b6d92;
-  --accent-dim: #7fa8bd;
-  --accent-warm: #a35b00;
+  --accent: #006c93;
+  --accent-dim: #3f7894;
+  --accent-warm: #b25a00;
   --ok: #0a7a4b;
-  --warn: #a35b00;
+  --warn: #a35200;
   --error: #b3162a;
+  --accent-rgb: 0 108 147;
+  --warm-rgb: 178 90 0;
+  --error-rgb: 179 22 42;
+  --on-accent: #ffffff;
+  --warn-text: #7a3d00;
+  --error-text: #8c1020;
+  --hover-bg: rgb(var(--accent-rgb) / 0.07);
+  --active-bg: rgb(var(--accent-rgb) / 0.12);
+  --scanline: transparent;
+  --status-fade: rgba(236, 242, 248, 0.94);
+  --kbd-bg: rgba(255, 255, 255, 0.6);
 
-  --shadow: 0 6px 24px rgba(20, 42, 60, 0.16);
+  /*
+   * Over imagery, daylight chrome is frosted white with ink on it. The dark
+   * theme's black halo under dark ink would be a smudge; a light halo keeps
+   * thin strokes crisp over a dark forest or a night-side ocean instead.
+   */
+  --hud-text: #0b1b28;
+  --hud-dim: #2c4a62;
+  --hud-label: #1f6385;
+  --hud-bg: rgba(248, 251, 254, 0.78);
+  --hud-border: rgba(14, 64, 92, 0.22);
+  --hud-accent: #0077a3;
+  --hud-warm: #c26400;
+  --hud-halo: 0 0 2px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.6);
+  --hud-mark: rgba(11, 27, 40, 0.8);
+  --hud-mark-shadow: 0 0 3px rgba(255, 255, 255, 0.95);
+  --hud-drop: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9));
+  --scrim: rgba(240, 245, 250, 0.9);
+  --scrim-soft: rgba(240, 245, 250, 0.6);
+
+  --shadow: 0 10px 30px rgba(20, 42, 60, 0.14), 0 2px 6px rgba(20, 42, 60, 0.08);
   /* Light does not glow. A halo on white is a smudge. */
   --glow: 0 1px 3px rgba(20, 42, 60, 0.12);
+  --glow-strong: 0 2px 10px rgba(0, 108, 147, 0.22);
 
   color-scheme: light;
 }
-
-/* Scanlines are a projection artefact. On paper they are just dirt. */
-:root[data-theme='light'] .panel::before { display: none; }
 
 * { box-sizing: border-box; }
 
@@ -190,7 +267,7 @@ button {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(127, 223, 255, 0.035) 0 1px,
+    var(--scanline) 0 1px,
     transparent 1px 3px
   );
 }
@@ -211,9 +288,11 @@ button {
  * A control: angular, cyan, and lit rather than filled.
  *
  * Used for every button that is not the primary action, so the amber of an
- * actual action stays rare enough to mean something.
+ * actual action stays rare enough to mean something. An icon, when there is
+ * one, is an inline SVG sized by `.chip svg`; see `ui/Icon.svelte`.
  */
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -227,33 +306,59 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   backdrop-filter: blur(12px);
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  -webkit-backdrop-filter: blur(12px);
+  transition:
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
+.chip svg { width: 15px; height: 15px; flex-shrink: 0; }
 .chip:hover {
   color: var(--accent);
   border-color: var(--border-strong);
-  background: rgba(127, 223, 255, 0.08);
+  background: var(--hover-bg);
 }
+.chip:active { transform: translateY(1px); }
 .chip.active {
-  color: #03121b;
+  color: var(--on-accent);
   background: var(--accent);
   border-color: var(--accent);
   font-weight: 700;
+  box-shadow: var(--glow-strong);
 }
 .chip.primary {
   color: var(--accent-warm);
-  border-color: rgba(255, 176, 46, 0.45);
-  background: rgba(255, 176, 46, 0.1);
+  border-color: rgb(var(--warm-rgb) / 0.45);
+  background: rgb(var(--warm-rgb) / 0.1);
 }
-.chip.primary:hover { background: rgba(255, 176, 46, 0.2); color: #ffd79a; }
+.chip.primary:hover { background: rgb(var(--warm-rgb) / 0.2); color: var(--accent-warm); filter: brightness(1.1); }
+.chip:disabled { opacity: 0.55; cursor: progress; }
+
+/* A key cap, wherever a shortcut is named. */
+.kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 1px 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--accent);
+  background: var(--kbd-bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
 
 /* MapLibre's own chrome, dragged into the same theme. */
 .maplibregl-ctrl-attrib {
-  background: rgba(3, 6, 12, 0.82) !important;
+  background: var(--bg-panel) !important;
   color: var(--text-faint) !important;
   font-size: 10px !important;
 }
 .maplibregl-ctrl-attrib a { color: var(--text-faint) !important; }
+.maplibregl-ctrl-attrib-button { filter: var(--ctrl-icon-filter); }
 .maplibregl-ctrl-group {
   background: var(--bg-panel) !important;
   border: 1px solid var(--border) !important;
@@ -262,13 +367,15 @@ button {
 }
 .maplibregl-ctrl-group button { border-radius: 0 !important; }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
-.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(160deg); }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: var(--ctrl-icon-filter); }
 .maplibregl-ctrl-scale {
-  background: rgba(3, 6, 12, 0.7) !important;
+  background: var(--bg-panel) !important;
   border-color: var(--border-strong) !important;
   color: var(--text-dim) !important;
   border-radius: 0 !important;
 }
+:root { --ctrl-icon-filter: invert(1) hue-rotate(160deg); }
+:root[data-theme='light'] { --ctrl-icon-filter: none; }
 
 /*
  * Reduced motion switches off the scanlines as well as the animations.
@@ -281,4 +388,97 @@ button {
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   .panel::before { display: none; }
+}
+
+/*
+ * Pins on the selection map (`map2d/pins.ts`).
+ *
+ * Global because MapLibre creates the marker elements, outside any Svelte
+ * component's scope. The amber matches the beacon they become in 3D, so the
+ * pin on the map and the column of light out of the window read as one thing.
+ */
+.pv-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.pv-pin-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffb347;
+  border: 2px solid #fff4e2;
+  box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.3), 0 0 12px rgba(255, 179, 71, 0.7);
+}
+.pv-pin-name {
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff4e2;
+  background: rgba(20, 12, 4, 0.72);
+  border: 1px solid rgba(255, 179, 71, 0.55);
+  border-radius: 3px;
+  white-space: nowrap;
+  outline: none;
+  cursor: text;
+}
+.pv-pin-name[contenteditable='plaintext-only'] {
+  border-color: #ffb347;
+  box-shadow: 0 0 0 2px rgba(255, 179, 71, 0.35);
+}
+.pv-pin-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 16px;
+  color: #fff4e2;
+  background: rgba(20, 12, 4, 0.72);
+  border: 1px solid rgba(255, 179, 71, 0.55);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.pv-pin:hover .pv-pin-remove,
+.pv-pin-remove:focus-visible { opacity: 1; }
+/* No hover on touch screens: keep the delete button reachable there. */
+@media (hover: none) {
+  .pv-pin-remove { opacity: 0.8; }
+}
+
+/*
+ * The sandbox's chosen start on the map (`map2d/map.ts`). Two rings that
+ * pulse outward and a centre cross, in the warm accent: it is an action.
+ */
+.pv-spawn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  pointer-events: none;
+}
+.pv-spawn span {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #ffb02e;
+  border-radius: 50%;
+  animation: pv-spawn-ring 1.8s var(--ease) infinite;
+}
+.pv-spawn span + span { animation-delay: 0.9s; }
+.pv-spawn i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 2px solid #ffb02e;
+  background: rgba(255, 176, 46, 0.25);
+  box-shadow: 0 0 12px rgba(255, 176, 46, 0.8);
+}
+@keyframes pv-spawn-ring {
+  from { transform: scale(0.3); opacity: 1; }
+  to { transform: scale(1.4); opacity: 0; }
 }

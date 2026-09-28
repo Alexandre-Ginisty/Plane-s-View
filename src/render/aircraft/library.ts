@@ -55,6 +55,16 @@ let catalogue: Promise<Catalogue | null> | null = null;
 const models = new Map<string, Promise<LoadedModel | null>>();
 
 /**
+ * Models built in code rather than downloaded, by type code — the sandbox's
+ * armed airframes. Consulted before the catalogue, and never livered.
+ */
+const builtIn = new Map<string, () => LoadedModel | null>();
+
+export function registerBuiltInModel(typeCode: string, build: () => LoadedModel | null): void {
+  builtIn.set(typeCode.toUpperCase(), build);
+}
+
+/**
  * The catalogue, fetched once — but only *cached* once it has succeeded.
  *
  * A failure is not cached, and that distinction matters more here than
@@ -151,6 +161,9 @@ export async function loadModelFor(
   category?: string | null,
 ): Promise<LoadedModel | null> {
   if (!typeCode) return null;
+
+  const own = builtIn.get(typeCode.toUpperCase());
+  if (own) return own();
 
   const index = await loadCatalogue();
   if (!index) return null;

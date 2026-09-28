@@ -307,7 +307,11 @@ export class OwnAircraft {
     dt: number,
     terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
-    this.scene.visible = visible;
+    // The model hides, not the scene: the sun and the ambient light live in
+    // this scene too, and they light every other aircraft as well. Hiding the
+    // whole scene in the cockpit switched them off, and the traffic outside
+    // the windscreen went dark exactly when it was being looked at.
+    this.group.visible = visible;
     if (!visible) return;
 
     this.ensureModel(typeCode, sample.latest.category, operatorOf(sample.latest.callsign));

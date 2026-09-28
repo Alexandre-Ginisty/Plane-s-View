@@ -14,6 +14,8 @@ import { Engine } from '@/render/engine';
 import { Globe } from '@/render/globe';
 import { OwnAircraft } from '@/render/ownAircraft';
 import { PovController } from '@/render/pov';
+import { Pins3D } from '@/render/pins3d';
+import { ViewOverlay } from '@/render/overlay';
 import { Traffic3D } from '@/render/traffic3d';
 
 export interface Surfaces {
@@ -22,9 +24,15 @@ export interface Surfaces {
   traffic3d: Traffic3D;
   ownAircraft: OwnAircraft;
   pov: PovController;
+  pins3d: Pins3D;
+  overlay: ViewOverlay;
 }
 
-export function createSurfaces(canvas: HTMLCanvasElement, origin: FloatingOrigin): Surfaces {
+export function createSurfaces(
+  canvas: HTMLCanvasElement,
+  origin: FloatingOrigin,
+  pinOverlay: HTMLCanvasElement,
+): Surfaces {
   /*
    * Vertical field of view, degrees.
    *
@@ -77,10 +85,13 @@ export function createSurfaces(canvas: HTMLCanvasElement, origin: FloatingOrigin
   const traffic3d = new Traffic3D(origin);
   const ownAircraft = new OwnAircraft(origin);
   const pov = new PovController(origin);
+  const pins3d = new Pins3D(origin);
+  const overlay = new ViewOverlay(pinOverlay);
 
   engine.scene.add(globe.scene);
   engine.scene.add(traffic3d.scene);
   engine.scene.add(ownAircraft.scene);
+  engine.scene.add(pins3d.scene);
 
-  return { engine, globe, traffic3d, ownAircraft, pov };
+  return { engine, globe, traffic3d, ownAircraft, pov, pins3d, overlay };
 }

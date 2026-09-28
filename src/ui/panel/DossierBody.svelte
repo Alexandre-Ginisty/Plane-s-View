@@ -174,9 +174,9 @@
     margin: 10px 0 0;
     padding: 7px 10px;
     border-radius: var(--radius-sm);
-    background: rgba(255, 92, 122, 0.14);
-    border: 1px solid rgba(255, 92, 122, 0.4);
-    color: #ffbecb;
+    background: rgb(var(--error-rgb) / 0.14);
+    border: 1px solid rgb(var(--error-rgb) / 0.45);
+    color: var(--error-text);
     font-size: 12px;
     font-weight: 600;
   }

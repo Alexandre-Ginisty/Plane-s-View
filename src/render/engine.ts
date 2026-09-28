@@ -235,6 +235,15 @@ export class Engine {
     return (this.skyMaterial.uniforms['horizonColor']!.value as Color).clone();
   }
 
+  /**
+   * Whether frames are drawn at all. The loop keeps running either way — the
+   * app's own per-frame work lives in it — but while the 3D view is hidden
+   * behind the map there is nothing to draw it for, and drawing a globe,
+   * a sky and a fleet sixty times a second into an invisible canvas was the
+   * single largest cost of simply having the map open.
+   */
+  renderEnabled = true;
+
   start(onFrame: (ctx: FrameContext) => void): void {
     if (this.running) return;
     this.onFrame = onFrame;
@@ -270,7 +279,7 @@ export class Engine {
     this.skyMesh.updateMatrix();
 
     this.onFrame?.({ dt, elapsed: this.elapsed, frame: this.frameCount });
-    this.renderer.render(this.scene, this.camera);
+    if (this.renderEnabled) this.renderer.render(this.scene, this.camera);
 
     this.adaptQuality(performance.now() - frameStart, dt);
   };

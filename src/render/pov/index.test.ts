@@ -363,3 +363,84 @@ describe('PovController input latency', () => {
     expect(pov.state.lookYaw).not.toBe(0);
   });
 });
+
+describe('the camera goes where the hand goes', () => {
+  const up = (s: SampledAircraft): Vector3 => {
+    const e = geodeticToEcef(s.lat, s.lon, 0);
+    return new Vector3(e[0], e[1], e[2]).normalize();
+  };
+  const forwardOf = (camera: PerspectiveCamera): Vector3 =>
+    new Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+
+  it('looks down in the cockpit when the drag goes down', () => {
+    const { pov, camera } = rig();
+    const s = aircraft({ pitchDeg: 0 });
+    pov.setMode('cockpit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+    const before = forwardOf(camera).dot(up(s));
+
+    pov.applyDrag(0, 120);
+    pov.update(camera, s, 1 / 60);
+    expect(forwardOf(camera).dot(up(s))).toBeLessThan(before - 0.05);
+  });
+
+  it('flips with invertY for anyone who wants to grab the world', () => {
+    const { pov, camera } = rig();
+    const s = aircraft({ pitchDeg: 0 });
+    pov.invertY = true;
+    pov.setMode('cockpit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+    const before = forwardOf(camera).dot(up(s));
+
+    pov.applyDrag(0, 120);
+    pov.update(camera, s, 1 / 60);
+    expect(forwardOf(camera).dot(up(s))).toBeGreaterThan(before + 0.05);
+  });
+
+  it('lowers the orbit camera when the drag goes down', () => {
+    const { pov, camera, origin } = rig();
+    const s = parked();
+    pov.setMode('orbit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+    const height = (): number => camera.position.clone().add(new Vector3(...origin.current)).length();
+    const before = height();
+
+    pov.applyDrag(0, 150);
+    pov.update(camera, s, 1 / 60);
+    expect(height()).toBeLessThan(before - 1);
+  });
+
+  it('swings the chase camera round the aircraft and keeps it in frame', () => {
+    const { pov, camera, origin } = rig();
+    const s = parked();
+    pov.setMode('chase');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+    const rightBefore = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const before = camera.position.clone().add(new Vector3(...origin.current));
+
+    pov.applyDrag(200, 0);
+    pov.update(camera, s, 1 / 60);
+    const after = camera.position.clone().add(new Vector3(...origin.current));
+    // Moved towards its own right, and still looking at the aircraft.
+    expect(after.sub(before).dot(rightBefore)).toBeGreaterThan(1);
+    expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
+  });
+
+  it('glides between views instead of cutting', () => {
+    const { pov, camera, origin } = rig();
+    const s = parked();
+    const abs = (): Vector3 => camera.position.clone().add(new Vector3(...origin.current));
+    pov.setMode('cockpit');
+    for (let i = 0; i < 10; i++) pov.update(camera, s, 1 / 60);
+    const cockpit = abs();
+
+    pov.setMode('orbit');
+    pov.update(camera, s, 1 / 60);
+    const oneFrame = abs().distanceTo(cockpit);
+    for (let i = 0; i < 90; i++) pov.update(camera, s, 1 / 60);
+    const arrived = abs().distanceTo(cockpit);
+
+    expect(pov.transitionProgress).toBeNull();
+    expect(oneFrame).toBeLessThan(arrived * 0.1);
+  });
+});

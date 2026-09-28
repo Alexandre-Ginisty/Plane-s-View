@@ -32,13 +32,20 @@
     { key: 'Click', does: 'Select an aircraft on the map' },
     { key: 'Enter', does: 'Step inside the selected aircraft' },
     { key: 'Esc', does: 'Leave the cockpit, or clear the selection' },
-    { key: 'Drag', does: 'Look around while flying' },
-    { key: 'Wheel', does: 'Zoom the view in and out' },
+    { key: 'Drag', does: 'Look around: the camera goes the way you drag' },
+    { key: 'Wheel', does: 'Zoom — nearer or further outside, a longer lens in the cockpit' },
+    { key: 'Click', does: 'A framed aircraft in 3D: fly across to it' },
     { key: `1 – ${CAMERA_MODES.length}`, does: `Switch camera: ${cameraKeys}` },
     { key: 'C', does: 'Re-centre the view straight ahead' },
+    { key: 'P', does: 'Pin mode: click the map to mark places you want to see from the air' },
+    { key: 'Right-click', does: 'Drop a pin on the map at any time' },
     { key: 'L', does: 'Catch a landing: step into an aircraft on final approach' },
     { key: 'T', does: 'Catch a takeoff: step into an aircraft on the runway or climbing out' },
     { key: 'A', does: 'Auto camera: pick the view for takeoffs and landings' },
+    { key: 'B', does: 'Sandbox: spawn your own armed aircraft anywhere and shoot down real traffic' },
+    { key: '↑ ↓ ← →', does: 'Sandbox: climb, dive, turn' },
+    { key: 'Space', does: 'Sandbox: fire at the locked target (Tab or click to choose one)' },
+    { key: 'Shift', does: 'Sandbox: boost (Ctrl slows down, or hovers a helicopter)' },
     { key: 'F', does: 'Fullscreen, with nothing but the view' },
     { key: 'D', does: 'Show the performance and connection counters' },
     { key: 'H', does: 'Show or hide this panel' },
@@ -71,10 +78,14 @@
     <section>
       <p class="label">Controls</p>
       <dl class="keys">
-        {#each KEYS as entry (entry.key)}
+        {#each KEYS as entry, i (i)}
           <div><dt>{entry.key}</dt><dd>{entry.does}</dd></div>
         {/each}
       </dl>
+      <label class="toggle">
+        <input type="checkbox" checked={app.invertY} onchange={(e) => app.setInvertY(e.currentTarget.checked)} />
+        <span>Invert vertical drag (drag down to look up)</span>
+      </label>
     </section>
 
     <section>
@@ -139,5 +150,15 @@
   }
   .keys dd { margin: 0; font-size: 12.5px; color: var(--text-dim); }
 
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
   .note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 </style>

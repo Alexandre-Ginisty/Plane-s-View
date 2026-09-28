@@ -84,7 +84,7 @@
     padding: 2px 6px;
     border-radius: var(--radius-sm);
   }
-  .close:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+  .close:hover { color: var(--text); background: var(--hover-bg); }
 
   /* The one primary action on this surface, so it gets the one amber button. */
   .enter {
@@ -97,12 +97,5 @@
   }
   .enter:hover { filter: brightness(1.15); }
 
-  .kbd {
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-  }
+  .enter .kbd { font-size: 11px; padding: 1px 6px; color: inherit; border-color: currentColor; }
 </style>

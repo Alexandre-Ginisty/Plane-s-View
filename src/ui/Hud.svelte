@@ -23,6 +23,7 @@
   import Compass from './hud/Compass.svelte';
   import FlightCard from './hud/FlightCard.svelte';
   import Tapes from './hud/Tapes.svelte';
+  import Icon, { type IconName } from './Icon.svelte';
 
   let { orchestrator }: { orchestrator: Orchestrator } = $props();
 
@@ -82,6 +83,32 @@
     app.phaseEvent && Date.now() - app.phaseEvent.at < 3500 ? app.phaseEvent : null,
   );
 
+  const sandbox = $derived(app.sandbox.phase === 'flying');
+  const MODE_ICONS: Record<string, IconName> = { cockpit: 'cockpit', chase: 'chase', wing: 'wing', orbit: 'orbit' };
+  const modeIndex = $derived(Math.max(0, CAMERA_MODES.findIndex((m) => m.id === app.cameraMode)));
+
+  /*
+   * A change of view is announced in the middle of the screen for a moment —
+   * the icon and the name — while the camera glides to its new place. Keyed
+   * on a counter so switching twice quickly replays it.
+   */
+  let toast = $state<{ id: number; mode: (typeof CAMERA_MODES)[number] } | null>(null);
+  let toastId = 0;
+  let lastMode: string | null = null;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const mode = app.cameraMode;
+    if (lastMode !== null && lastMode !== mode) {
+      const info = CAMERA_MODES.find((m) => m.id === mode);
+      if (info) {
+        toast = { id: ++toastId, mode: info };
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => (toast = null), 1400);
+      }
+    }
+    lastMode = mode;
+  });
+
   const degraded = $derived(
     app.network && app.network.grade !== 'fast' && app.network.grade !== 'good'
       ? profileFor(app.network.grade)
@@ -132,48 +159,71 @@
       <p class="banner info" role="status">{degraded.advice}</p>
     {/if}
 
-    <FlightCard {sample} {orchestrator} />
+    {#if !sandbox}<FlightCard {sample} {orchestrator} />{/if}
 
-    <nav class="modes" aria-label="Camera view">
-      {#each CAMERA_MODES as mode (mode.id)}
-        <button
-          class="chip"
-          class:active={app.cameraMode === mode.id}
-          onclick={() => orchestrator.setCameraMode(mode.id)}
-          title={mode.hint}
-        >{mode.label}</button>
-      {/each}
+    {#if toast}
+      {#key toast.id}
+        <div class="mode-toast" aria-live="polite">
+          <Icon name={MODE_ICONS[toast.mode.id] ?? 'cockpit'} size={30} />
+          <span>{toast.mode.label}</span>
+        </div>
+      {/key}
+    {/if}
+
+    <div class="bottom" class:faded={app.lookingAround}>
+      <nav class="modes" aria-label="Camera view" style="--index: {modeIndex}; --count: {CAMERA_MODES.length}">
+        <span class="slider" aria-hidden="true"></span>
+        {#each CAMERA_MODES as mode, i (mode.id)}
+          <button
+            class="mode"
+            class:active={app.cameraMode === mode.id}
+            onclick={() => orchestrator.setCameraMode(mode.id)}
+            title={`${mode.hint} (${i + 1})`}
+            aria-pressed={app.cameraMode === mode.id}
+          >
+            <Icon name={MODE_ICONS[mode.id] ?? 'cockpit'} size={18} />
+            <span>{mode.label}</span>
+          </button>
+        {/each}
+      </nav>
 
       <!--
-        The engine note, next to the camera modes because it is the same kind
-        of control: it changes what the aircraft is like to be in rather than
-        what the app is doing. Off by default — see `app.sound`.
+        The engine note sits with the view controls because it is the same
+        kind of switch: it changes what the aircraft is like to be in rather
+        than what the app is doing. Off by default — see `app.sound`.
       -->
-      <button
-        class="chip sound"
-        class:active={app.sound}
-        onclick={() => void orchestrator.setSound(!app.sound)}
-        title={app.sound ? 'Mute the engines' : 'Hear the engines'}
-        aria-pressed={app.sound}
-      >{app.sound ? 'Sound on' : 'Sound off'}</button>
+      <div class="utility">
+        <button
+          class="round"
+          class:active={app.sound}
+          onclick={() => void orchestrator.setSound(!app.sound)}
+          title={app.sound ? 'Mute the engines' : 'Hear the engines'}
+          aria-label={app.sound ? 'Mute the engines' : 'Hear the engines'}
+          aria-pressed={app.sound}
+        ><Icon name={app.sound ? 'sound' : 'mute'} size={17} /></button>
+        {#if !sandbox}
+          <button
+            class="round"
+            class:active={app.autoCamera}
+            onclick={() => app.setAutoCamera(!app.autoCamera)}
+            title="Auto camera: pick the view for takeoffs and landings (A)"
+            aria-label="Auto camera"
+            aria-pressed={app.autoCamera}
+          ><Icon name="auto" size={17} /></button>
+        {/if}
+        <button
+          class="round"
+          onclick={() => (app.cinema = true)}
+          title="Fullscreen, nothing but the view (F)"
+          aria-label="Fullscreen"
+        ><Icon name="fullscreen" size={17} /></button>
+      </div>
+    </div>
 
-      <button
-        class="chip"
-        class:active={app.autoCamera}
-        onclick={() => app.setAutoCamera(!app.autoCamera)}
-        title="Let the camera pick the view for takeoffs and landings (A)"
-        aria-pressed={app.autoCamera}
-      >Auto cam</button>
-
-      <button
-        class="chip"
-        onclick={() => (app.cinema = true)}
-        title="Fullscreen, nothing but the view (F)"
-      >Fullscreen</button>
-    </nav>
-
-    <button class="chip exit" onclick={() => orchestrator.exitPov()}>
-      <span class="kbd">Esc</span> Back to map
+    <button class="exit" onclick={() => orchestrator.exitPov()}>
+      <Icon name="back" size={15} />
+      <span>{sandbox ? 'Leave sandbox' : 'Back to map'}</span>
+      <span class="kbd">Esc</span>
     </button>
   </div>
 {/if}
@@ -192,15 +242,14 @@
      * strokes readable against a white cloud top without needing a scrim that
      * would hide the view.
      */
-    text-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.95),
-      0 0 6px rgba(0, 0, 0, 0.7);
+    color: var(--hud-text);
+    text-shadow: var(--hud-halo);
   }
 
   /* Brighter than the app-wide label colour, which was tuned for dark panels
      and disappears entirely against sky. */
   .hud :global(.label) {
-    color: #a8d8ee;
+    color: var(--hud-label);
     font-weight: 700;
   }
   /*
@@ -224,13 +273,13 @@
     flex-direction: column;
     gap: 2px;
     padding: 8px 12px;
-    background: rgba(3, 8, 14, 0.45);
-    border: 1px solid var(--border);
-    border-left: 2px solid var(--accent);
-    backdrop-filter: blur(4px);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    border-left: 2px solid var(--hud-accent);
+    backdrop-filter: blur(6px);
   }
   .callsign { font-size: 19px; font-weight: 700; letter-spacing: 0.12em; }
-  .sub { font-size: 11.5px; color: var(--text-dim); letter-spacing: 0.06em; }
+  .sub { font-size: 11.5px; color: var(--hud-dim); letter-spacing: 0.06em; }
 
   .banner {
     position: absolute;
@@ -245,14 +294,14 @@
     text-align: center;
   }
   .banner.warn {
-    color: #ffd7ab;
-    background: rgba(255, 176, 46, 0.14);
-    border: 1px solid rgba(255, 176, 46, 0.45);
+    color: var(--warn-text);
+    background: color-mix(in srgb, var(--hud-bg) 70%, rgb(var(--warm-rgb)) 30%);
+    border: 1px solid rgb(var(--warm-rgb) / 0.5);
   }
   .banner.info {
-    color: #bfe9ff;
-    background: rgba(127, 223, 255, 0.1);
-    border: 1px solid var(--border);
+    color: var(--hud-text);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
   }
 
   .phase {
@@ -266,18 +315,18 @@
     font-size: 11px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-dim);
-    background: rgba(3, 8, 14, 0.4);
-    border: 1px solid var(--border);
+    color: var(--hud-dim);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
     white-space: nowrap;
     transition: color 0.4s, border-color 0.4s;
   }
   .phase.moment {
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--hud-accent);
+    border-color: var(--hud-accent);
     box-shadow: var(--glow);
   }
-  .eta { text-transform: none; letter-spacing: 0.06em; color: var(--text); }
+  .eta { text-transform: none; letter-spacing: 0.06em; color: var(--hud-text); }
 
   .caption {
     position: absolute;
@@ -289,7 +338,7 @@
     font-weight: 300;
     letter-spacing: 0.4em;
     text-transform: uppercase;
-    color: #fff;
+    color: var(--hud-text);
     opacity: 0;
     animation: caption 3.2s ease-out forwards;
   }
@@ -303,25 +352,141 @@
     .caption { animation-duration: 2.5s; letter-spacing: 0.4em; }
   }
 
-  .modes {
+  /*
+   * The view controls: a segmented dock of camera modes, with a lit slider
+   * that glides to the chosen one, and the utilities beside it as round
+   * buttons — a different kind of switch, kept visibly apart so nobody reads
+   * the sound as a fifth view. The whole strip dims while the view is being
+   * dragged, like the details card.
+   */
+  .bottom {
     position: absolute;
     bottom: 22px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 3px;
+    align-items: center;
+    gap: 14px;
+    text-shadow: none;
+    transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+    animation: rise-in 0.5s var(--ease) both;
+  }
+  .bottom.faded { opacity: 0.25; transform: translateX(-50%) translateY(6px); }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
   }
 
-  /* Set apart from the camera modes: it is a different kind of switch, and
-     grouping it with them invites the eye to read it as a sixth view. */
-  .sound { margin-left: 14px; }
-
-  .exit { position: absolute; top: 18px; left: 24px; }
-  .kbd {
+  .modes {
+    --w: 92px;
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--count), var(--w));
+    padding: 4px;
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+  .slider {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: var(--w);
+    background: var(--hud-accent);
+    box-shadow: 0 0 18px rgb(var(--accent-rgb) / 0.45);
+    transform: translateX(calc(var(--index) * var(--w)));
+    transition: transform 0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .mode {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 7px 4px 6px;
     font-family: var(--mono);
-    font-size: 9px;
-    padding: 1px 4px;
-    border: 1px solid var(--border);
-    color: var(--accent);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--hud-dim);
+    transition: color 0.25s var(--ease);
+  }
+  .mode :global(.icon) { transition: transform 0.35s var(--ease); }
+  .mode:hover { color: var(--hud-text); }
+  .mode:hover :global(.icon) { transform: translateY(-2px); }
+  .mode.active { color: var(--on-accent); }
+  .mode.active :global(.icon) { transform: scale(1.12); }
+
+  .utility { display: flex; gap: 6px; }
+  .round {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    color: var(--hud-dim);
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    border-radius: 50%;
+    backdrop-filter: blur(12px);
+    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s var(--ease);
+  }
+  .round:hover { color: var(--hud-accent); border-color: var(--hud-accent); transform: translateY(-2px); }
+  .round.active { color: var(--hud-accent); border-color: var(--hud-accent); box-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.35); }
+
+  .mode-toast {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--hud-text);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    pointer-events: none;
+    animation: toast 1.4s var(--ease) forwards;
+  }
+  .mode-toast :global(.icon) { filter: drop-shadow(0 0 10px rgb(var(--accent-rgb) / 0.6)); color: var(--hud-accent); }
+  @keyframes toast {
+    0% { opacity: 0; transform: translate(-50%, -40%) scale(0.85); filter: blur(4px); }
+    18% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+    70% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -56%) scale(1.03); }
+  }
+
+  .exit {
+    position: absolute;
+    top: 18px;
+    left: 24px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px 7px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--hud-text);
+    text-shadow: none;
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    backdrop-filter: blur(12px);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .exit :global(.icon) { transition: transform 0.25s var(--ease); }
+  .exit:hover { color: var(--hud-accent); border-color: var(--hud-accent); }
+  .exit:hover :global(.icon) { transform: translateX(-3px); }
+
+  @media (max-width: 720px) {
+    .modes { --w: 62px; }
+    .mode span { display: none; }
+    .bottom { gap: 8px; bottom: 16px; }
+    .round { width: 36px; height: 36px; }
   }
 </style>

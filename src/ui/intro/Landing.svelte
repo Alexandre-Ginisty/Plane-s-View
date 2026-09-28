@@ -293,8 +293,8 @@
     overflow-x: hidden;
     scroll-behavior: smooth;
     background:
-      radial-gradient(120% 90% at 78% 12%, rgba(42, 95, 122, 0.3), transparent 60%),
-      radial-gradient(90% 80% at 10% 90%, rgba(127, 223, 255, 0.08), transparent 60%),
+      radial-gradient(120% 90% at 78% 12%, rgb(var(--accent-rgb) / 0.16), transparent 60%),
+      radial-gradient(90% 80% at 10% 90%, rgb(var(--accent-rgb) / 0.08), transparent 60%),
       var(--bg);
     opacity: 1;
     transition: opacity 400ms ease;
@@ -305,7 +305,7 @@
     position: fixed;
     inset: 0 0 auto 0;
     height: 2px;
-    background: rgba(127, 223, 255, 0.12);
+    background: rgb(var(--accent-rgb) / 0.12);
     z-index: 3;
   }
   .progress span {
@@ -440,8 +440,8 @@
     padding: 28px 30px;
     background: radial-gradient(
       70% 70% at 50% 50%,
-      rgba(3, 6, 12, 0.88),
-      rgba(3, 6, 12, 0.55) 60%,
+      var(--scrim),
+      var(--scrim-soft) 60%,
       transparent 100%
     );
   }
@@ -552,7 +552,7 @@
   .primary {
     border: 1px solid var(--accent);
     background: var(--accent);
-    color: #04121a;
+    color: var(--on-accent);
   }
   .primary:not(:disabled):hover { box-shadow: var(--glow); }
   .secondary {

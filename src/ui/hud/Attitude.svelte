@@ -49,7 +49,7 @@
     height: 240px;
     transform: translate(-50%, -50%);
     overflow: hidden;
-    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.85));
+    filter: var(--hud-drop);
   }
   .horizon-wrap, .horizon { position: absolute; inset: -60%; }
   .horizon-line {
@@ -58,8 +58,8 @@
     left: 12%;
     right: 12%;
     height: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 10px rgba(127, 223, 255, 0.6);
+    background: var(--hud-accent);
+    box-shadow: 0 0 10px rgb(var(--accent-rgb) / 0.5);
   }
   .ladder {
     position: absolute;
@@ -69,8 +69,8 @@
     align-items: center;
     gap: 6px;
   }
-  .rung { display: block; width: 54px; height: 1.5px; background: rgba(127, 223, 255, 0.72); }
-  .rung-label { font-size: 9.5px; color: rgba(127, 223, 255, 0.95); font-weight: 600; }
+  .rung { display: block; width: 54px; height: 1.5px; background: var(--hud-accent); opacity: 0.75; }
+  .rung-label { font-size: 9.5px; color: var(--hud-accent); font-weight: 600; }
 
   .boresight {
     position: absolute;
@@ -83,8 +83,8 @@
   }
   /* Amber, and the only amber in the middle of the screen: this is the one
      mark that says "you are here". */
-  .wing { width: 34px; height: 2px; background: var(--accent-warm); }
-  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-warm); }
+  .wing { width: 34px; height: 2px; background: var(--hud-warm); }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--hud-warm); }
 
   .roll-pointer {
     position: absolute;
@@ -95,7 +95,7 @@
     margin-left: -6px;
     border-left: 6px solid transparent;
     border-right: 6px solid transparent;
-    border-bottom: 9px solid var(--accent);
+    border-bottom: 9px solid var(--hud-accent);
     transform-origin: 50% 102px;
   }
 

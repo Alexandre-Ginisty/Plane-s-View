@@ -25,7 +25,7 @@
   }: { sample: SampledAircraft; orchestrator: Orchestrator } = $props();
 </script>
 
-<aside class="flight-card" class:collapsed={!app.showFlightCard}>
+<aside class="flight-card" class:collapsed={!app.showFlightCard} class:aside={app.lookingAround}>
   <button
     class="chip"
     onclick={() => (app.showFlightCard = !app.showFlightCard)}
@@ -67,6 +67,14 @@
     max-height: calc(100% - 120px);
   }
   .flight-card.collapsed { width: auto; }
+  /*
+   * Stepped aside while the view is being dragged, and back on release. The
+   * toggle is still the way to keep it hidden; this only gets it out of the
+   * way of a look around, which is what it used to block.
+   */
+  .flight-card { transition: opacity 0.28s var(--ease), transform 0.28s var(--ease); }
+  .flight-card.aside { opacity: 0; transform: translateX(24px); pointer-events: none; }
+  .flight-card.aside :global(*) { pointer-events: none !important; }
 
   /*
    * The two actions are pinned; only the figures scroll.

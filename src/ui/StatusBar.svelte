@@ -125,7 +125,7 @@
     padding: 6px 14px;
     font-size: 10px;
     color: var(--text-faint);
-    background: linear-gradient(180deg, transparent, rgba(3, 5, 10, 0.92) 55%);
+    background: linear-gradient(180deg, transparent, var(--status-fade) 55%);
     z-index: 12;
     pointer-events: none;
   }

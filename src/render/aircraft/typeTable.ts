@@ -430,6 +430,11 @@ export const EXACT: ReadonlyMap<string, Partial<AirframeShape>> = new Map([
   ['E3TF', { length: 46.6, spanRatio: 1.00, sweepDeg: 35, engines: 4 }],
   ['A124', { length: 69.1, spanRatio: 1.17, sweepDeg: 32, engines: 4 }],
   ['C5M', { length: 75.5, spanRatio: 0.89, sweepDeg: 25, engines: 4 }],
+  // The sandbox's own airframes (`sandbox/models.ts`). Not real designators,
+  // and chosen so no real one can collide with them.
+  ['SBF1', { kind: 'jet', length: 15, spanRatio: 0.63, sweepDeg: 40, engines: 0, engineMount: 'none', radiusRatio: 0.055, dihedralDeg: 0 }],
+  ['SBA1', { kind: 'jet', length: 16.3, spanRatio: 1.07, sweepDeg: 0, engines: 2, engineMount: 'tail', radiusRatio: 0.062, dihedralDeg: 3 }],
+  ['SBP1', { kind: 'piston', length: 10.2, spanRatio: 1.22, sweepDeg: 0, engines: 0, engineMount: 'none', radiusRatio: 0.072, dihedralDeg: 6 }],
 ]);
 
 /**
@@ -462,6 +467,8 @@ export const ROTORCRAFT_TYPES: ReadonlySet<string> = new Set([
   // under the `H1` range: common training helicopters, and every one of them
   // was drawn as a fixed-wing aircraft.
   'H269', 'H500', 'HUGH', 'B47G', 'B47J', 'EN28', 'EN48', 'R100', 'SCOR',
+  // The sandbox's attack helicopter (`sandbox/models.ts`).
+  'SBH1',
 ]);
 
 /** Prefixes that are unambiguously rotorcraft. See the note above. */
@@ -497,6 +504,7 @@ export const ROTOR_LENGTH: Readonly<Record<string, number>> = {
   A109: 13.0, A139: 16.7, A169: 14.6, A189: 19.5,
   S76: 16.0, S92: 20.9, S70: 19.8, UH60: 19.8, CH47: 30.1, CH53: 30.2,
   BK17: 13.0, NH90: 19.6, PUMA: 18.2, MI8: 18.2,
+  SBH1: 17.7,
 };
 
 /** Sailplanes: the other silhouette nothing else in the table can express. */
