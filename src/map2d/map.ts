@@ -8,8 +8,9 @@
  *
  * No text layers are used anywhere. MapLibre needs a glyph server for labels,
  * every free one has usage limits, and this project does not take a
- * dependency it cannot guarantee. Labels are DOM markers instead, which are
- * also crisper.
+ * dependency it cannot guarantee. Place names and borders come as a
+ * pre-rendered raster overlay instead (`LABEL_OVERLAYS`), streamed tile by
+ * tile like the imagery under it.
  */
 
 import {
@@ -26,7 +27,7 @@ import {
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureCollection, LineString, Point } from 'geojson';
 
-import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
+import { DEFAULT_IMAGERY, LABEL_OVERLAYS, type ImagerySource } from '@/tiles/sources';
 import {
   AIRCRAFT_ICON,
   AIRCRAFT_LAYERS,
@@ -44,7 +45,11 @@ import type { FlightRoute } from '@/data/types';
 export interface MapEvents {
   onSelect(hex: string | null): void;
   onHover(hex: string | null): void;
-  onMoveEnd(center: { lat: number; lon: number }, radiusNm: number): void;
+  onMoveEnd(
+    center: { lat: number; lon: number },
+    radiusNm: number,
+    bounds: { south: number; west: number; north: number; east: number },
+  ): void;
   onError?(message: string): void;
 }
 
@@ -52,6 +57,7 @@ export class SelectionMap {
   private map: MapLibreMap | null = null;
   private selectedHex: string | null = null;
   private imagery: ImagerySource = DEFAULT_IMAGERY;
+  private labelsVisible = true;
   /**
    * Fetch a source, or null while the style is still parsing.
    *
@@ -105,6 +111,18 @@ export class SelectionMap {
             maxzoom: this.imagery.maxZoom,
             attribution: this.imagery.attribution,
           },
+          ...Object.fromEntries(
+            LABEL_OVERLAYS.map((o) => [
+              o.id,
+              {
+                type: 'raster' as const,
+                tiles: [o.template],
+                tileSize: 256,
+                maxzoom: o.maxZoom,
+                attribution: o.attribution,
+              },
+            ]),
+          ),
           [ROUTE_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [TRAIL_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [AIRCRAFT_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
@@ -129,6 +147,14 @@ export class SelectionMap {
               'raster-fade-duration': 500,
             },
           },
+          // Borders and names over the imagery, under the traffic.
+          ...LABEL_OVERLAYS.map((o) => ({
+            id: o.id,
+            type: 'raster' as const,
+            source: o.id,
+            layout: { visibility: this.labelsVisible ? ('visible' as const) : ('none' as const) },
+            paint: { 'raster-fade-duration': 500 },
+          })),
           ...AIRCRAFT_LAYERS,
         ],
       },
@@ -267,6 +293,16 @@ export class SelectionMap {
     }
   }
 
+  /** Show or hide borders, place names and roads. */
+  setLabels(visible: boolean): void {
+    this.labelsVisible = visible;
+    const map = this.map;
+    if (!map) return;
+    for (const o of LABEL_OVERLAYS) {
+      if (map.getLayer(o.id)) map.setLayoutProperty(o.id, 'visibility', visible ? 'visible' : 'none');
+    }
+  }
+
   /** Viewport centre and the radius that covers it, for the traffic query. */
   private emitMove(): void {
     const map = this.map;
@@ -276,12 +312,23 @@ export class SelectionMap {
     const bounds = map.getBounds();
     const ne = bounds.getNorthEast();
 
-    const radiusM = haversineMetres(center.lat, center.lng, ne.lat, ne.lng);
-    // Providers cap at 250 nm; a small floor keeps a deeply zoomed-in map from
-    // asking for a circle so small it returns nothing.
-    const radiusNm = Math.min(250, Math.max(10, radiusM * METRES_TO_NM));
+    const sw = bounds.getSouthWest();
 
-    this.events.onMoveEnd({ lat: center.lat, lon: center.lng }, radiusNm);
+    const radiusM = Math.max(
+      haversineMetres(center.lat, center.lng, ne.lat, ne.lng),
+      haversineMetres(center.lat, center.lng, sw.lat, sw.lng),
+    );
+    // Not capped at the providers' 250 nm: a wider view is tiled into several
+    // circles by the feed (see `data/adsb/coverage`). The floor keeps a deeply
+    // zoomed-in map from asking for a circle so small it returns nothing.
+    const radiusNm = Math.max(10, radiusM * METRES_TO_NM);
+
+    this.events.onMoveEnd({ lat: center.lat, lon: center.lng }, radiusNm, {
+      south: sw.lat,
+      west: sw.lng,
+      north: ne.lat,
+      east: ne.lng,
+    });
   }
 
   setSelected(hex: string | null): void {

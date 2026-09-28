@@ -62,14 +62,13 @@ import {
 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { StreamingProfile } from '@/net/quality';
-import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
+import { DEFAULT_IMAGERY, IMAGERY_FALLBACK_ORDER, type ImagerySource } from '@/tiles/sources';
 import {
   DESCENT_TRIGGER_M,
   REFINE_TEXELS,
   RELIEF,
   ROOT_ZOOM,
   type GlobeOptions,
-  type ReliefDetail,
 } from './constants';
 import { evictDistantTiles, type TileMap } from './eviction';
 import { SceneSynchroniser } from './sceneSync';
@@ -78,7 +77,7 @@ import { TileStreamer, type LoadFrontier } from './streaming';
 import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight } from './terrainQuery';
 import { TileNode } from './tileNode';
 
-export type { GlobeOptions, ReliefDetail } from './constants';
+export type { GlobeOptions } from './constants';
 
 export interface GlobeStats {
   residentTiles: number;
@@ -100,7 +99,6 @@ export class Globe {
   private readonly streamer: TileStreamer;
   /** Owns the Three.js side: meshes, materials, fades. */
   private readonly sync: SceneSynchroniser;
-  private relief: ReliefDetail = 'standard';
 
   private imagery: ImagerySource = DEFAULT_IMAGERY;
   private options: Required<GlobeOptions>;
@@ -116,6 +114,16 @@ export class Globe {
   private readonly requestedSse: number;
   /** Largest anisotropic sample count the renderer supports. */
   private maxAnisotropy = 8;
+
+  /**
+   * Told when the globe changed layer on its own. See `maybeFailoverImagery`.
+   *
+   * A field rather than a constructor option because the app has to be able to
+   * follow the change — the 2D map draws the same imagery and the attribution
+   * line names it — and a silent switch would leave both stating the wrong
+   * provider.
+   */
+  onImageryChanged: ((source: ImagerySource) => void) | null = null;
 
   private frame = 0;
   /** Ground tile last seeded by `prefetchDescent`, so it runs on change only. */
@@ -151,9 +159,7 @@ export class Globe {
     this.options = {
       maxScreenSpaceError: options.maxScreenSpaceError ?? 1,
       maxZoom: options.maxZoom ?? 18,
-      baseResolution: options.baseResolution ?? 32,
-      nearResolution: options.nearResolution ?? 64,
-      exaggeration: options.exaggeration ?? 1,
+      exaggeration: options.exaggeration ?? RELIEF.exaggeration,
       maxResidentTiles: options.maxResidentTiles ?? 6000,
     };
     this.requestedMaxZoom = this.options.maxZoom;
@@ -200,8 +206,13 @@ export class Globe {
       // bookkeeping — a tile the previous provider had given up on deserves a
       // clean start with the new one.
       this.streamer.cancelTexture(node);
-      node.texture?.dispose();
-      node.texture = null;
+      /*
+       * The old image stays until the new one is decoded, and `loadTexture`
+       * disposes it then. Dropping it here left the tile with nothing to draw
+       * — and since `contentReady` counts imagery, out of the render set
+       * entirely — so switching layer punched the globe out for the length of
+       * a fetch. Re-skinning tile by tile is what it should look like.
+       */
       node.textureState = 'idle';
       node.textureAttempts = 0;
       node.textureRetryFrame = 0;
@@ -209,56 +220,6 @@ export class Globe {
       this.streamer.settle(node);
     }
     this.streamer.flushQueue();
-  }
-
-  /**
-   * See `RELIEF`. Every resident tile is rebuilt, because mesh density and
-   * vertical exaggeration are baked into the geometry the worker produced —
-   * letting the quadtree replace tiles on its own would leave the world half in
-   * one relief and half in the other, with a visible step where they met.
-   * Textures are kept: nothing about them changed.
-   */
-  setRelief(detail: ReliefDetail): void {
-    if (this.relief === detail) return;
-    this.relief = detail;
-
-    const settings = RELIEF[detail];
-    this.options = {
-      ...this.options,
-      baseResolution: settings.baseResolution,
-      nearResolution: settings.nearResolution,
-      exaggeration: settings.exaggeration,
-    };
-    this.streamer.setOptions(this.options);
-    this.sync.setAmbient(settings.ambient);
-
-    for (const node of this.nodes.values()) {
-      this.streamer.cancelGeometry(node);
-      if (node.mesh) {
-        this.scene.remove(node.mesh);
-        node.mesh = null;
-        node.attached = false;
-      }
-      node.geometry?.dispose();
-      node.geometry = null;
-      /*
-       * The heights stay. `sampleHeight` reads them, and it decides where an
-       * aircraft on the ground sits and how far the camera is lifted to clear
-       * a hillside. Clearing them alongside the mesh makes every tile answer
-       * "sea level" until its replacement lands — toggling the setting over
-       * the Alps dropped the camera two kilometres into the mountain. One
-       * rebuild out of date is invisible; zero is not.
-       */
-      node.geometryState = 'idle';
-      node.geometryAttempts = 0;
-      node.geometryRetryFrame = 0;
-      this.streamer.settle(node);
-    }
-    this.streamer.flushQueue();
-  }
-
-  get reliefDetail(): ReliefDetail {
-    return this.relief;
   }
 
   applyProfile(profile: StreamingProfile): void {
@@ -353,6 +314,7 @@ export class Globe {
     // visited first rather than to the worst one on screen; and eviction has
     // to run after the render set exists, or it cannot know what is protected.
     this.streamer.flush(this.loadFrontier);
+    this.maybeFailoverImagery();
     // After `flush`, so tiles that just entered the frontier are included, and
     // before `abandonStale`, which is about withdrawal rather than ordering.
     this.streamer.reprioritise();
@@ -377,6 +339,33 @@ export class Globe {
       onEvict: (node) => this.releaseNode(node),
     });
     this.updateStats();
+  }
+
+  /**
+   * Change layer for the whole globe when the active one stops serving.
+   *
+   * This is what replaced the per-tile fallback chain, and the difference is
+   * the whole point: substituting a second provider into one tile shows as a
+   * rectangle of differently coloured ground, while changing the layer changes
+   * everything at once, which reads as the app doing something rather than as
+   * the map being broken.
+   */
+  private maybeFailoverImagery(): void {
+    if (!this.streamer.imageryFailing) return;
+    /*
+     * Offline, everything fails, and the layer is not the reason. Switching
+     * then only teaches the second provider to fail as well, and leaves the
+     * user looking at a layer they did not pick once the link returns.
+     */
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    const order = IMAGERY_FALLBACK_ORDER;
+    const index = order.findIndex((s) => s.id === this.imagery.id);
+    const next = order[(index + 1) % order.length];
+    if (!next || next.id === this.imagery.id) return;
+
+    this.setImagery(next);
+    this.onImageryChanged?.(next);
   }
 
   /**

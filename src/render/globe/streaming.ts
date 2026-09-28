@@ -31,6 +31,8 @@ import { TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import { TerrainWorkerPool } from '@/workers/pool';
 import {
   ABANDON_AFTER_FRAMES,
+  FAILOVER_MAX_ZOOM,
+  LAYER_FAILOVER_TILES,
   MAX_CONCURRENT_TILE_LOADS,
   MAX_LOAD_ATTEMPTS,
   RETRY_BASE_FRAMES,
@@ -59,6 +61,19 @@ export class TileStreamer {
   private imagery: ImagerySource;
   private frame = 0;
   private maxAnisotropy = 8;
+
+  /**
+   * Tiles the active imagery layer has given up on since it last served one.
+   *
+   * Counted because per-tile provider substitution is gone (see
+   * `loadTexture`): a tile the layer will not serve now inherits from its
+   * ancestor rather than borrowing a different provider's photograph, which
+   * keeps the picture consistent but would leave the globe permanently soft if
+   * the layer were genuinely down rather than merely patchy. This is how the
+   * difference is told apart — patchy is a few tiles among many successes,
+   * down is nothing but failures.
+   */
+  private exhaustedSinceServed = 0;
 
   constructor(
     imagery: ImagerySource,
@@ -119,6 +134,18 @@ export class TileStreamer {
    */
   setImagery(source: ImagerySource): void {
     this.imagery = source;
+    this.exhaustedSinceServed = 0;
+  }
+
+  /**
+   * True when the active layer looks down rather than patchy.
+   *
+   * Eight tiles exhausted — each after its own full retry budget — without a
+   * single one served in between. A layer dropping the occasional tile never
+   * reaches this, because one success anywhere resets it.
+   */
+  get imageryFailing(): boolean {
+    return this.exhaustedSinceServed >= LAYER_FAILOVER_TILES;
   }
 
   /** Supersede any texture load in flight for this node and withdraw it. */
@@ -346,14 +373,31 @@ export class TileStreamer {
       if (node.textureGen !== gen) return;
       if (outcome === 'failed') {
         node.textureAttempts++;
-        if (node.textureAttempts >= MAX_LOAD_ATTEMPTS) node.textureState = 'exhausted';
-        else {
+        if (node.textureAttempts >= MAX_LOAD_ATTEMPTS) {
+          node.textureState = 'exhausted';
+          /*
+           * Counted only for coarse tiles, and not at all for the `exhausted`
+           * outcome the loader reports directly — that one means the layer
+           * does not cover this zoom, which is by design.
+           *
+           * The zoom test is what keeps a spurious switch off the table. Every
+           * provider here has global coverage down to z14, so a tile that will
+           * not come at that scale is the service; deeper than that, a 404 is
+           * routine — open ocean at z19 is genuinely not photographed — and a
+           * view sitting over one would otherwise pile up exhaustions with no
+           * success between them and change layer for no reason at all.
+           */
+          if (node.z <= FAILOVER_MAX_ZOOM) this.exhaustedSinceServed++;
+        } else {
           node.textureState = 'failed';
           node.textureRetryFrame = this.frame + RETRY_BASE_FRAMES * 2 ** node.textureAttempts;
         }
       } else {
         node.textureState = outcome === 'aborted' ? 'idle' : outcome;
-        if (outcome === 'ready') node.textureAttempts = 0;
+        if (outcome === 'ready') {
+          node.textureAttempts = 0;
+          this.exhaustedSinceServed = 0;
+        }
       }
     }
     this.settle(node);

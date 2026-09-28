@@ -143,6 +143,8 @@ const ROWS: readonly Row[] = [
   ['A21N', { length: 44.5, spanRatio: 0.81, sweepDeg: 25 }],
   ['A32', { length: 37.6, spanRatio: 0.95, sweepDeg: 25 }],
   ['A31', { length: 34, spanRatio: 1.04, sweepDeg: 25 }],
+  // Not an A318/A319: the A310 is a shortened A300 widebody.
+  ['A310', { length: 46.7, spanRatio: 0.94, sweepDeg: 28 }],
   ['A30', { length: 54.1, spanRatio: 0.82, sweepDeg: 28 }],
 
   // ---- Airbus widebody ----------------------------------------------------
@@ -169,6 +171,9 @@ const ROWS: readonly Row[] = [
 
   // ---- Boeing widebody ----------------------------------------------------
   ['B74', { length: 70, spanRatio: 0.93, engines: 4, sweepDeg: 37 }],
+  ['B744', { length: 70.7, spanRatio: 0.91, engines: 4, sweepDeg: 37 }],
+  ['B748', { length: 76.3, spanRatio: 0.89, engines: 4, sweepDeg: 37 }],
+  ['DC10', { length: 55.5, spanRatio: 0.9, sweepDeg: 35 }],
   ['B78', { length: 57, spanRatio: 1.05, sweepDeg: 34 }],
   ['B77', { length: 64, spanRatio: 1.02, sweepDeg: 35 }],
   ['B76', { length: 55, spanRatio: 0.85, sweepDeg: 31 }],
@@ -195,6 +200,17 @@ const ROWS: readonly Row[] = [
   ['E45', { ...BIZJET, length: 29.9, spanRatio: 0.67, sweepDeg: 22 }],
   ['E35L', { ...BIZJET, length: 26.3, spanRatio: 0.81, sweepDeg: 22 }],
   ['SU95', { length: 29.9, spanRatio: 0.92, sweepDeg: 25 }],
+  ['F100', { ...BIZJET, length: 35.5, spanRatio: 0.79, sweepDeg: 17 }],
+  ['F70', { ...BIZJET, length: 30.9, spanRatio: 0.91, sweepDeg: 17 }],
+  ['T134', { ...BIZJET, length: 37.1, spanRatio: 0.78, sweepDeg: 35 }],
+  // BAe 146 / Avro RJ: high wing, T-tail, four engines under the wing.
+  ['B461', { length: 26.2, spanRatio: 1.0, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['B462', { length: 28.6, spanRatio: 0.92, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['B463', { length: 31.0, spanRatio: 0.85, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['RJ70', { length: 26.2, spanRatio: 1.0, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['RJ85', { length: 28.6, spanRatio: 0.92, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['RJ1H', { length: 31.0, spanRatio: 0.85, engines: 4, tTail: true, sweepDeg: 15, dihedralDeg: -3 }],
+  ['IL76', { length: 46.6, spanRatio: 1.08, engines: 4, tTail: true, sweepDeg: 25, dihedralDeg: -3 }],
   ['AN14', { ...TPROP, length: 28.1, spanRatio: 1.04, engines: 4, tTail: false }],
 
   // ---- Turboprop airliners ------------------------------------------------
@@ -202,6 +218,7 @@ const ROWS: readonly Row[] = [
   ['AT4', { ...TPROP, length: 22.7, spanRatio: 1.08 }],
   ['AT5', { ...TPROP, length: 22.7, spanRatio: 1.08 }],
   ['DH8', { ...TPROP, length: 33, spanRatio: 0.85 }],
+  ['F50', { ...TPROP, length: 25.2, spanRatio: 1.15, tTail: false }],
   ['DHC6', { ...TPROP, length: 15.8, spanRatio: 1.25, tTail: false }],
   ['SF34', { ...TPROP, length: 19.7, spanRatio: 1.09, tTail: false }],
   ['SB20', { ...TPROP, length: 27.3, spanRatio: 0.83 }],

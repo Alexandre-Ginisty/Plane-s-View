@@ -40,8 +40,8 @@ export class SceneSynchroniser {
   private sunDirection = new Vector3(1, 0, 0);
   private fogColor = new Color(0x8fb2d4);
   private fogDensity = CLEAR_DAY_DENSITY;
-  /** Shadow floor handed to every terrain material. See `setAmbient`. */
-  private ambient = RELIEF.standard.ambient;
+  /** Shadow floor handed to every terrain material. */
+  private readonly ambient = RELIEF.ambient;
   /** Planet centre in render space. Recomputed each frame: the origin moves. */
   private readonly planetCentre = new Vector3();
 
@@ -167,18 +167,6 @@ export class SceneSynchroniser {
       node.centerEcef[2] - this.origin.current[2],
     );
     node.mesh.updateMatrix();
-  }
-
-  /**
-   * Shadow floor for the terrain, and for every tile already on screen.
-   *
-   * Applied to the live materials as well as remembered for the ones built
-   * next, or changing the setting would relight the world one tile at a time
-   * as the quadtree happened to replace them.
-   */
-  setAmbient(value: number): void {
-    this.ambient = value;
-    for (const node of this.nodes.values()) node.material?.setAmbient(value);
   }
 
   /** Re-place every mesh after the floating origin moved. */

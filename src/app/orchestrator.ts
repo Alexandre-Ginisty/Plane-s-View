@@ -11,14 +11,11 @@ import { Vector3 } from 'three';
 
 import { FloatingOrigin } from '@/core/frame';
 import {
-  loadQualityPreference,
   networkMonitor,
-  saveQualityPreference,
-  type QualityPreference,
 } from '@/net/quality';
 import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
-import type { Globe, ReliefDetail } from '@/render/globe';
+import type { Globe } from '@/render/globe';
 import type { OwnAircraft } from '@/render/ownAircraft';
 import type { PovController, CameraMode } from '@/render/pov';
 import type { Traffic3D } from '@/render/traffic3d';
@@ -28,7 +25,8 @@ import {
   KNOTS_TO_MPS,
   geodeticToEcef,
 } from '@/core/math/geo';
-import { TrafficClient } from '@/data/adsb/client';
+import { TrafficClient, type QuerySource } from '@/data/adsb/client';
+import { Coverage, type ViewBounds, type ViewWindow } from '@/data/adsb/coverage';
 import { registry } from '@/data/meta/registry';
 import { DEFAULT_IMAGERY, imageryById, type ImagerySource } from '@/tiles/sources';
 import { SelectionMap } from '@/map2d/map';
@@ -43,7 +41,6 @@ import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
 import { publishTelemetry } from './telemetry';
-import type { TrafficQuery } from '@/data/types';
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
@@ -63,7 +60,10 @@ export class Orchestrator {
   private readonly audio = new EngineAudio();
   private map: SelectionMap | null = null;
 
-  private query: TrafficQuery = { ...FALLBACK_VIEW, radiusNm: 120 };
+  /** The area traffic is wanted for: the map's view, or a followed aircraft. */
+  private query: ViewWindow = { ...FALLBACK_VIEW, radiusNm: 120 };
+  /** Tiles `query` into feed-sized circles and hands them out in turn. */
+  private readonly coverage = new Coverage(this.query);
   private uiAccumulator = 0;
   private prefetchAccumulator = 0;
   private followAccumulator = 0;
@@ -79,8 +79,6 @@ export class Orchestrator {
   private readonly povSession = new PovSession();
   /** Newest "take me somewhere else" search; older ones land nowhere. */
   private shuffleToken = 0;
-  /** Relief chosen at boot, applied once the globe exists. */
-  private pendingRelief: ReliefDetail = 'standard';
 
   /** Watches the link and retunes the renderer to it. */
   private readonly connection = new ConnectionSupervisor((profile) =>
@@ -132,21 +130,13 @@ export class Orchestrator {
     // when the browser grants a position.
     this.query = { ...FALLBACK_VIEW, radiusNm: 120 };
 
-    // The detail ceiling before anything starts streaming, so a first visit
-    // never briefly downloads at full rate before the preference is read.
-    app.quality = loadQualityPreference();
-    networkMonitor.setQuality(app.quality);
-    // Relief before the first tile is requested, so nothing is built at the
-    // wrong resolution and then thrown away.
-    this.pendingRelief = app.quality === 'high' ? 'boosted' : 'standard';
-
     this.map = new SelectionMap(mapContainer, {
       onSelect: (hex) => void this.select(hex),
       onHover: (hex) => {
         app.hoveredHex = hex;
       },
-      onMoveEnd: (center, radiusNm) => {
-        this.query = { lat: center.lat, lon: center.lon, radiusNm };
+      onMoveEnd: (center, radiusNm, bounds: ViewBounds) => {
+        this.query = { lat: center.lat, lon: center.lon, radiusNm, bounds };
       },
       onError: (message) => app.notify(`Map: ${message}`, 'warn'),
     });
@@ -166,14 +156,23 @@ export class Orchestrator {
     this.traffic3d = surfaces.traffic3d;
     this.ownAircraft = surfaces.ownAircraft;
     this.pov = surfaces.pov;
-    this.globe.setRelief(this.pendingRelief);
+    /*
+     * The globe changes layer by itself when the active provider stops
+     * serving; the 2D map and the attribution line have to follow, or the app
+     * spends the rest of the session crediting imagery it is not showing.
+     */
+    this.globe.onImageryChanged = (source) => {
+      this.map?.setImagery(source);
+      app.imageryId = source.id;
+      app.notify(`Imagery: switched to ${source.label} — the previous layer stopped responding.`, 'warn');
+    };
 
     if (!this.engine.webgl2) {
       app.notify('WebGL2 unavailable — the 3D globe needs it.', 'error', 0);
     }
     this.connection.start();
 
-    this.client.start(() => this.feedQuery(), 4000);
+    this.client.start(this.feedSource(), 4000);
     this.engine.start((ctx) => this.frame(ctx.dt));
 
     if (import.meta.env.DEV) {
@@ -289,11 +288,26 @@ export class Orchestrator {
    * is the "planes lagging" complaint, and it is a payload problem, not a
    * rendering one. A smaller circle returns sooner, so positions update more
    * often; fewer aircraft that are current beat more aircraft that are wrong.
+   *
+   * The same measurement bounds how many circles a zoomed-out view is tiled
+   * into, for the same reason. Limits and view are re-read on every request,
+   * so a pan or a change of link takes effect on the very next one.
    */
-  private feedQuery(): TrafficQuery {
+  private feedSource(): QuerySource {
+    const coverage = this.coverage;
+    const sync = () => {
+      coverage.setLimits(this.connection.feedRadiusCapNm, this.connection.feedMaxCells);
+      coverage.setView(this.query);
+    };
     return {
-      ...this.query,
-      radiusNm: Math.min(this.query.radiusNm, this.connection.feedRadiusCapNm),
+      next: () => {
+        sync();
+        return coverage.next();
+      },
+      get cellCount() {
+        sync();
+        return coverage.cellCount;
+      },
     };
   }
 
@@ -526,26 +540,10 @@ export class Orchestrator {
     }
   }
 
-  /**
-   * Applied through the monitor rather than straight to the globe: the ceiling
-   * has to reach everything the profile drives — loader concurrency and
-   * timeouts, feed radius, prefetch horizon — not just the zoom. Pushing it at
-   * the globe alone would leave the app asking for thirty parallel requests to
-   * serve a zoom-16 picture.
-   */
-  setQuality(preference: QualityPreference): void {
-    app.quality = preference;
-    saveQualityPreference(preference);
-    networkMonitor.setQuality(preference);
-    this.globe?.applyProfile(networkMonitor.profile);
-    /*
-     * Relief is the user's call, not the connection's: it is not a bandwidth
-     * decision at all. The elevation tile is downloaded and decoded either
-     * way; what changes is how much of it becomes vertices, which is CPU and
-     * GPU. Tying it to the measured grade would refuse a detailed mesh to
-     * somebody on a fast machine and a slow link.
-     */
-    this.globe?.setRelief(preference === 'high' ? 'boosted' : 'standard');
+  /** Borders, place names and roads over the selection map. */
+  setLabels(visible: boolean): void {
+    this.map?.setLabels(visible);
+    app.showLabels = visible;
   }
 
   setImagery(id: string): void {

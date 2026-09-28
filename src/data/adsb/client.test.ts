@@ -238,7 +238,7 @@ describe('TrafficClient polling', () => {
 });
 
 describe('TrafficClient provider chain', () => {
-  it('falls through to the next provider and then prefers it', async () => {
+  it('keeps serving from a live provider while another is down', async () => {
     const dead = fakeProvider('adsb.lol', () => {
       throw new Error('upstream down');
     });
@@ -249,14 +249,93 @@ describe('TrafficClient provider chain', () => {
 
     client.start(() => query, 2000);
     await vi.advanceTimersByTimeAsync(0);
-
     expect(snapshots[0]?.source).toBe('adsb.fi');
 
-    // Second cycle starts at the one that worked, not back at the dead one.
+    // The breaker takes the dead one out after three strikes; the live one
+    // keeps being asked every cycle.
+    await vi.advanceTimersByTimeAsync(20_000);
     const deadCalls = dead.calls;
-    await vi.advanceTimersByTimeAsync(2100);
-    expect(alive.calls).toBeGreaterThan(1);
+    expect(deadCalls).toBe(3);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(dead.calls).toBe(deadCalls);
+    expect(alive.calls).toBeGreaterThan(5);
+
+    client.stop();
+  });
+
+  /**
+   * The Africa report. The feeds are separate receiver networks, and one of
+   * them saying "nothing here" is not the same as there being nothing there.
+   */
+  it('asks every provider, so one network fills the other one\'s gaps', async () => {
+    const quiet = fakeProvider('adsb.lol', () => []);
+    const covered = fakeProvider('adsb.fi', () => [fakeState('ccc333')]);
+
+    const seen = new Set<string>();
+    const client = new TrafficClient(
+      { onSnapshot: (s) => s.aircraft.forEach((a) => seen.add(a.hex)) },
+      [quiet, covered],
+    );
+
+    client.start(() => query, 2000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(quiet.calls).toBe(1);
+    expect(covered.calls).toBe(1);
+    expect(seen.has('ccc333')).toBe(true);
+
+    client.stop();
+  });
+
+  it('does not stop the chain at an empty answer', async () => {
+    const quiet = fakeProvider('adsb.lol', () => []);
+    const covered = fakeProvider('adsb.fi', () => [fakeState('ddd444')]);
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [quiet, covered]);
+
+    const snapshot = await client.fetchOnce(query);
+    expect(snapshot?.source).toBe('adsb.fi');
+    expect(snapshot?.aircraft).toHaveLength(1);
+  });
+
+  it('keeps a metered fallback out of the sweep', async () => {
+    const primary = fakeProvider('adsb.lol', () => [fakeState('eee555')]);
+    const metered = Object.assign(fakeProvider('opensky', () => [fakeState('fff666')]), {
+      fallbackOnly: true,
+    });
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [primary, metered]);
+
+    client.start(() => query, 2000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(primary.calls).toBeGreaterThan(5);
+    expect(metered.calls).toBe(0);
+
+    client.stop();
+  });
+
+  it('sweeps a multi-cell view one cell per request', async () => {
+    const cells: TrafficQuery[] = [
+      { lat: 0, lon: 0, radiusNm: 250 },
+      { lat: 5, lon: 0, radiusNm: 250 },
+      { lat: -5, lon: 0, radiusNm: 250 },
+    ];
+    const asked: number[] = [];
+    let cursor = 0;
+    const provider = fakeProvider('adsb.lol', () => [fakeState('aaa111')]);
+    const fetch = provider.fetchTraffic.bind(provider);
+    provider.fetchTraffic = async (q: TrafficQuery) => {
+      asked.push(q.lat);
+      return fetch(q);
+    };
+
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [provider]);
+    client.start(
+      {
+        cellCount: cells.length,
+        next: () => cells[cursor++ % cells.length] ?? null,
+      },
+      4000,
+    );
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(asked.slice(0, 3)).toEqual([0, 5, -5]);
 
     client.stop();
   });

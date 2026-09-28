@@ -204,6 +204,37 @@ describe('TileLoader delivery', () => {
     await expect(p).resolves.toMatchObject({ sourceIndex: 1, fromDisk: false });
   });
 
+  /**
+   * A lone URL gets one retry; a chain does not.
+   *
+   * Imagery no longer comes with a second provider behind it — mixing two
+   * inside one view is what made the ground a patchwork — so a dropped
+   * response there has nothing to fall through to. Without the retry the tile
+   * waits out a node-level backoff of forty-five frames and upwards, and the
+   * refinement waiting on that tile stalls for all of it.
+   */
+  it('retries a single URL once before giving up', async () => {
+    vi.useFakeTimers();
+    try {
+      const loader = new TileLoader(4, nullDisk());
+      const p = loader.request('t', ['https://a/t'], 1);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(served).toHaveLength(1);
+
+      // A rejected fetch is a network failure, which is the retryable kind.
+      served[0]!.reject(new Error('socket hang up'));
+      // Past the backoff, which is jittered on top of 400 ms.
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(served).toHaveLength(2);
+      expect(served[1]!.url).toBe('https://a/t');
+      served[1]!.resolve(body());
+      await expect(p).resolves.toMatchObject({ sourceIndex: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /** An empty 200 is a failure dressed as a success; it must not be cached. */
   it('rejects a zero-length body', async () => {
     const puts: string[] = [];

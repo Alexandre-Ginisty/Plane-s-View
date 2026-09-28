@@ -13,7 +13,7 @@
  */
 
 import type { ProviderHealth } from '@/data/adsb/client';
-import { DEFAULT_QUALITY, type NetworkReadout, type QualityPreference, type StreamingProfile } from '@/net/quality';
+import type { NetworkReadout, StreamingProfile } from '@/net/quality';
 import type { CameraMode } from '@/render/pov';
 import { applyTheme, saveTheme, type Theme } from '@/ui/theme';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
@@ -83,8 +83,8 @@ class AppStore {
    */
   viewHeadingDeg = $state(0);
   imageryId = $state('esri');
-  /** The user's detail ceiling. A ceiling, not a level — see `preference.ts`. */
-  quality = $state<QualityPreference>(DEFAULT_QUALITY);
+  /** Borders, place names and roads drawn over the selection map. */
+  showLabels = $state(true);
 
   /**
    * Engine sound, off until asked for.

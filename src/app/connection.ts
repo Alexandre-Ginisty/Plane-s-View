@@ -52,6 +52,24 @@ const FEED_RADIUS_CAP_NM: Record<NetworkGrade, number> = {
 };
 
 /**
+ * Most circles the traffic sweep may cover the view with, per grade.
+ *
+ * A zoomed-out map is tiled into 250 nm circles (see `data/adsb/coverage`),
+ * and each one is a request. The providers' own politeness floors set how fast
+ * they are asked, so this bounds the *sweep length* — the time before a cell
+ * is revisited — and with it how stale the edge of the map gets. At two
+ * providers and ~0.8 requests a second, 36 cells come round in about 45 s,
+ * comfortably inside the two minutes an aircraft is kept without news.
+ */
+const FEED_MAX_CELLS: Record<NetworkGrade, number> = {
+  fast: 36,
+  good: 24,
+  slow: 6,
+  poor: 1,
+  offline: 1,
+};
+
+/**
  * How long a changed grade must hold before the user is told, seconds.
  *
  * The grade itself already has hysteresis (see `HYSTERESIS` in the monitor),
@@ -175,14 +193,19 @@ export class ConnectionSupervisor {
   /**
    * Largest radius the traffic query may ask for on this link, nm.
    *
-   * From the measured grade, not the user's detail ceiling. Detail is about
-   * how sharp the terrain is; this is about how much JSON the link can carry.
-   * Tying them together meant choosing standard detail quietly cut the number
-   * of aircraft on the map from a 250 nm circle to an 80 nm one, which is not
-   * a thing anyone asked for and not a thing the setting says it does.
+   * From the measured grade. How sharp the terrain is and how much JSON the
+   * link can carry are separate questions, and they were tied together once:
+   * the detail setting that used to sit over the measurement quietly cut the
+   * map from a 250 nm circle of aircraft to an 80 nm one. The setting is gone,
+   * and reading the measurement directly is what keeps it gone.
    */
   get feedRadiusCapNm(): number {
     return FEED_RADIUS_CAP_NM[networkMonitor.measuredGrade];
+  }
+
+  /** Most circles the traffic sweep may tile the view into on this link. */
+  get feedMaxCells(): number {
+    return FEED_MAX_CELLS[networkMonitor.measuredGrade];
   }
 
   get profile(): StreamingProfile {
@@ -205,14 +228,9 @@ export class ConnectionSupervisor {
       app.networkProfile = profile;
       this.onProfile(profile);
 
-      // The *measured* grade, not the effective profile.
-      //
-      // The profile is the measurement held under the user's detail ceiling
-      // (see `@/net/quality/preference`), so on standard detail it reads
-      // `slow` however good the link is — and this would then announce "Slow
-      // connection" to someone on fibre who had simply left the app on its
-      // default. These messages exist to explain the connection; a message
-      // that names the wrong cause sends the user to fix the wrong thing.
+      // The readout's grade, which is the measurement itself. These messages
+      // exist to explain the connection, and a message that names the wrong
+      // cause sends the user to fix the wrong thing.
       this.announce(this.announcements.observe(readout.grade));
     });
 

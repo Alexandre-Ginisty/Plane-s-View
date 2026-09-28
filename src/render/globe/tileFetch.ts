@@ -25,16 +25,14 @@ import { BufferAttribute, BufferGeometry, Sphere, Texture, Vector3 } from 'three
 
 import { wrapTileX } from '@/core/math/geo';
 import type { TileLoader } from '@/tiles/loader';
-import { IMAGERY_FALLBACK_ORDER, TERRARIUM, type ImagerySource } from '@/tiles/sources';
+import { TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import type { TerrainWorkerPool } from '@/workers/pool';
-import { skirtFloorFor } from './constants';
+import { meshResolutionFor, skirtFloorFor } from './constants';
 import { elevationRequest } from './metrics';
 import type { TileNode } from './tileNode';
 
 /** Mesh-building settings the loaders need from the globe's options. */
 export interface StreamerOptions {
-  baseResolution: number;
-  nearResolution: number;
   exaggeration: number;
 }
 
@@ -113,10 +111,9 @@ export async function loadGeometry(node: TileNode, ctx: LoadContext): Promise<vo
   }
   if (node.geometryGen !== gen) return;
 
-  // Near tiles get a denser grid; distant ones do not need it and the
-  // vertex count is what bounds the whole system.
-  const resolution =
-    node.z >= 10 ? ctx.options.nearResolution : ctx.options.baseResolution;
+  // Density is a function of the zoom alone, so two tiles at the same level
+  // are always built the same way — see `meshResolutionFor`.
+  const resolution = meshResolutionFor(node.z);
 
   try {
     const built = await ctx.workers.build(
@@ -164,11 +161,28 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
   const wrappedX = wrapTileX(node.x, node.z);
   const source = ctx.imagery;
 
-  // Fallback chain: the active layer first, then the others that cover this
-  // zoom. A 404 over open ocean at deep zoom is routine.
-  const urls = [source, ...IMAGERY_FALLBACK_ORDER.filter((s) => s.id !== source.id)]
-    .filter((s) => node.z >= s.minZoom && node.z <= s.maxZoom)
-    .map((s) => s.url(node.z, wrappedX, node.y));
+  /*
+   * One provider, per tile, always.
+   *
+   * This used to be a fallback chain — the active layer first, then any other
+   * layer covering this zoom — so a tile Esri happened to 500 on came back as
+   * Sentinel-2. Two global imagery sets photographed years apart do not agree
+   * about colour, season or cloud, so what that bought was a rectangle of a
+   * visibly different planet in the middle of the view, with a hard edge at
+   * the tile boundary. It is the single most obvious way the ground can fail
+   * to look like one map.
+   *
+   * The alternative when a tile will not come is to inherit the ancestor's
+   * imagery: the same provider, the same colours, one level softer. That is
+   * invisible from anywhere except directly overhead.
+   *
+   * A provider being *down*, as opposed to dropping tiles, is a real case and
+   * is still handled — but at the scale it actually happens at. See
+   * `imageryFailing`: the whole globe changes layer at once, which looks like
+   * a decision rather than like damage.
+   */
+  const covers = node.z >= source.minZoom && node.z <= source.maxZoom;
+  const urls = covers ? [source.url(node.z, wrappedX, node.y)] : [];
 
   if (urls.length === 0) {
     // Past this layer's max zoom: inherit from the ancestor permanently.
@@ -213,8 +227,23 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
     texture.wrapS = texture.wrapT = 1001; // ClampToEdgeWrapping
     texture.colorSpace = 'srgb';
 
+    // Replacing an image the tile is already showing — the imagery layer was
+    // switched under it. Dropping the old one at switch time instead would
+    // leave the tile with nothing to draw, and `contentReady` would take it
+    // out of the render set: a hole in the globe for the length of a fetch.
+    const replacing = node.texture;
     node.texture = texture;
-    node.textureBlend = 0; // start the cross-fade from the inherited image
+    /*
+     * The cross-fade is for an image arriving *underneath the viewer*, and
+     * after the refinement gate that is the rare case. A tile that is not on
+     * screen yet has nothing to fade from: starting it at 0 would make the
+     * whole quad show its parent's stretched imagery for 0.9 s after it
+     * appears, and since each quad starts its fade whenever its own last tile
+     * landed, neighbouring quads spend that time at different sharpness —
+     * which is the rectangular seam this was supposed to avoid.
+     */
+    node.textureBlend = node.attached ? 0 : 1;
+    replacing?.dispose();
     ctx.finish(node, 'texture', gen, 'ready');
   } catch {
     if (node.textureRequestKey === key) node.textureRequestKey = null;

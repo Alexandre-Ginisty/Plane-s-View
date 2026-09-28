@@ -36,6 +36,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { applyTransform, flatten, parseAc3d } from './ac3d.mjs';
+import { isHouseScheme, listingEntries, liveryTexture, pickPerOperator } from './liveries.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
@@ -181,59 +182,19 @@ export const AIRCRAFT = [
     lengthM: 73.9,
     credit: '777 — FlightGear FGAddon, GPL-2.0',
     /*
-     * Operator liveries.
+     * Operator liveries are discovered for every aircraft (`liveries.mjs`).
+     * The 777 is the one that needs telling where: its schemes live in a
+     * folder of their own and its paint sheet is not named after any of them.
      *
-     * The 777 is the one aircraft in the hangar whose liveries are filed under
-     * ICAO airline designators, which is exactly what the first three letters
-     * of an ADS-B callsign are. That makes the correct airline reachable
-     * rather than guessable, and it is what fixes the complaint that started
-     * this: a single baked-in JAL paint scheme was being shown on every 777 in
-     * the sky, including everyone else's.
-     *
-     * `neutral` is the fallback and it matters more than any single airline.
-     * Falling back to *another* operator's livery would be worse than having
-     * none — a plain white aircraft is honest about not knowing, and a Qatar
-     * 777 painted as Emirates is not.
+     * The plain white scheme becomes the fallback, and it matters more than
+     * any single airline. Falling back to *another* operator's livery would
+     * be worse than having none — a plain white aircraft is honest about not
+     * knowing, and a Qatar 777 painted as Emirates is not.
      */
     liveries: {
-      dir: 'Models/Liveries-300ER',
+      dirs: ['Models/Liveries-300ER'],
       /** The texture in the base model that a livery replaces. */
       replaces: 'paint1.png',
-      neutral: 'white',
-      /*
-       * The busiest 777 operators, plus the file each one is under — the
-       * upstream names are not all bare designators. Curated rather than
-       * exhaustive because every entry is about half a megabyte, and the
-       * long tail is answered perfectly well by `neutral`.
-       */
-      byOperator: {
-        AAL: 'AAL',
-        ACA: 'ACA-New-livery',
-        AFL: 'AFL',
-        AFR: 'AFR-New-livery',
-        ANA: 'ANA',
-        ANZ: 'ANZ',
-        BAW: 'BAW',
-        CCA: 'CCA',
-        CES: 'CES',
-        CPA: 'CPA',
-        CSN: 'CSN',
-        ETD: 'ETD',
-        EVA: 'EVA',
-        GIA: 'GIA',
-        JAL: 'JAL-one',
-        KLM: 'KLM-New-livery',
-        MSR: 'MSR',
-        PIA: 'PIA',
-        QTR: 'QTR',
-        SAA: 'SAA',
-        SIA: 'SIA',
-        SVA: 'SVA',
-        SWR: 'SWR',
-        THY: 'THY',
-        UAE: 'UAE',
-        VOZ: 'VOZ',
-      },
     },
   },
   {
@@ -299,6 +260,9 @@ export const AIRCRAFT = [
     types: ['BE20', 'BE9L', 'BE10', 'B350'],
     lengthM: 14.2,
     credit: 'King Air — FlightGear FGAddon, GPL-2.0',
+    // Its schemes are air forces, coastguards and private owners; the two
+    // that parse as designators are coincidences, not airlines.
+    liveries: false,
   },
   {
     id: 'c208',
@@ -307,6 +271,8 @@ export const AIRCRAFT = [
     types: ['C208', 'C20T'],
     lengthM: 12.6,
     credit: 'Cessna 208 Caravan — FlightGear FGAddon, GPL-2.0',
+    // `FAB` is the Brazilian Air Force scheme, not an airline.
+    liveries: false,
   },
   {
     id: 'pc12',
@@ -406,9 +372,12 @@ export const AIRCRAFT = [
     id: 'b733',
     path: '737-300',
     model: 'Models/737-300.ac',
-    types: ['B733', 'B734', 'B735', 'B736', 'B737', 'B738', 'B739', 'B38M', 'B39M', 'B73H'],
+    types: ['B733', 'B734', 'B735'],
     lengthM: 33.4,
     credit: '737-300 — FlightGear FGAddon, GPL-2.0',
+    // The schemes are painted on the white sheet, which is named for none
+    // of them.
+    liveries: { replaces: '733_white.png' },
   },
   {
     id: 'b712',
@@ -438,9 +407,168 @@ export const AIRCRAFT = [
     id: 'f27',
     path: 'Fokker-F.27',
     model: 'Models/f27.ac',
-    types: ['F27', 'F50'],
+    types: ['F27'],
     lengthM: 25.1,
     credit: 'Fokker F.27 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    /*
+     * The A320 family: the most common airliner in the sky, so the one whose
+     * absence cost the most. Every A319/A320/A321 used to be drawn as a
+     * 737-300.
+     *
+     * The airframe file carries the fuselage, wings and gear; the engines are
+     * a file of their own. `A320-200-CFM.xml` raises the engines by 0.83 m,
+     * but the fuselage is raised by the same amount elsewhere in the chain:
+     * measured, applying it alone puts the pylon fairing inside the wing,
+     * while at zero the nacelle hangs just under the lower skin where it
+     * belongs. Both wingtip styles are modelled in the one file and the
+     * simulator shows one at a time — here the fence stays and the sharklet
+     * goes, since drawing both puts two wingtips on each wing.
+     */
+    id: 'a320',
+    path: 'A320-family',
+    parts: [
+      { model: 'Models/Fuselage/res/A320-216.ac' },
+      { model: 'Models/Fuselage/res/CFM56.ac' },
+    ],
+    discard: /sharklet/i,
+    types: ['A320', 'A319', 'A321', 'A318', 'A20N', 'A19N', 'A21N'],
+    lengthM: 37.57,
+    credit: 'A320 family — FlightGear FGAddon, GPL-2.0',
+    liveries: {
+      dirs: [
+        'Models/Liveries/CFM',
+        'Models/Liveries/IAE',
+        'Models/Liveries/CFM-NEO',
+        'Models/Liveries/PW-NEO',
+      ],
+      replaces: 'Fuse-Main.png',
+    },
+  },
+  {
+    /*
+     * The 737-800, assembled.
+     *
+     * Its wings, stabilisers, winglets and nose gear are separate files —
+     * which is why the -300 stood in for it until the converter could join
+     * them. Every part shares the fuselage's origin (the XML offsets are all
+     * zero), so no placement is needed, only the join.
+     */
+    id: 'b738',
+    path: '737-800',
+    parts: [
+      { model: 'Models/737-800.ac' },
+      { model: 'Models/LWing.ac' },
+      { model: 'Models/RWing.ac' },
+      { model: 'Models/HorzStab.ac' },
+      { model: 'Models/VertStab.ac' },
+      { model: 'Models/winglet.ac' },
+      { model: 'Models/nosegear.ac' },
+    ],
+    types: ['B738', 'B739', 'B737', 'B736', 'B38M', 'B39M', 'B37M', 'B3XM', 'B73H'],
+    lengthM: 39.5,
+    credit: '737-800 — FlightGear FGAddon, GPL-2.0',
+    liveries: { dirs: ['Models/Liveries-800'], replaces: '737-800.png' },
+  },
+  {
+    id: 'b732',
+    path: '737-200',
+    model: 'Models/737-200.ac',
+    types: ['B732', 'B731'],
+    lengthM: 30.5,
+    credit: '737-200 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'b748',
+    path: '747-8i',
+    model: 'Models/747-8i.ac',
+    types: ['B748', 'B744', 'B74F'],
+    lengthM: 76.3,
+    credit: '747-8 Intercontinental — FlightGear FGAddon, GPL-2.0',
+    liveries: { dirs: ['Models/Liveries/748I', 'Models/Liveries'] },
+  },
+  {
+    id: 'b742',
+    path: '747-200',
+    model: 'Models/boeing747-200.ac',
+    types: ['B742', 'B741', 'B743', 'B74S', 'B74R'],
+    lengthM: 70.6,
+    credit: '747-200 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'md11',
+    path: 'MD-11',
+    model: 'Models/MD-11-GE.ac',
+    types: ['MD11'],
+    lengthM: 61.6,
+    credit: 'MD-11 — FlightGear FGAddon, GPL-2.0',
+    liveries: { dirs: ['Models/Liveries/MD-11', 'Models/Liveries/MD-11F'] },
+  },
+  {
+    id: 'dc10',
+    path: 'DC-10',
+    model: 'Models/DC-10-30.ac',
+    types: ['DC10'],
+    lengthM: 55.5,
+    credit: 'DC-10 — FlightGear FGAddon, GPL-2.0',
+    liveries: { dirs: ['Models/Liveries/DC-10-30', 'Models/Liveries/DC-10-30F'] },
+  },
+  {
+    id: 'b463',
+    path: 'BAe-146',
+    model: 'Models/bae146.ac',
+    types: ['B461', 'B462', 'B463', 'RJ70', 'RJ85', 'RJ1H'],
+    // The upstream model is the short -100.
+    lengthM: 26.2,
+    credit: 'BAe 146 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'f100',
+    path: 'fokker100',
+    model: 'Models/f100/fokker100.ac',
+    types: ['F100'],
+    lengthM: 35.5,
+    credit: 'Fokker 100 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'f70',
+    path: 'fokker100',
+    model: 'Models/f70/fokker70.ac',
+    types: ['F70'],
+    lengthM: 30.9,
+    credit: 'Fokker 70 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'f50',
+    path: 'fokker50',
+    model: 'Models/fokker50.ac',
+    types: ['F50'],
+    lengthM: 25.25,
+    credit: 'Fokker 50 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'il76',
+    path: 'IL-76',
+    model: 'Models/il76.ac',
+    types: ['IL76'],
+    lengthM: 46.6,
+    credit: 'Ilyushin Il-76 — FlightGear FGAddon, GPL-2.0',
+  },
+  {
+    id: 'a306',
+    path: 'A300-600',
+    parts: [
+      { model: 'Models/Fuselage.ac' },
+      { model: 'Models/Wings.ac' },
+      { model: 'Models/Tail.ac' },
+      { model: 'Models/GE-CF6.ac' },
+      { model: 'Models/Gears.ac' },
+    ],
+    types: ['A306', 'A30B', 'A310'],
+    lengthM: 54.1,
+    credit: 'A300-600 — FlightGear FGAddon, GPL-2.0',
+    liveries: { dirs: ['Models/Liveries/603', 'Models/Liveries/600F'] },
   },
 ];
 
@@ -493,6 +621,50 @@ async function fetchCached(url, file) {
   const buffer = Buffer.from(await response.arrayBuffer());
   await writeFile(target, buffer);
   return buffer;
+}
+
+/**
+ * Every livery upstream offers for an aircraft.
+ *
+ * Reads the XML descriptors in `Models/Liveries/` (and any extra folders the
+ * entry names). A texture path in a descriptor is relative to `Models/`, which
+ * is where the simulator resolves it from. Folders that hold bare images and
+ * no descriptors are read as images named after their operator.
+ */
+async function discoverLiveries(entry) {
+  const dirs = entry.liveries?.dirs ?? ['Models/Liveries'];
+  const all = [];
+  for (const dir of dirs) {
+    let listing;
+    try {
+      listing = listingEntries(
+        (await fetchCached(`${FGADDON}/${entry.path}/${dir}/`, `${entry.id}/ls-${dir.replace(/\//g, '_')}.html`)).toString(),
+      );
+    } catch {
+      continue;
+    }
+    const xmls = listing.filter((f) => f.endsWith('.xml'));
+    for (const file of xmls) {
+      try {
+        const xml = (await fetchCached(`${FGADDON}/${entry.path}/${dir}/${file}`, `${entry.id}/livery-${file}`)).toString();
+        const texture = liveryTexture(xml);
+        if (!texture) continue;
+        const relative = texture.startsWith('Models/') || texture.startsWith('Aircraft/')
+          ? texture.replace(/^Aircraft\/[^/]+\//, '')
+          : `Models/${texture}`;
+        all.push({ stem: file.replace(/\.xml$/, ''), texture: relative });
+      } catch {
+        // An unreadable descriptor is one fewer livery, not a failed aircraft.
+      }
+    }
+    if (xmls.length === 0) {
+      for (const file of listing.filter((f) => /\.png$/i.test(f))) {
+        all.push({ stem: file.replace(/\.png$/i, ''), texture: `${dir}/${file}` });
+      }
+    }
+  }
+  const { chosen, skipped } = pickPerOperator(all);
+  return { all, chosen, skipped, dirs };
 }
 
 /** Authors named in the aircraft's FlightGear `-set.xml`, if any. */
@@ -642,14 +814,74 @@ function index(tris) {
   return { positions, normals, uvs, indices };
 }
 
+/**
+ * The aircraft's geometry as one AC3D tree, however many files it is kept in.
+ *
+ * Most FGAddon aircraft are one `.ac` file. Some — the A320 family, the
+ * 737NG — keep the engines, or the wings, in files of their own that the
+ * simulator places from XML offsets. `entry.parts` lists those files with the
+ * offsets copied from that XML, and they are joined here under one root.
+ *
+ * Three things have to be carried across when two files become one tree:
+ *
+ *  - **Materials** are numbered per file, so each file's surfaces are shifted
+ *    past the materials of the files before it.
+ *  - **Offsets** are in FlightGear's body frame (x aft, y right, z up) while
+ *    the geometry is in AC3D's (y up, z toward the viewer): x, y, z in the
+ *    XML is x, z, -y in the file.
+ *  - **Texture names** are relative to the file that uses them, so a part in
+ *    a sub-folder has its folder put in front, relative to `Models/`, which
+ *    is where the texture search starts.
+ */
+async function loadAssembly(entry) {
+  const parts = entry.parts ?? [{ model: entry.model }];
+  const materials = [];
+  const roots = [];
+
+  for (const part of parts) {
+    const cacheName = entry.parts ? `${entry.id}/part-${part.model.replace(/[\\/]/g, '_')}` : `${entry.id}/model.ac`;
+    const text = (await fetchCached(`${FGADDON}/${entry.path}/${part.model}`, cacheName)).toString('utf8');
+    const parsed = parseAc3d(text);
+
+    const folder = dirname(part.model).replace(/^Models\/?/, '');
+    const shift = materials.length;
+    for (const { object } of flatten(parsed.root)) {
+      for (const surface of object.surfaces) surface.material += shift;
+      if (folder && object.texture && !object.texture.includes('/')) {
+        object.texture = `${folder}/${object.texture}`;
+      }
+    }
+    materials.push(...parsed.materials);
+
+    const o = part.offset ?? {};
+    const r = parsed.root;
+    r.loc = [r.loc[0] + (o.x ?? 0), r.loc[1] + (o.z ?? 0), r.loc[2] - (o.y ?? 0)];
+    roots.push(r);
+  }
+
+  const root =
+    roots.length === 1
+      ? roots[0]
+      : {
+          type: 'group',
+          name: 'assembly',
+          texture: null,
+          texrep: [1, 1],
+          verts: [],
+          surfaces: [],
+          kids: roots,
+          rot: null,
+          loc: [0, 0, 0],
+        };
+  return { materials, root };
+}
+
 export async function convert(entry, { quiet = false } = {}) {
   const say = (...a) => {
     if (!quiet) console.log(...a);
   };
 
-  const acPath = `${entry.path}/${entry.model}`;
-  const text = (await fetchCached(`${FGADDON}/${acPath}`, `${entry.id}/model.ac`)).toString('utf8');
-  const { materials, root } = parseAc3d(text);
+  const { materials, root } = await loadAssembly(entry);
 
   // --- collect, grouped by role + texture + material ------------------------
   const groups = new Map();
@@ -658,7 +890,11 @@ export async function convert(entry, { quiet = false } = {}) {
 
   for (const { object, transform } of flatten(root)) {
     if (object.verts.length === 0) continue;
-    if (DISCARD.test(object.name) || (object.texture && EFFECT_TEXTURE.test(object.texture))) {
+    if (
+      DISCARD.test(object.name) ||
+      entry.discard?.test(object.name) ||
+      (object.texture && EFFECT_TEXTURE.test(object.texture))
+    ) {
       discarded += object.verts.length;
       continue;
     }
@@ -998,29 +1234,103 @@ export async function convert(entry, { quiet = false } = {}) {
   const liveries = {};
   let liveryTexture = -1;
 
-  if (entry.liveries) {
-    const slot = textures.findIndex((t) => t.replace(/^.*[\\/]/, '') === entry.liveries.replaces);
+  if (entry.liveries !== false) {
+    const found = await discoverLiveries(entry);
+    const byBase = (t) => t.replace(/^.*[\\/]/, '').toLowerCase();
+
+    // The slot a livery replaces is the model texture that one of the
+    // schemes also supplies — that is the sheet the author painted the
+    // default livery on. Named explicitly where the file names disagree.
+    const liveryBases = new Set(found.all.map((c) => byBase(c.texture)));
+    const wantedBase = entry.liveries?.replaces?.toLowerCase();
+    const slot = textures.findIndex((t) =>
+      wantedBase ? byBase(t) === wantedBase : liveryBases.has(byBase(t)),
+    );
     liveryTexture = slot >= 0 ? remap[slot] ?? -1 : -1;
 
-    if (liveryTexture < 0) {
-      say(`  ${entry.id}: livery slot ${entry.liveries.replaces} not in the model — skipped`);
+    if (found.all.length === 0) {
+      // Nothing upstream; nothing to say.
+    } else if (liveryTexture < 0) {
+      say(`  ${entry.id}: ${found.all.length} liveries upstream, but no model texture they replace — skipped`);
     } else {
-      const wanted = { NEUTRAL: entry.liveries.neutral, ...entry.liveries.byOperator };
-      for (const [operator, file] of Object.entries(wanted)) {
-        try {
-          const data = await fetchCached(
-            `${FGADDON}/${entry.path}/${entry.liveries.dir}/${file}.png`,
-            `${entry.id}/livery-${file}.png`,
-          );
-          const encoded = await shrink(data, `${operator}.png`);
-          const name = `${entry.id}-livery-${encoded.name}`;
-          await writeFile(join(OUT, name), encoded.data);
-          liveries[operator] = name;
-        } catch {
-          say(`  ${entry.id}: livery ${operator} (${file}) unavailable`);
+      const fetchLivery = async (texture) => {
+        const base = texture.replace(/^.*[\\/]/, '');
+        // Beside the descriptor, or in the resolution folder some authors
+        // file the full-size paint under.
+        const places = found.dirs.flatMap((d) => [d, `${d}/4k`, `${d}/2k`]);
+        for (const candidate of [`${entry.path}/${texture}`, ...places.map((d) => `${entry.path}/${d}/${base}`)]) {
+          try {
+            return await fetchCached(`${FGADDON}/${candidate}`, `${entry.id}/livery-${base}`);
+          } catch {
+            // Try the next place it might be.
+          }
+        }
+        return null;
+      };
+      const emit = async (operator, data) => {
+        const encoded = await shrink(data, `${operator}.png`);
+        const name = `${entry.id}-livery-${encoded.name}`;
+        await writeFile(join(OUT, name), encoded.data);
+        liveries[operator] = name;
+      };
+
+      for (const [operator, texture] of Object.entries(found.chosen)) {
+        const data = await fetchLivery(texture);
+        if (data) await emit(operator, data);
+        else say(`  ${entry.id}: livery ${operator} (${texture}) unavailable`);
+      }
+      const airlines = Object.keys(liveries).filter((k) => k !== 'NEUTRAL');
+
+      /*
+       * The neutral scheme, which every aircraft with liveries must have.
+       *
+       * Without it an operator with no scheme of its own would be drawn in
+       * the paint the upstream author happened to model — on the 767 that is
+       * one specific charter airline, shown on every unmatched 767 in the
+       * sky. In order of preference: a plain white scheme upstream; the
+       * manufacturer's own colours, which name no operator; and failing
+       * both, the model's paint washed out to near-white, so its sheet keeps
+       * its panel lines and windows but no airline can be read off it.
+       */
+      const dropAll = async () => {
+        for (const [key, name] of Object.entries(liveries)) {
+          await rm(join(OUT, name), { force: true });
+          delete liveries[key];
+        }
+        liveryTexture = -1;
+      };
+
+      if (airlines.length === 0) {
+        /*
+         * No airline schemes: nothing to swap, so nothing to neutralise.
+         * A light aircraft, a helicopter or a military type keeps the paint
+         * it was modelled in, which names no airline to begin with.
+         */
+        await dropAll();
+      } else if (!liveries['NEUTRAL']) {
+        const house = found.all.find((c) => isHouseScheme(c.stem));
+        const houseData = house ? await fetchLivery(house.texture) : null;
+        if (houseData) {
+          await emit('NEUTRAL', houseData);
+        } else {
+          const own = textures[slot].replace(/^.*[\\/]/, '');
+          try {
+            const raw = await fetchCached(`${FGADDON}/${entry.path}/Models/${textures[slot]}`, `${entry.id}/${own}`);
+            await emit('NEUTRAL', await sharp(raw).greyscale().linear(0.3, 178).png().toBuffer());
+            say(`  ${entry.id}: neutral scheme washed out from ${own}`);
+          } catch {
+            // Airline schemes with no honest fallback would put somebody's
+            // paint on every unmatched operator. Keep the model as modelled.
+            say(`  ${entry.id}: no neutral scheme and ${own} cannot be washed out — liveries dropped`);
+            await dropAll();
+          }
         }
       }
-      say(`  ${entry.id}: ${Object.keys(liveries).length} liveries`);
+
+      say(
+        `  ${entry.id}: ${Object.keys(liveries).filter((k) => k !== 'NEUTRAL').length} airline liveries` +
+          (found.skipped.length ? ` (not airlines: ${found.skipped.join(', ')})` : ''),
+      );
     }
   }
 
@@ -1171,7 +1481,7 @@ async function main() {
    * better stand-in for the rest than that.
    */
   const FALLBACKS = {
-    jet: 'b733',
+    jet: 'b738',
     turboprop: 'at72',
     piston: 'c172',
     rotorcraft: 'ec35',

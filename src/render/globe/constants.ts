@@ -10,6 +10,8 @@
  * lines, those relationships were invisible and were broken twice.
  */
 
+import { TERRARIUM } from '@/tiles/sources';
+
 export const ROOT_ZOOM = 2;
 
 /** Cross-fade for "own texture replaces inherited", seconds. */
@@ -18,22 +20,35 @@ export const TEXTURE_FADE_SEC = 0.9;
 export const TILE_FADE_SEC = 0.3;
 
 /**
- * How much relief the terrain is built with; `boosted` is what the detail
- * switch turns on.
+ * How much relief the terrain is built with — one setting, for everyone.
+ *
+ * ## Why there is only one
+ *
+ * There used to be two, `standard` and `boosted`, behind a detail switch, and
+ * the switch is what produced the complaint that some ground looks properly
+ * three-dimensional and some looks flat. Two profiles cannot be compared by a
+ * user who only ever sees one of them at a time; what they see instead is a
+ * world whose relief changes when the setting is touched, and — because a
+ * profile change rebuilds every resident tile — a world that changes all at
+ * once for no reason they asked for. A single profile is the only way the
+ * terrain can look the same everywhere, which is what was actually wanted.
  *
  * ## Resolution is free detail, and most of it was being thrown away
  *
  * A Terrarium tile is 256x256 samples, and a 64-quad mesh keeps 65x65 of those
  * 65 536 elevations — six percent of a PNG already downloaded and decoded.
- * Raising the near grid to 128 keeps a quarter of them, for no bandwidth at
- * all: the single biggest gain available anywhere in the terrain.
+ * Keeping more costs no bandwidth at all: see `meshResolutionFor`, which is
+ * where the density actually comes from now.
  *
  * ## Exaggeration is not free, and is deliberate
  *
- * 1.45x vertical is a lie about the shape of the Earth, and every terrain
+ * 1.3x vertical is a lie about the shape of the Earth, and every terrain
  * viewer tells it, because true scale is genuinely flat from the altitudes
  * this app spends its time at: from FL350 a 2 km alp subtends a third of a
- * degree against a hundred kilometres of ground.
+ * degree against a hundred kilometres of ground. It sits between the 1.0 the
+ * old standard profile used — honest, and flat enough that people asked why
+ * the terrain was not 3D — and the 1.45 the boosted one used, which turns
+ * hills into scenery.
  *
  * It is safe only because it is applied in *one* place. The worker bakes it
  * into the heights it returns, and those same heights are what `sampleHeight`
@@ -41,20 +56,70 @@ export const TILE_FADE_SEC = 0.3;
  * the camera must be lifted to clear a hillside, when the undercarriage comes
  * down. Exaggerating in the shader instead would have broken all three.
  */
-export type ReliefDetail = 'standard' | 'boosted';
-
 export interface ReliefSettings {
-  baseResolution: number;
-  nearResolution: number;
   exaggeration: number;
   /** Shadow floor in the terrain shader; lower makes slopes read harder. */
   ambient: number;
 }
 
-export const RELIEF: Record<ReliefDetail, ReliefSettings> = {
-  standard: { baseResolution: 32, nearResolution: 64, exaggeration: 1, ambient: 0.45 },
-  boosted: { baseResolution: 48, nearResolution: 128, exaggeration: 1.45, ambient: 0.3 },
+export const RELIEF: ReliefSettings = {
+  exaggeration: 1.3,
+  // Low enough that slopes read as slopes, high enough not to double-light
+  // imagery that already contains its own sun.
+  ambient: 0.32,
 };
+
+/**
+ * Quads along one side of a tile's mesh, from its zoom.
+ *
+ * ## The cliff this replaces
+ *
+ * It used to be `z >= 10 ? near : base` — 64 quads below zoom 10 and 128 above
+ * it, a fourfold jump in density across one quadtree level. From the air that
+ * boundary is a straight line with visibly rounder terrain on one side of it,
+ * and it is a *tile* boundary, so it is a rectangle: exactly the "some of the
+ * map is 3D and some is not" artefact. Two doublings three levels apart, in
+ * different parts of the view, are far harder to see than one quadrupling.
+ *
+ * ## And the ceiling, which is not arbitrary either
+ *
+ * Terrarium stops at zoom 15, so a deeper tile samples a sub-rectangle of its
+ * z15 ancestor: a quarter of the samples per level. At z19 the tile covers
+ * 16x16 real elevations, and a 128-quad mesh over them is 16 000 vertices
+ * carrying 256 numbers' worth of information — interpolation sold as detail,
+ * paid for in vertex bandwidth on the tiles closest to the camera. Capping the
+ * mesh at the data means the grid gets *coarser* on final approach, and it
+ * costs nothing visible, because there was nothing there to see.
+ */
+export function meshResolutionFor(z: number): number {
+  // Real elevation samples across this tile, one side.
+  const real = z <= TERRARIUM.maxZoom ? TERRARIUM.tileSize : TERRARIUM.tileSize >> (z - TERRARIUM.maxZoom);
+  // 32 -> 64 -> 128, doubling at z9 and z12.
+  const ramp = 32 << Math.max(0, Math.min(2, Math.floor((z - 6) / 3)));
+  return Math.max(8, Math.min(ramp, real));
+}
+
+/**
+ * Tiles the active imagery layer must give up on, with nothing served in
+ * between, before the globe changes layer.
+ *
+ * Each one has already spent its full retry budget, so eight of them in a row
+ * is a provider that is down, not one that is patchy — and a single tile
+ * served anywhere resets the count. The alternative to a number here is the
+ * per-tile fallback this replaced, which substituted one provider's imagery
+ * into another's picture one rectangle at a time.
+ */
+export const LAYER_FAILOVER_TILES = 8;
+
+/**
+ * Deepest zoom whose failures count towards that decision.
+ *
+ * Every imagery layer here covers the whole planet down to z14, so a tile
+ * refused at or above that scale is the service failing. Below it, a 404 is
+ * ordinary — open ocean at z19 is not photographed by anybody — and counting
+ * those would let a view parked over the Atlantic change layer on its own.
+ */
+export const FAILOVER_MAX_ZOOM = 14;
 
 /** Highest terrain on Earth plus margin; used for conservative bounds. */
 export const MAX_TERRAIN_M = 9000;
@@ -122,9 +187,6 @@ export interface GlobeOptions {
   maxScreenSpaceError?: number;
   /** Deepest zoom to refine to. Esri serves imagery to 19. */
   maxZoom?: number;
-  /** Quads per tile side, far and near. */
-  baseResolution?: number;
-  nearResolution?: number;
   /** Vertical exaggeration; 1 is true scale. */
   exaggeration?: number;
   maxResidentTiles?: number;

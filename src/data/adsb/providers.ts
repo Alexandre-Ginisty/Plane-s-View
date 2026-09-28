@@ -39,6 +39,12 @@ export interface AdsbProvider {
    * polling faster than the data updates is pure waste.
    */
   readonly minIntervalMs: number;
+  /**
+   * Asked only when every other provider is out of action, never as part of
+   * a sweep. For metered services whose daily allowance a sweep would spend
+   * in minutes.
+   */
+  readonly fallbackOnly?: boolean;
   fetchTraffic(query: TrafficQuery, signal?: AbortSignal): Promise<ProviderResult>;
   /** Track one aircraft worldwide, outside the current viewport query. */
   fetchByHex?(hex: string, signal?: AbortSignal): Promise<ProviderResult>;
@@ -145,6 +151,7 @@ const openSky: AdsbProvider = {
   label: 'OpenSky Network',
   homepage: 'https://opensky-network.org',
   enabled: true,
+  fallbackOnly: true,
   maxRadiusNm: 400,
   // The anonymous tier grants ~400 credits/day. One request per 15 s is about
   // 5 700/day, so the client's budget guard (not this floor) does the limiting;

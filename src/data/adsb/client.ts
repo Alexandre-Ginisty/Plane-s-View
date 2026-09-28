@@ -29,6 +29,14 @@ export interface ProviderHealth {
   retryInMs: number;
 }
 
+/** Where the poll gets its areas from. */
+export interface QuerySource {
+  /** The next area to fetch, or null to skip. Called once per request. */
+  next(): TrafficQuery | null;
+  /** How many areas the current view needs; more than one means a sweep. */
+  readonly cellCount: number;
+}
+
 export interface TrafficClientEvents {
   onSnapshot(snapshot: TrafficSnapshot): void;
   onHints?(hints: InlineAirframeHint[]): void;
@@ -92,53 +100,44 @@ export class TrafficClient {
   async fetchOnce(query: TrafficQuery, signal?: AbortSignal): Promise<TrafficSnapshot | null> {
     const errors = new Map<ProviderId, string>();
     const now = Date.now();
+    let empty: TrafficSnapshot | null = null;
 
     for (const rt of this.chain()) {
-      const { provider, breaker } = rt;
-
-      if (!provider.enabled) continue;
-      if (!breaker.allowsRequest(now)) continue;
-      if (now - rt.lastRequestAt < provider.minIntervalMs) continue;
+      if (!this.isReady(rt, now)) continue;
+      // A metered fallback is for when the feeds are down, not quiet.
+      if (empty && rt.provider.fallbackOnly) continue;
 
       const started = performance.now();
       rt.lastRequestAt = Date.now();
 
       try {
-        const result = await provider.fetchTraffic(query, signal);
-        const latency = performance.now() - started;
-
-        breaker.recordSuccess();
-        rt.lastLatencyMs = latency;
-        rt.lastError = null;
-        rt.lastSuccessAt = Date.now();
-        rt.aircraftLastSeen = result.states.length;
-
-        // Stick with whatever just worked.
-        this.preferred = this.runtimes.indexOf(rt);
+        const snapshot = await this.request(rt, query, started, signal);
         this.consecutiveTotalFailures = 0;
 
-        if (result.hints.length > 0) this.events.onHints?.(result.hints);
-        this.emitHealth();
+        /*
+         * An empty answer is not the end of the chain.
+         *
+         * The feeds are volunteer receiver networks and they do not overlap:
+         * over much of Africa, South America or central Asia one of them has
+         * a receiver where the other has none. Stopping at the first provider
+         * that *answered* meant stopping at the first one that said "nothing
+         * here", which is how whole regions came to look empty.
+         */
+        if (snapshot.aircraft.length === 0) {
+          empty ??= snapshot;
+          continue;
+        }
 
-        return {
-          aircraft: result.states,
-          source: provider.id,
-          receivedAt: rt.lastSuccessAt,
-          latencyMs: latency,
-        };
+        // Stick with whatever just found traffic.
+        this.preferred = this.runtimes.indexOf(rt);
+        return snapshot;
       } catch (err) {
         if (signal?.aborted) throw err;
-        if (err instanceof HttpError && err.isRateLimit) {
-          // Back off hard rather than keep knocking.
-          breaker.recordRateLimit(err.retryAfterMs);
-        } else {
-          breaker.recordFailure();
-        }
-        rt.lastError = err instanceof Error ? err.message : String(err);
-        rt.lastLatencyMs = performance.now() - started;
-        errors.set(provider.id, rt.lastError);
+        errors.set(rt.provider.id, this.recordError(rt, err, started));
       }
     }
+
+    if (empty) return empty;
 
     // Only a real attempt can fail.
     //
@@ -156,16 +155,68 @@ export class TrafficClient {
     return null;
   }
 
+  /** Enabled, breaker closed, and past its politeness floor. */
+  private isReady(rt: ProviderRuntime, now: number): boolean {
+    return (
+      rt.provider.enabled &&
+      rt.breaker.allowsRequest(now) &&
+      now - rt.lastRequestAt >= rt.provider.minIntervalMs
+    );
+  }
+
+  /** One request to one provider, with its bookkeeping. Throws on failure. */
+  private async request(
+    rt: ProviderRuntime,
+    query: TrafficQuery,
+    started: number,
+    signal?: AbortSignal,
+  ): Promise<TrafficSnapshot> {
+    const result = await rt.provider.fetchTraffic(query, signal);
+    const latency = performance.now() - started;
+
+    rt.breaker.recordSuccess();
+    rt.lastLatencyMs = latency;
+    rt.lastError = null;
+    rt.lastSuccessAt = Date.now();
+    rt.aircraftLastSeen = result.states.length;
+
+    if (result.hints.length > 0) this.events.onHints?.(result.hints);
+    this.emitHealth();
+
+    return {
+      aircraft: result.states,
+      source: rt.provider.id,
+      receivedAt: rt.lastSuccessAt,
+      latencyMs: latency,
+    };
+  }
+
+  /** Feed a failure to the breaker. Returns the message recorded. */
+  private recordError(rt: ProviderRuntime, err: unknown, started: number): string {
+    if (err instanceof HttpError && err.isRateLimit) {
+      // Back off hard rather than keep knocking.
+      rt.breaker.recordRateLimit(err.retryAfterMs);
+    } else {
+      rt.breaker.recordFailure();
+    }
+    rt.lastError = err instanceof Error ? err.message : String(err);
+    rt.lastLatencyMs = performance.now() - started;
+    return rt.lastError;
+  }
+
   /**
-   * Begin polling. `getQuery` is called fresh each cycle so the caller can
-   * follow the camera without restarting the client; returning null skips the
-   * cycle (nothing selected, map not ready).
+   * Begin polling.
+   *
+   * `source` is asked for a query once per request, so the caller can follow
+   * the camera without restarting the client; returning null skips the cycle
+   * (nothing selected, map not ready). A plain function is one fixed area; a
+   * `QuerySource` with several cells is swept, one cell per request.
    */
-  start(getQuery: () => TrafficQuery | null, intervalMs = 3000): void {
+  start(source: QuerySource | (() => TrafficQuery | null), intervalMs = 3000): void {
     if (this.running) return;
     this.running = true;
     this.baseIntervalMs = Math.max(MIN_POLL_MS, intervalMs);
-    this.getQuery = getQuery;
+    this.source = typeof source === 'function' ? { next: source, cellCount: 1 } : source;
     document.addEventListener('visibilitychange', this.onVisibility);
     void this.tick();
   }
@@ -182,7 +233,7 @@ export class TrafficClient {
   }
 
   private baseIntervalMs = 3000;
-  private getQuery: () => TrafficQuery | null = () => null;
+  private source: QuerySource = { next: () => null, cellCount: 1 };
 
   private handleVisibilityChange(): void {
     if (!this.running) return;
@@ -209,20 +260,15 @@ export class TrafficClient {
     this.timer = null;
     if (!this.running || document.hidden) return;
 
-    const query = this.getQuery();
-    if (query) {
-      this.inFlight?.abort();
-      const controller = new AbortController();
-      this.inFlight = controller;
-
-      try {
-        const snapshot = await this.fetchOnce(query, controller.signal);
-        if (snapshot) this.events.onSnapshot(snapshot);
-      } catch {
-        // Aborted by a newer cycle or by stop(); nothing to report.
-      } finally {
-        if (this.inFlight === controller) this.inFlight = null;
-      }
+    this.inFlight?.abort();
+    const controller = new AbortController();
+    this.inFlight = controller;
+    try {
+      await this.sweep(controller.signal);
+    } catch {
+      // Aborted by a newer cycle or by stop(); nothing to report.
+    } finally {
+      if (this.inFlight === controller) this.inFlight = null;
     }
 
     // Hidden again while that request was in flight: leave `timer` null so the
@@ -232,9 +278,80 @@ export class TrafficClient {
     this.timer = self.setTimeout(() => void this.tick(), this.nextDelayMs());
   }
 
+  /**
+   * One cycle: every provider that is ready gets a request of its own.
+   *
+   * The providers are separate receiver networks, so asking each of them is
+   * what fills the gaps either one has alone — the tracker merges the
+   * reports by aircraft and fix time, so an aircraft both of them hear is
+   * simply heard twice. Each provider still keeps its own politeness floor;
+   * this changes who is asked, not how often any one of them is.
+   *
+   * With several cells, each request takes the next cell, so the view is
+   * swept and consecutive cycles hand every cell to a different network.
+   */
+  private async sweep(signal: AbortSignal): Promise<void> {
+    const now = Date.now();
+    const primaries = [...this.chain()].filter(
+      (rt) => rt.provider.enabled && !rt.provider.fallbackOnly && rt.breaker.allowsRequest(now),
+    );
+
+    // Every sweeping provider is down: walk the whole chain, fallbacks
+    // included, for one area — the old behaviour, kept for exactly this case.
+    if (primaries.length === 0) {
+      const query = this.source.next();
+      const snapshot = query ? await this.fetchOnce(query, signal) : null;
+      if (snapshot) this.events.onSnapshot(snapshot);
+      return;
+    }
+
+    const ready = primaries.filter((rt) => this.isReady(rt, now));
+    if (ready.length === 0) return;
+
+    const errors = new Map<ProviderId, string>();
+    let attempted = 0;
+    let succeeded = 0;
+
+    await Promise.all(
+      ready.map(async (rt) => {
+        const query = this.source.next();
+        if (!query) return;
+        attempted++;
+        const started = performance.now();
+        rt.lastRequestAt = Date.now();
+        try {
+          const snapshot = await this.request(rt, query, started, signal);
+          succeeded++;
+          if (snapshot.aircraft.length > 0) this.preferred = this.runtimes.indexOf(rt);
+          this.events.onSnapshot(snapshot);
+        } catch (err) {
+          if (signal.aborted) throw err;
+          errors.set(rt.provider.id, this.recordError(rt, err, started));
+        }
+      }),
+    );
+
+    if (succeeded > 0) {
+      this.consecutiveTotalFailures = 0;
+    } else if (attempted > 0 && errors.size > 0) {
+      // Only a real attempt can fail — see `fetchOnce`.
+      this.consecutiveTotalFailures++;
+      this.emitHealth();
+      this.events.onAllFailed?.(errors);
+    }
+  }
+
   /** Exponential backoff while the whole chain is down, capped. */
   private nextDelayMs(): number {
-    if (this.consecutiveTotalFailures === 0) return this.baseIntervalMs;
+    if (this.consecutiveTotalFailures === 0) {
+      if (this.source.cellCount <= 1) return this.baseIntervalMs;
+      // Sweeping: come back as soon as the quickest provider may be asked
+      // again. The floors, not this timer, set the actual request rate.
+      const floors = this.runtimes
+        .filter((rt) => rt.provider.enabled && !rt.provider.fallbackOnly)
+        .map((rt) => rt.provider.minIntervalMs);
+      return Math.max(MIN_POLL_MS, Math.min(this.baseIntervalMs, ...floors));
+    }
     const backoff = this.baseIntervalMs * 2 ** Math.min(this.consecutiveTotalFailures, 4);
     return Math.min(MAX_POLL_MS, backoff) * (0.85 + Math.random() * 0.3);
   }

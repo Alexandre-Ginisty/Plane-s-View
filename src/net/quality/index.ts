@@ -30,12 +30,16 @@
  * and error target, the traffic client its query radius.
  *
  * `profile.ts` is the policy (grades and what each one permits),
- * `monitor.ts` the measurement, `environment.ts` the browser hints, and
- * `preference.ts` the user's ceiling on the result — which can lower the
- * measurement but never raise it.
+ * `monitor.ts` the measurement and `environment.ts` the browser hints.
+ *
+ * There is deliberately no user-facing detail setting on top of this. There
+ * used to be one, defaulting to a `slow` ceiling so a first visit would be
+ * economical, and its only real effect was that most people never saw the app
+ * at the quality it is capable of — while the ones who did found a world that
+ * looked different from the one everybody else was describing. What the link
+ * can carry is measured, and nothing else gets a vote.
  */
 
 export * from './profile';
 export * from './environment';
-export * from './preference';
 export * from './monitor';

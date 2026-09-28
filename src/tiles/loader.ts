@@ -205,9 +205,24 @@ export class TileLoader {
           // same tile; asking again only doubles the traffic it is already
           // failing to carry.
           timeoutMs: this.monitor.profile.timeoutMs,
-          // The fallback chain is the retry. Retrying a dead host wastes a slot
-          // that a different provider could have used.
-          retries: 0,
+          /*
+           * A chain is its own retry; a lone URL has nothing to fall through
+           * to.
+           *
+           * It used to be zero either way, because imagery always came with a
+           * second provider behind it. It no longer does — mixing two
+           * providers inside one view is what made the ground look like a
+           * patchwork of different planets — so for those requests a single
+           * dropped response costs the tile a node-level backoff of forty-five
+           * frames and upwards, with the refinement waiting on it stalled for
+           * all of it. One immediate retry absorbs the blip. A second would be
+           * asking a host that has now failed twice, which is what the backoff
+           * is for.
+           *
+           * Nothing is retried that should not be: `fetchWithRetry` throws a
+           * 404 straight back rather than asking again.
+           */
+          retries: entry.urls.length > 1 ? 0 : 1,
           signal: entry.controller.signal,
           headers: { Accept: 'image/*' },
         });

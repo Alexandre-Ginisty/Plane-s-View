@@ -1,15 +1,15 @@
 /**
  * What the relief setting actually buys, measured on a real mesh.
  *
- * The constants test next door says the numbers differ; this says the mesh
- * differs, and by how much. Both halves matter, because the expensive half of
- * this change is not the exaggeration — it is the vertex count, and a setting
- * that quadruples the work per tile has to be looked at rather than assumed.
+ * The constants test next door says what the numbers are; this says what the
+ * mesh does with them. The expensive half of the setting is not the
+ * exaggeration — it is the vertex count, and a density that quadruples the
+ * work per tile has to be looked at rather than assumed.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { RELIEF } from '@/render/globe/constants';
+import { RELIEF, meshResolutionFor } from '@/render/globe/constants';
 import type { BuildTileRequest } from '../protocol';
 import { buildTileMesh } from './mesh';
 import type { Heightmap } from './heightmap';
@@ -55,35 +55,28 @@ function relief(heights: Float32Array): number {
   return hi - lo;
 }
 
-describe('the boosted mesh', () => {
+describe('the terrain mesh', () => {
   const map = alps();
-  const standard = buildTileMesh(request(RELIEF.standard.nearResolution, 1), map);
-  const boosted = buildTileMesh(
-    request(RELIEF.boosted.nearResolution, RELIEF.boosted.exaggeration),
-    map,
-  );
+  const near = meshResolutionFor(12);
+  const built = buildTileMesh(request(near, RELIEF.exaggeration), map);
+  const flat = buildTileMesh(request(near, 1), map);
 
-  it('keeps detail the standard mesh drops', () => {
+  it('keeps detail a 64-quad mesh drops', () => {
     /*
      * The honest half of the setting. Both meshes are built from the same
-     * downloaded heightmap; the standard one samples 65 of its 256 rows and
-     * the boosted one 129, so the fine structure on the ridge survives in one
-     * and is aliased away in the other.
+     * downloaded heightmap; a 64-quad mesh samples 65 of its 256 rows and the
+     * one this app builds near the ground samples 129, so the fine structure
+     * on the ridge survives in one and is aliased away in the other.
      *
      * Compared as relief *per unit of exaggeration*, or this would just be
      * measuring the stretch.
      */
-    const standardRelief = relief(standard.heights);
-    const boostedRelief = relief(boosted.heights) / RELIEF.boosted.exaggeration;
-    expect(boostedRelief).toBeGreaterThan(standardRelief);
+    const coarse = buildTileMesh(request(64, 1), map);
+    expect(relief(built.heights) / RELIEF.exaggeration).toBeGreaterThan(relief(coarse.heights));
   });
 
   it('stretches the terrain by the stated factor and no more', () => {
-    const flat = buildTileMesh(request(RELIEF.boosted.nearResolution, 1), map);
-    expect(relief(boosted.heights) / relief(flat.heights)).toBeCloseTo(
-      RELIEF.boosted.exaggeration,
-      3,
-    );
+    expect(relief(built.heights) / relief(flat.heights)).toBeCloseTo(RELIEF.exaggeration, 3);
   });
 
   it('bakes the exaggeration into the heights the rest of the app reads', () => {
@@ -96,18 +89,18 @@ describe('the boosted mesh', () => {
      * positions, all three would be measured against an invisible true-scale
      * surface and aeroplanes would sink into the hills.
      */
-    const flat = buildTileMesh(request(RELIEF.boosted.nearResolution, 1), map);
-    let peakBoosted = -Infinity;
+    let peakBuilt = -Infinity;
     let peakFlat = -Infinity;
-    for (const h of boosted.heights) peakBoosted = Math.max(peakBoosted, h);
+    for (const h of built.heights) peakBuilt = Math.max(peakBuilt, h);
     for (const h of flat.heights) peakFlat = Math.max(peakFlat, h);
-    expect(peakBoosted / peakFlat).toBeCloseTo(RELIEF.boosted.exaggeration, 2);
+    expect(peakBuilt / peakFlat).toBeCloseTo(RELIEF.exaggeration, 2);
   });
 
-  it('costs about four times the vertices, and not more', () => {
-    // The price. Stated here so that raising the resolution again is a
-    // decision taken with the number in front of you rather than a nudge.
-    const ratio = boosted.positions.length / standard.positions.length;
+  it('costs about four times the vertices of a 64-quad mesh, and not more', () => {
+    // The price. Stated here so that raising the density again is a decision
+    // taken with the number in front of you rather than a nudge.
+    const coarse = buildTileMesh(request(64, 1), map);
+    const ratio = built.positions.length / coarse.positions.length;
     expect(ratio).toBeGreaterThan(3.5);
     expect(ratio).toBeLessThan(4.3);
   });

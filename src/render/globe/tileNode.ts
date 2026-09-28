@@ -181,8 +181,29 @@ export class TileNode {
     this.lodRadius = Math.sqrt(flatSq);
   }
 
+  /**
+   * Ready to be drawn — and imagery counts, not just geometry.
+   *
+   * It used to be `geometry !== null`, and that one omission is what made the
+   * ground arrive as a patchwork. Geometry is cheap (one z15 heightmap serves
+   * sixteen tiles, usually from cache) so a quad went ready almost at once,
+   * was drawn stretching its parent's imagery, and then each of its four tiles
+   * sharpened whenever its own texture happened to land. Neighbours refined on
+   * different frames, so at any moment the view was a grid of sharp and blurry
+   * rectangles with hard edges between them — a tile boundary, which is what
+   * it was reported as.
+   *
+   * Waiting costs one round trip, and both resources are requested in the same
+   * `ensureContent` call, so it is the *same* round trip: the quad simply
+   * appears when it is finished instead of in two instalments.
+   *
+   * `exhausted` counts as resolved. It means the layer has no tile here at all
+   * — past its maximum zoom, or given up on after the retry budget — so the
+   * tile will inherit for ever, and treating that as "not ready" would stop
+   * refinement dead at the edge of the imagery's coverage.
+   */
   get contentReady(): boolean {
-    return this.geometry !== null;
+    return this.geometry !== null && (this.texture !== null || this.textureState === 'exhausted');
   }
 
   /** Nearest ancestor (or self) holding a real texture. */
