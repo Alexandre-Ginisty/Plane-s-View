@@ -21,7 +21,7 @@ export const TRAIL_SOURCE = 'trail';
 export const ROUTE_SOURCE = 'route';
 export const AIRCRAFT_ICON = 'aircraft-icon';
 
-/** Half-width of the click hit box, pixels. Icons are ~14 px across. */
+/** Half-width of the click hit box, pixels. Icons are ~18 px across. */
 export const CLICK_TOLERANCE_PX = 10;
 
 /**
@@ -110,7 +110,7 @@ export const AIRCRAFT_LAYERS: LayerSpecification[] = [
       'icon-rotation-alignment': 'map',
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
-      'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.22, 7, 0.32, 12, 0.45],
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.27, 7, 0.4, 12, 0.55],
     },
     paint: {
       /*
@@ -141,7 +141,7 @@ export const AIRCRAFT_LAYERS: LayerSpecification[] = [
       ],
       'icon-opacity': ['case', ['get', 'stale'], 0.45, 1],
       'icon-halo-color': '#000',
-      'icon-halo-width': 0.6,
+      'icon-halo-width': 1,
     },
   },
 ];

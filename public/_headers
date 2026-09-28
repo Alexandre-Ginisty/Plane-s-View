@@ -27,6 +27,10 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+# Natural Earth borders and place names: static, replaced only by a deploy.
+/map/*
+  Cache-Control: public, max-age=604800
+
 # Converted airframes: large, and replaced only by a new deploy.
 /models/*
   Cache-Control: public, max-age=604800

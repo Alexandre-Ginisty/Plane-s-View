@@ -31,12 +31,19 @@ import { registry } from '@/data/meta/registry';
 import { DEFAULT_IMAGERY, imageryById, type ImagerySource } from '@/tiles/sources';
 import { SelectionMap } from '@/map2d/map';
 import { flightRegime } from '@/state/regime';
+import {
+  PhaseTracker,
+  secondsToTouchdown,
+  type FlightPhase,
+  type PhaseInput,
+} from '@/state/phase';
 import { TrafficStore, type SampledAircraft } from '@/state/traffic';
 import { app } from '@/state/appStore.svelte';
 import { ConnectionSupervisor } from './connection';
 import { FALLBACK_VIEW, initialView } from './geolocate';
 import { PovSession } from './povSession';
 import { findRandomAircraft } from './shuffle';
+import { CATCH_LABELS, acceptsForCatch, pickNearby, type CatchKind } from './catch';
 import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
@@ -44,6 +51,39 @@ import { publishTelemetry } from './telemetry';
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
+
+/**
+ * The view the auto camera picks for each moment worth one.
+ *
+ * Cockpit for the ground roll and the final approach, because the runway
+ * rushing at the windscreen is the whole event. The wing for the initial
+ * climb, because the moment after liftoff is best seen from outside: the
+ * ground falling away under the aircraft, and the gear coming up.
+ */
+const DIRECTED_VIEWS: Partial<Record<FlightPhase, CameraMode>> = {
+  takeoff: 'cockpit',
+  departure: 'wing',
+  final: 'cockpit',
+  rollout: 'cockpit',
+};
+
+/** Whole-chain failures in a row before the user is told the feed is down. */
+const FEED_FAILURES_BEFORE_NOTICE = 3;
+
+/**
+ * Say what a feed error means rather than what the browser called it.
+ *
+ * "Failed to fetch" (Chrome) and "Load failed" (Safari) are the same thing:
+ * no response arrived at all. Naming that is more useful than the raw text.
+ */
+function describeFeedError(message: string): string {
+  if (/failed to fetch|load failed|networkerror/i.test(message)) return 'no response';
+  if (/exceeded \d+ ms|timed out/i.test(message)) return 'timed out';
+  const status = /HTTP (\d{3})/.exec(message)?.[1];
+  if (status === '429') return 'rate limited';
+  if (status) return `HTTP ${status}`;
+  return message;
+}
 
 export class Orchestrator {
   private readonly origin = new FloatingOrigin(50_000);
@@ -77,6 +117,21 @@ export class Orchestrator {
 
   /** Held-fix state for the cockpit view, across feed gaps. */
   private readonly povSession = new PovSession();
+
+  /** Phase of the aircraft being flown, and which aircraft that is. */
+  private readonly phaseTracker = new PhaseTracker();
+  private phaseHex: string | null = null;
+  private phaseInput: PhaseInput | null = null;
+  private phaseEventId = 0;
+  /** The view the user chose, restored when the auto camera lets go. */
+  private userCameraMode: CameraMode = 'cockpit';
+  /** True while the auto camera is holding the view. */
+  private directing = false;
+  /**
+   * A phase in which the user took the camera back. The auto camera stays
+   * out of it until the phase changes, rather than fighting them every frame.
+   */
+  private directorSuppressedFor: FlightPhase | null = null;
   /** Newest "take me somewhere else" search; older ones land nowhere. */
   private shuffleToken = 0;
 
@@ -102,7 +157,11 @@ export class Orchestrator {
       onHealth: (health) => {
         app.providers = health;
       },
-      onAllFailed: (errors) => {
+      onAllFailed: (errors, consecutive) => {
+        // One failed cycle is invisible: every aircraft is dead-reckoned
+        // between fixes, and the next cycle usually succeeds. Only a run of
+        // them is an outage worth interrupting someone for.
+        if (consecutive < FEED_FAILURES_BEFORE_NOTICE) return;
         // When the link itself is down, naming four providers and their
         // individual timeouts is noise dressed up as diagnostics — the user
         // already has an offline notice and none of those four is the problem.
@@ -110,8 +169,10 @@ export class Orchestrator {
           app.notify('Live traffic is paused until the connection returns.', 'warn', 8000);
           return;
         }
-        const detail = [...errors.entries()].map(([id, e]) => `${id}: ${e}`).join(' | ');
-        app.notify(`No traffic feed reachable. ${detail}`, 'error', 10_000);
+        const detail = [...errors.entries()]
+          .map(([id, e]) => `${id}: ${describeFeedError(e)}`)
+          .join(' | ');
+        app.notify(`No traffic feed reachable — retrying. ${detail}`, 'error', 10_000);
       },
     });
   }
@@ -236,6 +297,7 @@ export class Orchestrator {
       pov.setViewport(radiansPerPixel);
 
       pov.update(engine.camera, flying, dt, (lat, lon) => globe.sampleHeight(lat, lon));
+      this.trackPhase(flying, dt, globe.sampleHeight(flying.lat, flying.lon));
       this.applySunlight(flying.lat, flying.lon);
       this.maybePrefetch(dt, flying);
       this.maybeFollow(dt, flying.hex);
@@ -361,6 +423,62 @@ export class Orchestrator {
       .catch(() => undefined);
   }
 
+  /**
+   * Classify the flown aircraft's phase, announce liftoff and touchdown, and
+   * let the auto camera react. Runs every frame so the events land on the
+   * frame they happen; the HUD only reads the result at 10 Hz.
+   */
+  private trackPhase(flying: SampledAircraft, dt: number, groundM: number): void {
+    if (this.phaseHex !== flying.hex) {
+      this.phaseTracker.reset();
+      this.phaseHex = flying.hex;
+      this.directorSuppressedFor = null;
+    }
+
+    const input: PhaseInput = {
+      onGround: flying.latest.onGround === true,
+      groundSpeedKt: flying.groundSpeedKt,
+      verticalRateFpm: flying.verticalRateFpm,
+      aglFt: Number.isFinite(groundM) ? flying.altFt - groundM / FEET_TO_METRES : Number.NaN,
+      altFt: flying.altFt,
+    };
+    this.phaseInput = input;
+
+    const { phase, event } = this.phaseTracker.update(input, dt);
+    if (event) app.phaseEvent = { kind: event, id: ++this.phaseEventId, at: Date.now() };
+    this.direct(phase);
+  }
+
+  /** Hold the directed view for this phase, or hand the camera back. */
+  private direct(phase: FlightPhase): void {
+    if (this.directorSuppressedFor !== null && this.directorSuppressedFor !== phase) {
+      this.directorSuppressedFor = null;
+    }
+    const want = app.autoCamera && this.directorSuppressedFor === null ? DIRECTED_VIEWS[phase] : undefined;
+
+    if (want) {
+      if (!this.directing) {
+        this.userCameraMode = app.cameraMode;
+        this.directing = true;
+      }
+      if (app.cameraMode !== want) this.applyCameraMode(want);
+    } else if (this.directing) {
+      this.directing = false;
+      if (this.directorSuppressedFor === null) this.applyCameraMode(this.userCameraMode);
+    }
+  }
+
+  private resetPhase(): void {
+    this.phaseTracker.reset();
+    this.phaseHex = null;
+    this.phaseInput = null;
+    this.directing = false;
+    this.directorSuppressedFor = null;
+    app.phase = null;
+    app.touchdownInS = null;
+    app.phaseEvent = null;
+  }
+
   private publish(dt: number, selected: SampledAircraft | null, tracked: number): void {
     this.uiAccumulator += dt;
     if (this.uiAccumulator < 1 / UI_REFRESH_HZ) return;
@@ -372,6 +490,10 @@ export class Orchestrator {
 
     app.selected = selected;
     if (this.pov) app.viewHeadingDeg = this.pov.viewHeadingDeg;
+    if (app.view === 'pov') {
+      app.phase = this.phaseTracker.phase;
+      app.touchdownInS = this.phaseInput ? secondsToTouchdown(this.phaseInput) : null;
+    }
     publishTelemetry({
       engine,
       globeStats: globe.getStats(),
@@ -427,6 +549,7 @@ export class Orchestrator {
     }
 
     this.pov?.reset();
+    this.resetPhase();
     // `exitPov` suspends the graph rather than tearing it down, so the setting
     // survives a trip back to the map and stepping into the next aircraft is
     // not unexpectedly silent.
@@ -454,6 +577,7 @@ export class Orchestrator {
 
     app.view = 'pov';
     app.cameraMode = this.pov?.state.mode ?? 'cockpit';
+    this.userCameraMode = app.cameraMode;
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
   }
 
@@ -510,6 +634,9 @@ export class Orchestrator {
     // seconds after the user asked to go back to the map is not a feature.
     this.shuffleToken++;
     app.view = 'map';
+    // Give back the view the user chose, not the one the auto camera held.
+    if (this.directing) this.applyCameraMode(this.userCameraMode);
+    this.resetPhase();
     this.pov?.reset();
     this.povSession.reset();
     // Nothing is being flown any more, so nothing should be heard. The setting
@@ -521,9 +648,58 @@ export class Orchestrator {
     this.map?.resize();
   }
 
+  /** The user choosing a view. Also takes it back from the auto camera. */
   setCameraMode(mode: CameraMode): void {
+    this.userCameraMode = mode;
+    if (this.directing) this.directorSuppressedFor = this.phaseTracker.phase;
+    this.applyCameraMode(mode);
+  }
+
+  private applyCameraMode(mode: CameraMode): void {
     this.pov?.setMode(mode);
     app.cameraMode = mode;
+  }
+
+  /**
+   * Step into an aircraft that is landing or taking off right now.
+   *
+   * Nearby first — see `./catch`. Shares the shuffle's token and busy flag,
+   * because it is the same kind of action: a search that may take a few
+   * seconds and that any newer choice should silently cancel.
+   */
+  async catchAircraft(kind: CatchKind): Promise<void> {
+    if (app.shuffling) return;
+    const label = CATCH_LABELS[kind].noun;
+
+    const near = app.selected ?? this.map?.center ?? FALLBACK_VIEW;
+    const local = pickNearby(kind, this.lastSamples, near, app.view === 'pov' ? app.selectedHex : null);
+    if (local) {
+      await this.select(local.hex);
+      this.enterPov();
+      return;
+    }
+
+    app.shuffling = true;
+    const token = ++this.shuffleToken;
+    try {
+      const found = await findRandomAircraft((query, signal) => this.client.fetchOnce(query, signal), {
+        excludeHex: app.selectedHex,
+        accept: acceptsForCatch(kind),
+      });
+      if (token !== this.shuffleToken) return;
+      if (!found) {
+        app.notify(`No ${label} found in the busy airspaces right now — try again in a minute.`, 'warn');
+        return;
+      }
+      this.traffic.ingestOne(found.aircraft);
+      this.query = { lat: found.aircraft.lat, lon: found.aircraft.lon, radiusNm: 80 };
+      await this.select(found.aircraft.hex);
+      if (token !== this.shuffleToken) return;
+      this.enterPov();
+      app.notify(`Caught a ${label} over ${found.region.name}.`, 'info', 4500);
+    } finally {
+      app.shuffling = false;
+    }
   }
 
   /**
@@ -540,7 +716,7 @@ export class Orchestrator {
     }
   }
 
-  /** Borders, place names and roads over the selection map. */
+  /** Borders and place names over the selection map. */
   setLabels(visible: boolean): void {
     this.map?.setLabels(visible);
     app.showLabels = visible;

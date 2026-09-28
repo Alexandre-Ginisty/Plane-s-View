@@ -3,7 +3,8 @@
   "entry": [
     "src/workers/**/*.worker.ts",
     "functions/**/*.ts",
-    "tools/**/convert.mjs"
+    "tools/**/convert.mjs",
+    "tools/map/build-places.mjs"
   ],
   "project": [
     "src/**/*.{ts,svelte}",

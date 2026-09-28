@@ -41,8 +41,12 @@ export interface TrafficClientEvents {
   onSnapshot(snapshot: TrafficSnapshot): void;
   onHints?(hints: InlineAirframeHint[]): void;
   onHealth?(health: ProviderHealth[]): void;
-  /** Fired when every provider in the chain failed. */
-  onAllFailed?(errors: Map<ProviderId, string>): void;
+  /**
+   * Fired when every provider in the chain failed. `consecutive` counts the
+   * cycles in a row that have done so, so a caller can tell a blip from an
+   * outage.
+   */
+  onAllFailed?(errors: Map<ProviderId, string>, consecutive: number): void;
 }
 
 interface ProviderRuntime {
@@ -150,7 +154,7 @@ export class TrafficClient {
     if (errors.size > 0) {
       this.consecutiveTotalFailures++;
       this.emitHealth();
-      this.events.onAllFailed?.(errors);
+      this.events.onAllFailed?.(errors, this.consecutiveTotalFailures);
     }
     return null;
   }
@@ -337,7 +341,7 @@ export class TrafficClient {
       // Only a real attempt can fail — see `fetchOnce`.
       this.consecutiveTotalFailures++;
       this.emitHealth();
-      this.events.onAllFailed?.(errors);
+      this.events.onAllFailed?.(errors, this.consecutiveTotalFailures);
     }
   }
 

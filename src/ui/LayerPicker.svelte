@@ -48,7 +48,7 @@
         class:active={app.showLabels}
         onclick={() => orchestrator.setLabels(!app.showLabels)}
       >
-        <span class="name">Countries, cities &amp; roads</span>
+        <span class="name">Countries &amp; cities</span>
         <span class="zoom">{app.showLabels ? 'on' : 'off'}</span>
         <span class="desc">Borders and place names over the imagery, loaded with the view.</span>
       </button>

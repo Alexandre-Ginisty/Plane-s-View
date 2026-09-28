@@ -51,6 +51,8 @@ export interface AdsbProvider {
 }
 
 const TIMEOUT_MS = 9000;
+/** Pause before retrying a request that got no response at all. */
+const NETWORK_RETRY_MS = 600;
 
 /** readsb-family providers differ only in how they spell the URL. */
 function readsbProvider(opts: {
@@ -67,13 +69,34 @@ function readsbProvider(opts: {
 }): AdsbProvider {
   const maxRadiusNm = opts.maxRadiusNm ?? 250;
 
-  const run = async (path: string, signal?: AbortSignal): Promise<ProviderResult> => {
+  const once = async (path: string, signal?: AbortSignal): Promise<ProviderResult> => {
     const body = await fetchJson<ReadsbResponse>(relayUrl(opts.target, path), {
       timeoutMs: TIMEOUT_MS,
       retries: 0, // the chain is the retry; don't stall it on one slow provider
       signal,
     });
     return normalizeReadsbResponse(body, opts.id, Date.now());
+  };
+
+  /*
+   * One quick second try, for a network error only.
+   *
+   * `fetch` rejects with a bare TypeError ("Failed to fetch") when no
+   * response arrived at all: Wi-Fi or VPN switching networks, a laptop
+   * waking, a dropped keep-alive socket. Those last a fraction of a second,
+   * and every provider hits the same one at the same moment, so without this
+   * a single blip failed the whole chain. An HTTP error is a real answer
+   * and is not retried here: a 429 in particular must reach the breaker.
+   */
+  const run = async (path: string, signal?: AbortSignal): Promise<ProviderResult> => {
+    try {
+      return await once(path, signal);
+    } catch (err) {
+      if (!(err instanceof TypeError) || signal?.aborted) throw err;
+      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_MS * (0.5 + Math.random())));
+      if (signal?.aborted) throw err;
+      return once(path, signal);
+    }
   };
 
   const provider: AdsbProvider = {

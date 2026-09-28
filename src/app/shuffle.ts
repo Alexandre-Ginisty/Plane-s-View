@@ -109,10 +109,22 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
   return out;
 }
 
+/**
+ * A position and a direction: the least the camera needs to fly an aircraft.
+ *
+ * Track is what the whole body frame is built from. Without it the aircraft
+ * would be drawn, and flown, pointing due north regardless of where it is
+ * going.
+ */
+export function hasUsableFix(a: AircraftState): boolean {
+  if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon)) return false;
+  return a.trackDeg !== null || a.headingDeg !== null;
+}
+
 /** Airborne, moving, and carrying enough data to be worth flying. */
 export function isWorthFlying(a: AircraftState): boolean {
   if (a.onGround) return false;
-  if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon)) return false;
+  if (!hasUsableFix(a)) return false;
 
   const alt = a.altGeomFt ?? a.altBaroFt;
   if (alt === null || alt < MIN_ALT_FT) return false;
@@ -120,12 +132,7 @@ export function isWorthFlying(a: AircraftState): boolean {
   // A null ground speed is missing data, not a stationary aircraft — but it
   // gives the camera nothing to orient by, so it is still the wrong pick when
   // hundreds of better ones are in the same snapshot.
-  if ((a.groundSpeedKt ?? 0) < MIN_SPEED_KT) return false;
-
-  // Track is what the whole body frame is built from. Without it the aircraft
-  // would be drawn, and flown, pointing due north regardless of where it is
-  // going.
-  return a.trackDeg !== null || a.headingDeg !== null;
+  return (a.groundSpeedKt ?? 0) >= MIN_SPEED_KT;
 }
 
 /**
@@ -143,9 +150,12 @@ export async function findRandomAircraft(
     random?: () => number;
     /** Excluded from the result — normally the aircraft being flown now. */
     excludeHex?: string | null;
+    /** What counts as a candidate. Defaults to `isWorthFlying`. */
+    accept?: (a: AircraftState) => boolean;
   } = {},
 ): Promise<ShuffleResult | null> {
   const random = options.random ?? Math.random;
+  const accept = options.accept ?? isWorthFlying;
   const order = shuffled(REGIONS, random).slice(0, MAX_REGIONS_TRIED);
 
   for (const region of order) {
@@ -163,7 +173,7 @@ export async function findRandomAircraft(
     }
 
     const candidates = (snapshot?.aircraft ?? []).filter(
-      (a) => a.hex !== options.excludeHex && isWorthFlying(a),
+      (a) => a.hex !== options.excludeHex && accept(a),
     );
     if (candidates.length === 0) continue;
 

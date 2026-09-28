@@ -12,6 +12,7 @@
   import { app } from '@/state/appStore.svelte';
   import { resolveTheme, watchSystemTheme } from '@/ui/theme';
   import { CAMERA_MODES } from '@/render/pov';
+  import { CATCH_LABELS } from '@/app/catch';
   import AircraftPanel from '@/ui/AircraftPanel.svelte';
   import Landing from '@/ui/intro/Landing.svelte';
   import ThemeToggle from '@/ui/ThemeToggle.svelte';
@@ -41,6 +42,50 @@
    * that.
    */
   let showLanding = $state(!new URLSearchParams(location.search).has('go'));
+
+  /*
+   * Cinema: nothing on screen but the view.
+   *
+   * The browser's fullscreen is asked for alongside, and where it is refused
+   * or missing (an iPhone has none for a page) the overlays still go, which
+   * is most of what was wanted. Leaving the browser's fullscreen — its own
+   * Esc, or a swipe — leaves cinema too, so the two can never disagree.
+   */
+  let cinemaHint = $state(false);
+  let idle = $state(false);
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let hintTimer: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    if (app.cinema) {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => undefined);
+      }
+      cinemaHint = true;
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => (cinemaHint = false), 2500);
+      wakeCursor();
+    } else {
+      cinemaHint = false;
+      idle = false;
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
+    }
+  });
+
+  onMount(() => {
+    const onFullscreen = (): void => {
+      if (!document.fullscreenElement && app.cinema) app.cinema = false;
+    };
+    document.addEventListener('fullscreenchange', onFullscreen);
+    return () => document.removeEventListener('fullscreenchange', onFullscreen);
+  });
+
+  /** The cursor hides after a moment of stillness in cinema, like a video. */
+  function wakeCursor(): void {
+    idle = false;
+    clearTimeout(idleTimer);
+    if (app.cinema) idleTimer = setTimeout(() => (idle = true), 2000);
+  }
 
   let dragging = false;
   let lastX = 0;
@@ -105,7 +150,8 @@
       case 'Escape':
         // The key closes whatever is on top before it changes the view, so it
         // never both dismisses a panel and ejects the user in one press.
-        if (app.showLegend) app.showLegend = false;
+        if (app.cinema) app.cinema = false;
+        else if (app.showLegend) app.showLegend = false;
         else if (app.view === 'pov') o.exitPov();
         else if (app.selectedHex) void o.select(null);
         break;
@@ -124,6 +170,23 @@
       case 'H':
       case '?':
         app.showLegend = !app.showLegend;
+        break;
+      case 'f':
+      case 'F':
+        app.cinema = !app.cinema;
+        break;
+      case 'a':
+      case 'A':
+        app.setAutoCamera(!app.autoCamera);
+        app.notify(app.autoCamera ? 'Auto camera on for takeoffs and landings.' : 'Auto camera off.', 'info', 2500);
+        break;
+      case 'l':
+      case 'L':
+        void o.catchAircraft('landing');
+        break;
+      case 't':
+      case 'T':
+        void o.catchAircraft('takeoff');
         break;
       default: {
         // 1-5 select a camera view while flying.
@@ -172,7 +235,12 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<main class:pov={app.view === 'pov'}>
+<main
+  class:pov={app.view === 'pov'}
+  class:cinema={app.cinema}
+  class:idle={app.cinema && idle}
+  onpointermove={wakeCursor}
+>
   <div class="surface map" bind:this={mapContainer} aria-hidden={app.view === 'pov'}></div>
 
   <canvas
@@ -214,21 +282,77 @@
         <button class="chip" onclick={() => (app.showLegend = !app.showLegend)}>
           Key <span class="kbd">H</span>
         </button>
+        <span class="catch">
+          <button
+            class="chip"
+            disabled={app.shuffling}
+            onclick={() => void orchestrator?.catchAircraft('landing')}
+            title="Step into an aircraft on final approach (L)"
+          >{CATCH_LABELS.landing.verb}</button>
+          <button
+            class="chip"
+            disabled={app.shuffling}
+            onclick={() => void orchestrator?.catchAircraft('takeoff')}
+            title="Step into an aircraft taking off (T)"
+          >{CATCH_LABELS.takeoff.verb}</button>
+        </span>
       </header>
-      <AircraftPanel {orchestrator} />
-    {:else}
+      {#if !app.cinema}<AircraftPanel {orchestrator} />{/if}
+    {:else if !app.cinema}
       <Hud {orchestrator} />
     {/if}
 
-    <Diagnostics />
-    <Legend />
-    <Notices />
-    <StatusBar />
+    {#if !app.cinema}
+      <Diagnostics />
+      <Legend />
+      <Notices />
+      <StatusBar />
+    {:else if cinemaHint}
+      <p class="cinema-hint" role="status">Press <span class="kbd">F</span> or <span class="kbd">Esc</span> to leave fullscreen</p>
+    {/if}
   {/if}
 </main>
 
 <style>
   main { position: relative; width: 100%; height: 100%; overflow: hidden; }
+  main.idle, main.idle :global(canvas) { cursor: none; }
+
+  main.cinema .toolbar,
+  main.cinema .brackets { display: none; }
+
+  .cinema-hint {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    margin: 0;
+    padding: 6px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    background: rgba(3, 8, 14, 0.55);
+    border: 1px solid var(--border);
+    pointer-events: none;
+    animation: hint 2.5s ease-out forwards;
+  }
+  .cinema-hint .kbd {
+    font-size: 9px;
+    padding: 1px 4px;
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  @keyframes hint {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .catch { display: flex; gap: 4px; margin-left: 6px; }
+  .catch .chip:disabled { opacity: 0.6; cursor: progress; }
+  @media (max-width: 720px) {
+    .catch { display: none; }
+  }
 
   .boot.hidden { opacity: 0; pointer-events: none; }
 

@@ -18,6 +18,29 @@ import type { CameraMode } from '@/render/pov';
 import { applyTheme, saveTheme, type Theme } from '@/ui/theme';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
 import type { SampledAircraft } from '@/state/traffic';
+import type { FlightPhase, PhaseEvent } from '@/state/phase';
+
+/**
+ * Read a boolean preference, falling back when storage is unavailable.
+ * `localStorage` throws in a locked-down browser and is empty in a private
+ * window; either way the default is the right answer.
+ */
+function storedFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function storeFlag(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // Not remembered next time; still applied now.
+  }
+}
 
 type ViewMode = 'map' | 'pov';
 
@@ -54,6 +77,33 @@ class AppStore {
   /** Live state of the selected aircraft, refreshed every frame in POV. */
   selected = $state<SampledAircraft | null>(null);
 
+  /** Phase of flight of the aircraft being flown. See `@/state/phase`. */
+  phase = $state<FlightPhase | null>(null);
+  /** Seconds to touchdown at the present sink rate, when descending low. */
+  touchdownInS = $state<number | null>(null);
+  /**
+   * The latest liftoff or touchdown. `id` changes on every event, so the HUD
+   * can key its caption on it and replay the animation for the next one.
+   */
+  phaseEvent = $state<{ kind: PhaseEvent; id: number; at: number } | null>(null);
+
+  /**
+   * Let the camera pick the view for takeoffs and landings. On by default and
+   * remembered: it only ever acts during those two moments, and hands the
+   * view straight back afterwards.
+   */
+  autoCamera = $state(storedFlag('planesview.autocam', true));
+  setAutoCamera(on: boolean): void {
+    this.autoCamera = on;
+    storeFlag('planesview.autocam', on);
+  }
+
+  /**
+   * Nothing but the picture: every overlay hidden, and the browser fullscreen
+   * where it allows it. See `App.svelte`.
+   */
+  cinema = $state(false);
+
   /**
    * Dark or daylight. Seeded before the first paint — see `ui/theme.ts`.
    *
@@ -83,7 +133,7 @@ class AppStore {
    */
   viewHeadingDeg = $state(0);
   imageryId = $state('esri');
-  /** Borders, place names and roads drawn over the selection map. */
+  /** Borders and place names drawn over the selection map. */
   showLabels = $state(true);
 
   /**

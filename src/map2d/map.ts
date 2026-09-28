@@ -6,11 +6,11 @@
  * north up, no perspective, everything the same size — and a globe is a bad
  * instrument for it. The 3D view begins once a target is chosen.
  *
- * No text layers are used anywhere. MapLibre needs a glyph server for labels,
- * every free one has usage limits, and this project does not take a
- * dependency it cannot guarantee. Place names and borders come as a
- * pre-rendered raster overlay instead (`LABEL_OVERLAYS`), streamed tile by
- * tile like the imagery under it.
+ * No MapLibre text layers are used anywhere. MapLibre needs a glyph server for
+ * labels, every free one has usage limits, and this project does not take a
+ * dependency it cannot guarantee. Place names are drawn by `PlaceLabels`
+ * instead, and borders are an ordinary line layer; both read Natural Earth
+ * data served from this origin.
  */
 
 import {
@@ -27,7 +27,7 @@ import {
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureCollection, LineString, Point } from 'geojson';
 
-import { DEFAULT_IMAGERY, LABEL_OVERLAYS, type ImagerySource } from '@/tiles/sources';
+import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
 import {
   AIRCRAFT_ICON,
   AIRCRAFT_LAYERS,
@@ -38,6 +38,7 @@ import {
   TRAIL_SOURCE,
   createAircraftIcon,
 } from './style';
+import { PlaceLabels } from './labels';
 import { METRES_TO_NM, haversineMetres } from '@/core/math/geo';
 import type { SampledAircraft } from '@/state/traffic';
 import type { FlightRoute } from '@/data/types';
@@ -58,6 +59,7 @@ export class SelectionMap {
   private selectedHex: string | null = null;
   private imagery: ImagerySource = DEFAULT_IMAGERY;
   private labelsVisible = true;
+  private labels: PlaceLabels | null = null;
   /**
    * Fetch a source, or null while the style is still parsing.
    *
@@ -111,18 +113,7 @@ export class SelectionMap {
             maxzoom: this.imagery.maxZoom,
             attribution: this.imagery.attribution,
           },
-          ...Object.fromEntries(
-            LABEL_OVERLAYS.map((o) => [
-              o.id,
-              {
-                type: 'raster' as const,
-                tiles: [o.template],
-                tileSize: 256,
-                maxzoom: o.maxZoom,
-                attribution: o.attribution,
-              },
-            ]),
-          ),
+          borders: { type: 'geojson', data: '/map/borders.json' },
           [ROUTE_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [TRAIL_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
           [AIRCRAFT_SOURCE]: { type: 'geojson', data: EMPTY_COLLECTION },
@@ -134,6 +125,10 @@ export class SelectionMap {
             type: 'raster',
             source: 'basemap',
             paint: {
+              // Toned down so the traffic, not the ground, is what the eye
+              // lands on.
+              'raster-saturation': -0.25,
+              'raster-brightness-max': 0.85,
               /*
                * Longer than MapLibre's 300 ms default.
                *
@@ -147,18 +142,30 @@ export class SelectionMap {
               'raster-fade-duration': 500,
             },
           },
-          // Borders and names over the imagery, under the traffic.
-          ...LABEL_OVERLAYS.map((o) => ({
-            id: o.id,
-            type: 'raster' as const,
-            source: o.id,
-            layout: { visibility: this.labelsVisible ? ('visible' as const) : ('none' as const) },
-            paint: { 'raster-fade-duration': 500 },
-          })),
+          // Borders over the imagery, under the traffic. Hairline and faint:
+          // orientation, not decoration.
+          {
+            id: 'borders',
+            type: 'line',
+            source: 'borders',
+            layout: {
+              visibility: this.labelsVisible ? 'visible' : 'none',
+              'line-join': 'round',
+            },
+            paint: {
+              'line-color': '#e8edf2',
+              'line-opacity': 0.35,
+              'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.5, 8, 1.1],
+            },
+          },
           ...AIRCRAFT_LAYERS,
         ],
       },
-      attributionControl: { compact: true },
+      attributionControl: {
+        compact: true,
+        // GeoNames is CC BY: credit is a condition of use, not a courtesy.
+        customAttribution: 'Places © Natural Earth, GeoNames (CC BY 4.0)',
+      },
       /*
        * Keep what has already been downloaded.
        *
@@ -205,6 +212,9 @@ export class SelectionMap {
       if (e.id !== AIRCRAFT_ICON || map.hasImage(AIRCRAFT_ICON)) return;
       map.addImage(AIRCRAFT_ICON, createAircraftIcon(), { sdf: true, pixelRatio: 2 });
     });
+
+    this.labels = new PlaceLabels(map);
+    this.labels.setVisible(this.labelsVisible);
 
     this.attachInteractions(map);
     this.emitMove();
@@ -293,14 +303,13 @@ export class SelectionMap {
     }
   }
 
-  /** Show or hide borders, place names and roads. */
+  /** Show or hide borders and place names. */
   setLabels(visible: boolean): void {
     this.labelsVisible = visible;
     const map = this.map;
     if (!map) return;
-    for (const o of LABEL_OVERLAYS) {
-      if (map.getLayer(o.id)) map.setLayoutProperty(o.id, 'visibility', visible ? 'visible' : 'none');
-    }
+    if (map.getLayer('borders')) map.setLayoutProperty('borders', 'visibility', visible ? 'visible' : 'none');
+    this.labels?.setVisible(visible);
   }
 
   /** Viewport centre and the radius that covers it, for the traffic query. */
@@ -428,6 +437,8 @@ export class SelectionMap {
   dispose(): void {
     // Nulling the map is what disables every other method: they all guard
     // on it, so a separate `disposed` flag would say the same thing twice.
+    this.labels?.dispose();
+    this.labels = null;
     this.map?.remove();
     this.map = null;
   }

@@ -103,52 +103,6 @@ export function imageryById(id: string): ImagerySource | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Reference overlays
-// ---------------------------------------------------------------------------
-
-/**
- * A transparent raster drawn over the imagery: borders, place names, roads.
- *
- * Raster rather than vector on purpose. A vector label layer needs a glyph
- * server, and every free one has usage limits this project will not depend
- * on (see `map2d/map.ts`). Esri's reference layers are pre-rendered labels on
- * transparent tiles, served with `Access-Control-Allow-Origin: *`, and they
- * stream exactly as the imagery beneath them does — only the tiles in view,
- * at the zoom in view, cached by the map and the browser like any other.
- */
-export interface OverlaySource {
-  readonly id: string;
-  readonly label: string;
-  readonly attribution: string;
-  /** Deepest zoom with its own tiles; the map overzooms past it. */
-  readonly maxZoom: number;
-  readonly template: string;
-}
-
-/** Roads and road names. Drawn first, so place names sit on top of them. */
-const esriTransportation: OverlaySource = {
-  id: 'esri-transportation',
-  label: 'Roads',
-  attribution: 'Roads © Esri, HERE, Garmin, © OpenStreetMap contributors',
-  maxZoom: 19,
-  template:
-    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-};
-
-/** Borders, countries, regions, cities, towns and water names. */
-const esriPlaces: OverlaySource = {
-  id: 'esri-places',
-  label: 'Borders & places',
-  attribution: 'Labels © Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community',
-  maxZoom: 19,
-  template:
-    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-};
-
-/** Bottom to top. */
-export const LABEL_OVERLAYS: readonly OverlaySource[] = [esriTransportation, esriPlaces];
-
-// ---------------------------------------------------------------------------
 // Elevation
 // ---------------------------------------------------------------------------
 

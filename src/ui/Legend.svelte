@@ -36,6 +36,10 @@
     { key: 'Wheel', does: 'Zoom the view in and out' },
     { key: `1 – ${CAMERA_MODES.length}`, does: `Switch camera: ${cameraKeys}` },
     { key: 'C', does: 'Re-centre the view straight ahead' },
+    { key: 'L', does: 'Catch a landing: step into an aircraft on final approach' },
+    { key: 'T', does: 'Catch a takeoff: step into an aircraft on the runway or climbing out' },
+    { key: 'A', does: 'Auto camera: pick the view for takeoffs and landings' },
+    { key: 'F', does: 'Fullscreen, with nothing but the view' },
     { key: 'D', does: 'Show the performance and connection counters' },
     { key: 'H', does: 'Show or hide this panel' },
   ];
