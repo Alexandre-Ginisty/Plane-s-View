@@ -22,13 +22,17 @@ import {
   DirectionalLight,
   DoubleSide,
   Group,
+  HemisphereLight,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
   Quaternion,
   Scene,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
+import { prewarm } from './prewarm';
 import { FEET_TO_METRES, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
@@ -42,12 +46,27 @@ import {
   visibleSpinRate,
   type AircraftModel,
   type AirframeShape,
+  shapeFor,
   type Spinner,
 } from './aircraft';
+import { lightSeed, type AircraftLights } from './aircraftLights';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
 import { GROUND_CHECK_CEILING_M, GroundMemory, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
+import { sunTransmittance, type SceneLight } from './sky/model';
+
+/** The lights as the materials were tuned: a midday sun and sky. */
+const NOON_SUN = new Color(0xfff4e0);
+const NOON_SKY = new Color(0x8ea8c4);
+const SUN_INTENSITY = 2.1;
+const AMBIENT_INTENSITY = 1.1;
+/** Normalised sea-level sunlight with the sun high: what `setLight` divides by. */
+const NOON_TINT = (() => {
+  const t = sunTransmittance(0, 60, 1);
+  const max = Math.max(t[0], t[1], t[2]);
+  return [t[0] / max, t[1] / max, t[2] / max] as const;
+})();
 
 /**
  * Height above ground at which the gear comes down, metres.
@@ -58,7 +77,19 @@ import { aircraftFrame } from './pov';
  */
 const GEAR_DOWN_AGL_M = 750;
 
+/*
+ * Night. The sun gone and the sky at its floor, a model lit by those alone is
+ * a black cut-out — and an aeroplane at night is not: the moon, the glow of
+ * the cities under it and its own logo and wing lights all reach it. A cool
+ * light from above and a warm one from below, faded in as the sky darkens.
+ */
+const NIGHT_SKY = new Color(0x8fa6d8);
+const NIGHT_GROUND = new Color(0xc79a6a);
+const NIGHT_INTENSITY = 0.75;
+
 const MODEL_AXIS = new Vector3(0, 1, 0);
+const _lightMatrix = new Matrix4();
+const _scale = new Vector3();
 const _axis = new Vector3();
 const _base = new Quaternion();
 const _spin = new Quaternion();
@@ -74,6 +105,13 @@ interface SpinnerNode {
   bladeMaterial: { opacity: number };
   discMaterial: { opacity: number } | null;
   angle: number;
+  /**
+   * The geometry already lies in its plane of rotation. A converted model's
+   * rotor is authored in place, flat over the mast; only the generated
+   * spinners are built normal to +Y and need standing onto their axis —
+   * doing that to a real rotor stood its disc on edge, blades to the ground.
+   */
+  inPlace: boolean;
 }
 
 export class OwnAircraft {
@@ -118,8 +156,14 @@ export class OwnAircraft {
   private shape: AirframeShape | null = null;
 
   /** Sun, carried in this scene so the model is lit like the terrain. */
-  private readonly sun = new DirectionalLight(0xfff4e0, 2.1);
-  private readonly ambient = new AmbientLight(0x8ea8c4, 1.1);
+  private readonly sun = new DirectionalLight(NOON_SUN, SUN_INTENSITY);
+  private readonly ambient = new AmbientLight(NOON_SKY, AMBIENT_INTENSITY);
+  private readonly nightFill = new HemisphereLight(NIGHT_SKY, NIGHT_GROUND, 0);
+
+  /** Where its navigation lights, beacons and strobes are drawn, with the traffic's. */
+  lights: AircraftLights | null = null;
+  /** To put a downloaded airframe on the GPU before it replaces the stand-in (see `prewarm`). */
+  warm: { renderer: WebGLRenderer; scene: Scene } | null = null;
 
   constructor(private readonly origin: FloatingOrigin) {
     this.scene.add(this.group);
@@ -127,6 +171,7 @@ export class OwnAircraft {
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
     this.scene.add(this.ambient);
+    this.scene.add(this.nightFill);
     this.scene.matrixAutoUpdate = false;
     this.group.matrixAutoUpdate = false;
   }
@@ -165,9 +210,17 @@ export class OwnAircraft {
     this.shape = model.shape;
     this.applyProcedural(model);
 
-    void loadModelFor(typeCode, operator, category).then((loaded) => {
+    void loadModelFor(typeCode, operator, category).then(async (loaded) => {
       // The user may have moved on while it was downloading.
       if (!loaded || this.builtFor !== key) return;
+      if (this.warm) {
+        // Uploaded and compiled while the stand-in is still showing, so the
+        // swap is not a frozen frame.
+        const probe = new Group();
+        for (const part of loaded.parts) probe.add(new Mesh(part.geometry, part.material));
+        await prewarm(this.warm.renderer, probe, this.warm.scene);
+        if (this.builtFor !== key) return;
+      }
       this.applyLoaded(loaded);
     });
   }
@@ -224,6 +277,7 @@ export class OwnAircraft {
         bladeMaterial,
         discMaterial,
         angle: 0,
+        inPlace: false,
       });
     }
 
@@ -275,6 +329,7 @@ export class OwnAircraft {
         bladeMaterial: part.material,
         discMaterial: disc ? (disc.material as MeshBasicMaterial) : null,
         angle: 0,
+        inPlace: true,
       });
       // The blur disc is only ever shown against the blades, so it starts off.
       // `transparent` is already set by the parser — see the note there on why
@@ -312,7 +367,22 @@ export class OwnAircraft {
     // whole scene in the cockpit switched them off, and the traffic outside
     // the windscreen went dark exactly when it was being looked at.
     this.group.visible = visible;
-    if (!visible) return;
+    // From inside, only the lights are drawn: the strobes on the wingtip out of
+    // the window are the aircraft's own.
+    if (!visible) {
+      // Loaded and warmed from inside too, so the first look outside is not a stall.
+      this.ensureModel(typeCode, sample.latest.category, operatorOf(sample.latest.callsign));
+      if (this.lights) {
+        const frame = aircraftFrame(sample, sample.altFt * FEET_TO_METRES);
+        const ecef = geodeticToEcef(sample.lat, sample.lon, sample.altFt * FEET_TO_METRES);
+        const shape = this.shape ?? shapeFor(typeCode, sample.latest.category ?? null);
+        _lightMatrix.makeBasis(frame.right, frame.forward, frame.up);
+        _lightMatrix.setPosition(ecef[0] - this.origin.current[0], ecef[1] - this.origin.current[1], ecef[2] - this.origin.current[2]);
+        _lightMatrix.scale(_scale.setScalar(shape.length));
+        this.lights.add(_lightMatrix, shape, lightSeed(sample.hex), sample.altFt < 10_000);
+      }
+      return;
+    }
 
     this.ensureModel(typeCode, sample.latest.category, operatorOf(sample.latest.callsign));
 
@@ -341,6 +411,10 @@ export class OwnAircraft {
     this.group.matrix.makeBasis(frame.right, frame.forward, frame.up);
     this.group.matrix.setPosition(this.group.position);
     this.group.matrixWorldNeedsUpdate = true;
+    if (this.lights && this.shape) {
+      _lightMatrix.copy(this.group.matrix).scale(_scale.setScalar(this.shape.length));
+      this.lights.add(_lightMatrix, this.shape, lightSeed(sample.hex), sample.altFt < 10_000);
+    }
 
     const regime = flightRegime(sample);
     const gearDown = regime.onGround || altM - terrainM < GEAR_DOWN_AGL_M;
@@ -357,9 +431,10 @@ export class OwnAircraft {
       node.angle += node.direction * visibleSpinRate(rpm) * Math.PI * 2 * dt;
 
       _axis.set(node.axis[0], node.axis[1], node.axis[2]).normalize();
-      // Geometry is built in the plane normal to +Y, so it is first stood onto
-      // its own axis and then turned about it.
-      _base.setFromUnitVectors(MODEL_AXIS, _axis);
+      // Generated geometry is built in the plane normal to +Y, so it is first
+      // stood onto its own axis and then turned about it.
+      if (node.inPlace) _base.identity();
+      else _base.setFromUnitVectors(MODEL_AXIS, _axis);
       _spin.setFromAxisAngle(_axis, node.angle);
       node.blades.quaternion.copy(_spin).multiply(_base);
       node.disc?.quaternion.copy(_base);
@@ -394,6 +469,31 @@ export class OwnAircraft {
    * position: at planetary scale a "far away" light placed once would drift out
    * of alignment as the floating origin moves.
    */
+  /**
+   * Colour and strength of the sun and sky on the models, from the
+   * atmosphere. Relative to the midday values the materials were tuned under:
+   * at noon nothing changes, at sunset the sunlit side turns orange and the
+   * shadow side blue, and at night only a little skylight is left.
+   */
+  setLight(light: SceneLight): void {
+    const noon = NOON_SUN;
+    this.sun.color.setRGB(
+      noon.r * Math.min(1.1, light.sunColor[0] / NOON_TINT[0]),
+      noon.g * Math.min(1.1, light.sunColor[1] / NOON_TINT[1]),
+      noon.b * Math.min(1.1, light.sunColor[2] / NOON_TINT[2]),
+    );
+    this.sun.intensity = SUN_INTENSITY * light.sunStrength;
+    this.ambient.color.setRGB(
+      NOON_SKY.r * (light.skyColor[0] / 0.72),
+      NOON_SKY.g * (light.skyColor[1] / 0.82),
+      NOON_SKY.b * light.skyColor[2],
+    );
+    this.ambient.intensity = AMBIENT_INTENSITY * light.skyStrength;
+    // 0 by day, 1 in full night: the same measure the lights use.
+    const night = Math.min(1, Math.max(0, (0.62 - light.skyStrength) / 0.42));
+    this.nightFill.intensity = NIGHT_INTENSITY * night;
+  }
+
   setSun(direction: Vector3): void {
     this.sun.position.copy(this.group.position).addScaledVector(direction, 4000);
     this.sun.target.position.copy(this.group.position);

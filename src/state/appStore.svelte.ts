@@ -19,6 +19,7 @@ import { applyTheme, saveTheme, type Theme } from '@/ui/theme';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
 import type { SampledAircraft } from '@/state/traffic';
 import type { FlightPhase, PhaseEvent } from '@/state/phase';
+import type { FlightReadout } from '@/sandbox/realFlight';
 
 /**
  * Read a boolean preference, falling back when storage is unavailable.
@@ -59,12 +60,18 @@ interface SandboxState {
   /** 0 while reloading, 1 ready. */
   ready: number;
   lock: string | null;
+  /** 0..1 while the seeker tones up on `lock`, 1 once a missile will guide. */
+  lockLevel: number;
+  /** The key reference card, shown on demand (H). */
+  showKeys: boolean;
   killCam: boolean;
   crashed: boolean;
   /** The last kill or impact, for the centre-screen announcement. */
   banner: { id: number; title: string; detail: string; points: number } | null;
   /** Recent kills, newest first. */
   feed: { id: number; text: string; points: number }[];
+  /** The flight model's systems, or null when the aircraft flies the arcade model. */
+  flight: FlightReadout | null;
 }
 
 /** A place the user marked on the map, to find again from the air. */
@@ -214,6 +221,8 @@ class AppStore {
   }
 
   cameraMode = $state<CameraMode>('cockpit');
+  /** The 3D cockpit (with its own instruments) is on screen. */
+  cockpit3d = $state(false);
   /**
    * Compass bearing the camera is looking along, degrees.
    *
@@ -279,7 +288,6 @@ class AppStore {
   showDiagnostics = $state(false);
   /** The key-and-controls panel. Opened once on a first visit; see `App`. */
   showLegend = $state(false);
-  showLayers = $state(false);
   /** Flight details panel in the cockpit view. */
   showFlightCard = $state(true);
   /**
@@ -307,10 +315,13 @@ class AppStore {
     crashes: 0,
     ready: 1,
     lock: null,
+    lockLevel: 0,
+    showKeys: false,
     killCam: false,
     crashed: false,
     banner: null,
     feed: [],
+    flight: null,
   });
 
   private noticeId = 0;

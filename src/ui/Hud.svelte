@@ -16,7 +16,7 @@
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
   import { profileFor } from '@/net/quality';
-  import { CAMERA_MODES } from '@/render/pov';
+  import { CAMERA_MODES, type CameraGroup } from '@/render/pov';
   import { PHASE_LABELS, isLandingPhase, isTakeoffPhase } from '@/state/phase';
   import type { Orchestrator } from '@/app/orchestrator';
   import Attitude from './hud/Attitude.svelte';
@@ -84,8 +84,21 @@
   );
 
   const sandbox = $derived(app.sandbox.phase === 'flying');
-  const MODE_ICONS: Record<string, IconName> = { cockpit: 'cockpit', chase: 'chase', wing: 'wing', orbit: 'orbit' };
-  const modeIndex = $derived(Math.max(0, CAMERA_MODES.findIndex((m) => m.id === app.cameraMode)));
+  const MODE_ICONS: Record<string, IconName> = { cockpit: 'cockpit', cabin: 'window', chase: 'chase', wing: 'wing', orbit: 'orbit' };
+
+  /*
+   * Two groups of views: from inside the aircraft (the flight deck, a window
+   * seat) and from outside it. The group is the first choice; the view within
+   * it the second, and each group remembers the last one picked, so going
+   * outside and back in returns to the same seat.
+   */
+  const GROUPS: { id: CameraGroup; label: string; hint: string }[] = [
+    { id: 'interior', label: 'Inside', hint: 'From inside the aircraft: the flight deck or a window seat' },
+    { id: 'exterior', label: 'Outside', hint: 'Looking at the aircraft from outside' },
+  ];
+  const current = $derived(CAMERA_MODES.find((m) => m.id === app.cameraMode) ?? CAMERA_MODES[0]!);
+  const groupModes = $derived(CAMERA_MODES.filter((m) => m.group === current.group));
+  const modeIndex = $derived(Math.max(0, groupModes.findIndex((m) => m.id === app.cameraMode)));
 
   /*
    * A change of view is announced in the middle of the screen for a moment —
@@ -118,7 +131,10 @@
 
 {#if sample}
   <div class="hud" aria-live="off">
-    {#if firstPerson}
+    <!-- With the 3D cockpit up, its own instruments show attitude and heading,
+         redrawn every frame; these DOM ones refresh at the UI rate and would
+         trail the view. -->
+    {#if firstPerson && !app.cockpit3d}
       <Attitude pitchDeg={sample.pitchDeg} rollDeg={sample.rollDeg} />
       <Compass headingDeg={app.viewHeadingDeg} />
     {/if}
@@ -171,21 +187,36 @@
     {/if}
 
     <div class="bottom" class:faded={app.lookingAround}>
-      <nav class="modes" aria-label="Camera view" style="--index: {modeIndex}; --count: {CAMERA_MODES.length}">
-        <span class="slider" aria-hidden="true"></span>
-        {#each CAMERA_MODES as mode, i (mode.id)}
-          <button
-            class="mode"
-            class:active={app.cameraMode === mode.id}
-            onclick={() => orchestrator.setCameraMode(mode.id)}
-            title={`${mode.hint} (${i + 1})`}
-            aria-pressed={app.cameraMode === mode.id}
-          >
-            <Icon name={MODE_ICONS[mode.id] ?? 'cockpit'} size={18} />
-            <span>{mode.label}</span>
-          </button>
-        {/each}
-      </nav>
+      <div class="views">
+        <div class="groups" role="group" aria-label="Inside or outside">
+          {#each GROUPS as group (group.id)}
+            <button
+              class="group"
+              class:active={current.group === group.id}
+              onclick={() => orchestrator.setCameraGroup(group.id)}
+              title={`${group.hint} (V)`}
+              aria-pressed={current.group === group.id}
+            >
+              {group.label}
+            </button>
+          {/each}
+        </div>
+        <nav class="modes" aria-label="Camera view" style="--index: {modeIndex}; --count: {groupModes.length}">
+          <span class="slider" aria-hidden="true"></span>
+          {#each groupModes as mode (mode.id)}
+            <button
+              class="mode"
+              class:active={app.cameraMode === mode.id}
+              onclick={() => orchestrator.setCameraMode(mode.id)}
+              title={`${mode.hint} (${CAMERA_MODES.indexOf(mode) + 1})`}
+              aria-pressed={app.cameraMode === mode.id}
+            >
+              <Icon name={MODE_ICONS[mode.id] ?? 'cockpit'} size={18} />
+              <span>{mode.label}</span>
+            </button>
+          {/each}
+        </nav>
+      </div>
 
       <!--
         The engine note sits with the view controls because it is the same
@@ -376,6 +407,32 @@
     from { opacity: 0; transform: translateX(-50%) translateY(12px); }
   }
 
+  .views { display: flex; align-items: stretch; gap: 6px; }
+  .groups {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+  .group {
+    flex: 1;
+    padding: 0 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--hud-dim);
+    border-left: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .group:hover { color: var(--hud-text); }
+  .group.active { color: var(--hud-accent); border-left-color: var(--hud-accent); background: rgb(var(--accent-rgb) / 0.1); }
   .modes {
     --w: 92px;
     position: relative;
@@ -485,6 +542,7 @@
 
   @media (max-width: 720px) {
     .modes { --w: 62px; }
+    .group { padding: 0 8px; font-size: 9px; }
     .mode span { display: none; }
     .bottom { gap: 8px; bottom: 16px; }
     .round { width: 36px; height: 36px; }

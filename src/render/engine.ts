@@ -22,14 +22,15 @@
 import {
   ACESFilmicToneMapping,
   Color,
-  Mesh,
+  FogExp2,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   Scene,
-  SphereGeometry,
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { createSkyMaterial } from './terrainMaterial';
+import type { FloatingOrigin } from '@/core/frame';
+import { Atmosphere } from './sky';
 
 export interface EngineOptions {
   /** Vertical field of view, degrees. */
@@ -52,8 +53,10 @@ export class Engine {
   readonly camera: PerspectiveCamera;
   readonly scene = new Scene();
 
-  private readonly skyMesh: Mesh;
-  private readonly skyMaterial = createSkyMaterial();
+  /** Sky, haze and sunlight, from one model. See `@/render/sky`. */
+  readonly atmosphere = new Atmosphere();
+  private readonly planetCentre = new Vector3(0, 0, -6_371_000);
+  private readonly sunDirection = new Vector3(1, 0, 0);
 
   private rafHandle: number | null = null;
   private lastTime = 0;
@@ -116,6 +119,10 @@ export class Engine {
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+    // Only the cockpit casts shadows (its frame across its own panel); the
+    // world's lights never do, so the world pays nothing for this.
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.setClearColor(new Color(0x05070d), 1);
 
     // near = 0.5 m so a cockpit view does not clip through the nose;
@@ -131,11 +138,11 @@ export class Engine {
 
     // The sky is a shell that rides with the camera. Radius is arbitrary since
     // its depth is forced to the far plane; it only has to stay inside `far`.
-    this.skyMesh = new Mesh(new SphereGeometry(1, 32, 16), this.skyMaterial);
-    this.skyMesh.frustumCulled = false;
-    this.skyMesh.renderOrder = -1000;
-    this.skyMesh.matrixAutoUpdate = false;
-    this.scene.add(this.skyMesh);
+    this.scene.add(this.atmosphere.dome);
+    // Only switches three's fog code on for every material; what it computes
+    // is the atmosphere's (see `installAtmosphere`), so colour and density
+    // here are never read.
+    this.scene.fog = new FogExp2(0x000000, 0);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -192,33 +199,23 @@ export class Engine {
   }
 
   /**
-   * Sky colours. `elevation` is the sun's angle above the local horizon, so
-   * the palette moves through day, golden hour, civil twilight and night the
-   * way the real sky does.
+   * The floating origin the scene is drawn relative to. The atmosphere needs
+   * the planet's centre in render space, which is minus the origin, read at
+   * draw time: a rebase can happen anywhere in the frame's work, and an
+   * altitude measured from a stale centre puts the whole world at the wrong
+   * air density for a frame.
    */
-  setSky(sunDirection: Vector3, up: Vector3, elevationDeg: number): void {
-    const u = this.skyMaterial.uniforms;
-    (u['sunDirection']!.value as Vector3).copy(sunDirection);
-    (u['upDirection']!.value as Vector3).copy(up);
+  origin: FloatingOrigin | null = null;
 
-    const day = Math.max(0, Math.min(1, (elevationDeg + 6) / 12));
-    const dusk = Math.max(0, Math.min(1, (elevationDeg + 12) / 18));
+  /**
+   * A second scene drawn after the world with its own camera and a cleared
+   * depth buffer: the cockpit, which lives centimetres from the eye.
+   */
+  overlay: { scene: Scene; camera: PerspectiveCamera; visible: boolean } | null = null;
 
-    const horizon = new Color(0x0b1a2e).lerp(new Color(0xc4dcf2), day);
-    // Warm the horizon through sunset rather than fading it straight to grey.
-    if (elevationDeg > -8 && elevationDeg < 12) {
-      const warmth = 1 - Math.abs(elevationDeg - 2) / 10;
-      horizon.lerp(new Color(0xff9e5e), Math.max(0, warmth) * 0.55);
-    }
-
-    (u['horizonColor']!.value as Color).copy(horizon);
-    (u['zenithColor']!.value as Color)
-      .copy(new Color(0x02040a))
-      .lerp(new Color(0x1b4a8f), dusk);
-    (u['groundColor']!.value as Color)
-      .copy(new Color(0x01030a))
-      .lerp(new Color(0x152331), day);
-    u['sunIntensity']!.value = Math.max(0, Math.min(1, (elevationDeg + 2) / 8));
+  /** Where the sun is, for the atmosphere. Unit vector, ECEF axes. */
+  setSky(sunDirection: Vector3): void {
+    this.sunDirection.copy(sunDirection);
   }
 
   /** Fraction of the frame budget consumed by our own work, 0-1. */
@@ -228,11 +225,6 @@ export class Engine {
 
   get renderMs(): number {
     return this.renderMsAverage;
-  }
-
-  /** Atmosphere colour the terrain should fade into. Matches the sky horizon. */
-  get horizonColor(): Color {
-    return (this.skyMaterial.uniforms['horizonColor']!.value as Color).clone();
   }
 
   /**
@@ -274,12 +266,24 @@ export class Engine {
     // Before anything is drawn: see `resize`.
     this.applyResize();
 
-    this.skyMesh.position.copy(this.camera.position);
-    this.skyMesh.scale.setScalar(this.camera.far * 0.5);
-    this.skyMesh.updateMatrix();
-
     this.onFrame?.({ dt, elapsed: this.elapsed, frame: this.frameCount });
-    if (this.renderEnabled) this.renderer.render(this.scene, this.camera);
+    if (this.renderEnabled) {
+      // After the frame's work, so the camera it reads is the one about to draw.
+      if (this.origin) {
+        const o = this.origin.current;
+        this.planetCentre.set(-o[0], -o[1], -o[2]);
+      }
+      this.atmosphere.update(this.camera, this.planetCentre, this.sunDirection, dt);
+      this.renderer.render(this.scene, this.camera);
+      // The cockpit, over the world, into a cleared depth buffer (see `@/render/cockpit`).
+      const overlay = this.overlay;
+      if (overlay?.visible) {
+        this.renderer.autoClear = false;
+        this.renderer.clearDepth();
+        this.renderer.render(overlay.scene, overlay.camera);
+        this.renderer.autoClear = true;
+      }
+    }
 
     this.adaptQuality(performance.now() - frameStart, dt);
   };
@@ -322,8 +326,7 @@ export class Engine {
   dispose(): void {
     this.stop();
     this.resizeObserver.disconnect();
-    this.skyMesh.geometry.dispose();
-    this.skyMaterial.dispose();
+    this.atmosphere.dispose();
     this.renderer.dispose();
   }
 }

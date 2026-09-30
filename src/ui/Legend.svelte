@@ -12,6 +12,7 @@
   first read, so it is the one surface that does not perform.
 -->
 <script lang="ts">
+  import { SANDBOX_ENABLED } from '@/sandbox/enabled';
   import { app } from '@/state/appStore.svelte';
   import { CAMERA_MODES } from '@/render/pov';
   import { TRAFFIC_LEGEND } from './palette';
@@ -36,16 +37,21 @@
     { key: 'Wheel', does: 'Zoom — nearer or further outside, a longer lens in the cockpit' },
     { key: 'Click', does: 'A framed aircraft in 3D: fly across to it' },
     { key: `1 – ${CAMERA_MODES.length}`, does: `Switch camera: ${cameraKeys}` },
-    { key: 'C', does: 'Re-centre the view straight ahead' },
+    { key: 'V', does: 'Inside or outside: the flight deck and a window seat, or the views of the aircraft' },
+    { key: 'C', does: 'Re-centre the view' },
     { key: 'P', does: 'Pin mode: click the map to mark places you want to see from the air' },
     { key: 'Right-click', does: 'Drop a pin on the map at any time' },
     { key: 'L', does: 'Catch a landing: step into an aircraft on final approach' },
     { key: 'T', does: 'Catch a takeoff: step into an aircraft on the runway or climbing out' },
     { key: 'A', does: 'Auto camera: pick the view for takeoffs and landings' },
-    { key: 'B', does: 'Sandbox: spawn your own armed aircraft anywhere and shoot down real traffic' },
-    { key: '↑ ↓ ← →', does: 'Sandbox: climb, dive, turn' },
-    { key: 'Space', does: 'Sandbox: fire at the locked target (Tab or click to choose one)' },
-    { key: 'Shift', does: 'Sandbox: boost (Ctrl slows down, or hovers a helicopter)' },
+    ...(SANDBOX_ENABLED
+      ? [
+          { key: 'B', does: 'Sandbox: spawn your own armed aircraft anywhere and shoot down real traffic' },
+          { key: '↑ ↓ ← →', does: 'Sandbox: climb, dive, turn' },
+          { key: 'Space', does: 'Sandbox: fire at the locked target (Tab or click to choose one)' },
+          { key: 'Shift', does: 'Sandbox: boost (Ctrl slows down, or hovers a helicopter)' },
+        ]
+      : []),
     { key: 'F', does: 'Fullscreen, with nothing but the view' },
     { key: 'D', does: 'Show the performance and connection counters' },
     { key: 'H', does: 'Show or hide this panel' },

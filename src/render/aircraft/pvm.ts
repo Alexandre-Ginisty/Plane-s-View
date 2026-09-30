@@ -24,6 +24,7 @@ import {
   Color,
   DoubleSide,
   MeshLambertMaterial,
+  RepeatWrapping,
   type Texture,
 } from 'three';
 
@@ -47,6 +48,24 @@ interface PartHeader {
   normal: Range;
   uv: Range;
   index: Range;
+  /** The texture has cut-outs (a cockpit's bezels, grilles): drawn with an alpha test. */
+  alpha?: boolean;
+  /** The texture tiles (a cockpit's lining): its coordinates run past 0–1. */
+  repeat?: boolean;
+  /** A cockpit only: baked openness per vertex, one byte each (255 = open). */
+  ao?: Range;
+}
+
+/** A cockpit display's face, about the eye: +X right, +Y up, −Z forward, metres, radians. */
+export interface DisplayFace {
+  id: 'pfd' | 'nd' | 'eicas' | 'radar' | 'systems' | 'sixpack';
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  h: number;
+  tilt: number;
+  yaw: number;
 }
 
 interface ModelHeader {
@@ -57,6 +76,14 @@ interface ModelHeader {
   textures: string[];
   /** Texture slot an operator livery replaces, or -1 if the model has none. */
   liveryTexture?: number;
+  /** A cockpit only: the eye in its exterior model, normalised, nose +Y, up +Z, about the centre. */
+  shellEye?: [number, number, number] | null;
+  /** A cockpit only: the faces its live displays are laid over. */
+  displays?: DisplayFace[];
+  /** A cockpit or cabin: where the view rests, radians (yaw left of the nose, pitch up). */
+  look?: { yaw: number; pitch: number } | null;
+  /** A cabin drawn in other airframes too: its eye in each, by model id. */
+  shellEyes?: Record<string, [number, number, number] | null>;
   parts: PartHeader[];
 }
 
@@ -79,6 +106,11 @@ export interface LoadedModel {
   lengthM: number;
   /** Texture slot an operator livery replaces, or -1 if the model has none. */
   liveryTexture: number;
+  /** A cockpit only: the eye in its exterior model (see the header). */
+  shellEye: readonly [number, number, number] | null;
+  displays: readonly DisplayFace[];
+  look: { yaw: number; pitch: number } | null;
+  shellEyes: Readonly<Record<string, readonly [number, number, number] | null>>;
   parts: ModelPart[];
 }
 
@@ -117,8 +149,20 @@ export function parsePvm(
       new BufferAttribute(new Uint32Array(buffer, payload + part.index.offset, part.index.count), 1),
     );
     geometry.computeBoundingSphere();
+    if (part.ao) {
+      // Grey vertex colours: the baked contact shadow, multiplied into the material.
+      const bytes = new Uint8Array(buffer, payload + part.ao.offset, part.ao.count);
+      const grey = new Float32Array(bytes.length * 3);
+      for (let i = 0; i < bytes.length; i++) grey[i * 3] = grey[i * 3 + 1] = grey[i * 3 + 2] = bytes[i]! / 255;
+      geometry.setAttribute('color', new BufferAttribute(grey, 3));
+    }
 
     const texture = part.texture >= 0 ? textures[part.texture] ?? null : null;
+    if (texture && part.repeat && texture.wrapS !== RepeatWrapping) {
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      texture.needsUpdate = true;
+    }
 
     /*
      * Anything that turns is transparent from the start.
@@ -139,6 +183,8 @@ export function parsePvm(
       map: texture,
       transparent,
       opacity: part.opacity,
+      alphaTest: part.alpha ? 0.5 : 0,
+      vertexColors: Boolean(part.ao),
       /*
        * Two-sided throughout.
        *
@@ -169,6 +215,10 @@ export function parsePvm(
     license: header.license,
     lengthM: header.lengthM,
     liveryTexture: header.liveryTexture ?? -1,
+    shellEye: header.shellEye ?? null,
+    displays: header.displays ?? [],
+    look: header.look ?? null,
+    shellEyes: header.shellEyes ?? {},
     parts,
   };
 }

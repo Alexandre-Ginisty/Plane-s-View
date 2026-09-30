@@ -21,21 +21,15 @@
  *
  * ## Aerial perspective
  *
- * Distant terrain fades towards the sky colour with an exponential falloff.
- * This is not only atmosphere: it is what hides the LOD horizon, where tiles
- * are at their coarsest. Without it the eye immediately finds the boundary.
+ * Distant terrain fades into the sky through the shared atmosphere
+ * (`@/render/sky`): per channel, so the far ground turns blue before it turns
+ * into sky, and towards the exact colour the dome shows behind it. This is
+ * not only atmosphere: it is what hides the LOD horizon, where tiles are at
+ * their coarsest. Without it the eye immediately finds the boundary.
  */
 
-import { CLEAR_DAY_DENSITY, EARTH_RADIUS_M, SCALE_HEIGHT_M } from './atmosphere';
-import {
-  BackSide,
-  Color,
-  FrontSide,
-  ShaderMaterial,
-  Texture,
-  Vector3,
-  Vector4,
-} from 'three';
+import { FrontSide, ShaderMaterial, Texture, Vector3, Vector4 } from 'three';
+import { ATMO_GLSL, ATMO_UNIFORMS } from './sky/shader';
 
 const vertexShader = /* glsl */ `
   #include <common>
@@ -74,13 +68,7 @@ const fragmentShader = /* glsl */ `
   uniform float tileOpacity;
 
   uniform vec3 sunDirection;
-  uniform vec3 fogColor;
-  // Sea-level extinction per metre. See @/render/atmosphere.
-  uniform float fogDensity;
-  uniform float fogScaleHeight;
-  // Planet centre in render space, i.e. minus the floating origin.
-  uniform vec3 planetCenter;
-  uniform float earthRadius;
+  ${ATMO_GLSL}
   uniform float ambient;
 
   varying vec2 vUv;
@@ -103,39 +91,17 @@ const fragmentShader = /* glsl */ `
 
     // Satellite imagery already contains the sun that lit it, so shading is
     // kept gentle: enough to reveal relief, not enough to double-light it.
-    vec3 lit = albedo * (ambient + (1.0 - ambient) * lambert);
+    // The sun's colour and strength come from the atmosphere, relative to
+    // noon (atmo[4]): orange at sunset, gone at night, where the skylight
+    // term keeps the imagery legible.
+    vec3 lit = albedo * (ambient * atmo[4].w + (1.0 - ambient) * lambert * atmo[4].rgb);
 
-    /*
-     * Aerial perspective through an exponential atmosphere.
-     *
-     * A transcription of opticalDepth in @/render/atmosphere -- see that
-     * file for why a constant density is wrong in both directions at once, and
-     * for the tests that pin these numbers. Keep the two in step.
-     *
-     * This is what removes the ring of colour around the aircraft: the imagery
-     * provider serves a different dataset at deep zoom than at shallow, so the
-     * ground near the aircraft is graded cooler than the ground at the horizon.
-     * Fifty kilometres of air washes the difference out, exactly as it does
-     * from a real window.
-     */
-    float rayLength = length(vWorldPosition - cameraPosition);
-    float hFrag = max(length(vWorldPosition - planetCenter) - earthRadius, 0.0);
-    float hCam = max(length(cameraPosition - planetCenter) - earthRadius, 0.0);
-    float dh = hFrag - hCam;
-
-    float tau;
-    if (abs(dh) < 1.0) {
-      // Level ray: the closed form below divides by dh.
-      tau = fogDensity * exp(-hCam / fogScaleHeight) * rayLength;
-    } else {
-      tau = abs(
-        fogDensity * fogScaleHeight * (rayLength / dh) *
-        (exp(-hCam / fogScaleHeight) - exp(-hFrag / fogScaleHeight))
-      );
-    }
-
-    float fogAmount = 1.0 - exp(-tau);
-    vec3 finalColor = mix(lit, fogColor, clamp(fogAmount, 0.0, 1.0));
+    // Aerial perspective, shared with every other material and with the sky
+    // itself: see @/render/sky. This is also what removes the ring of colour
+    // around the aircraft, where the imagery provider switches from recent
+    // aerial survey to a warmer satellite composite with zoom: fifty
+    // kilometres of air washes the difference out, as from a real window.
+    vec3 finalColor = atmoApply(lit, vWorldPosition);
 
     gl_FragColor = vec4(finalColor, tileOpacity);
 
@@ -147,8 +113,6 @@ const fragmentShader = /* glsl */ `
 export const IDENTITY_UV = new Vector4(0, 0, 1, 1);
 
 export interface TerrainMaterialOptions {
-  fogColor?: Color;
-  fogDensity?: number;
   ambient?: number;
 }
 
@@ -165,11 +129,7 @@ export class TerrainMaterial extends ShaderMaterial {
         blend: { value: 0 },
         tileOpacity: { value: 1 },
         sunDirection: { value: new Vector3(1, 0, 0) },
-        fogColor: { value: options.fogColor?.clone() ?? new Color(0x8fb2d4) },
-        fogDensity: { value: options.fogDensity ?? CLEAR_DAY_DENSITY },
-        fogScaleHeight: { value: SCALE_HEIGHT_M },
-        planetCenter: { value: new Vector3(0, 0, 0) },
-        earthRadius: { value: EARTH_RADIUS_M },
+        ...ATMO_UNIFORMS,
         ambient: { value: options.ambient ?? 0.45 },
       },
       side: FrontSide,
@@ -229,77 +189,4 @@ export class TerrainMaterial extends ShaderMaterial {
   setAmbient(value: number): void {
     this.uniforms['ambient']!.value = value;
   }
-
-  /**
-   * @param planetCentre Where the centre of the Earth is in render space —
-   * the negated floating origin. Needed every frame because the origin moves,
-   * and an altitude measured against a stale centre puts the whole world at
-   * the wrong density after every rebase.
-   */
-  setFog(color: Color, density: number, planetCentre: Vector3): void {
-    (this.uniforms['fogColor']!.value as Color).copy(color);
-    this.uniforms['fogDensity']!.value = density;
-    (this.uniforms['planetCenter']!.value as Vector3).copy(planetCentre);
-  }
-}
-
-/**
- * Sky shell.
- *
- * Drawn on the inside of a large sphere around the camera. Its colour is the
- * same one the terrain fogs towards, so the horizon dissolves instead of
- * ending at a hard line — which is what would otherwise reveal exactly how far
- * the loaded terrain extends.
- */
-export function createSkyMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    side: BackSide,
-    depthWrite: false,
-    uniforms: {
-      horizonColor: { value: new Color(0x9dc0e3) },
-      zenithColor: { value: new Color(0x1b3f77) },
-      groundColor: { value: new Color(0x0a1420) },
-      sunDirection: { value: new Vector3(1, 0, 0) },
-      upDirection: { value: new Vector3(0, 0, 1) },
-      sunIntensity: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vDirection;
-      void main() {
-        vDirection = normalize((modelMatrix * vec4(position, 1.0)).xyz - cameraPosition);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        // Force the sky to the far plane so it never occludes terrain.
-        gl_Position.z = gl_Position.w;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 horizonColor;
-      uniform vec3 zenithColor;
-      uniform vec3 groundColor;
-      uniform vec3 sunDirection;
-      uniform vec3 upDirection;
-      uniform float sunIntensity;
-
-      varying vec3 vDirection;
-
-      void main() {
-        vec3 dir = normalize(vDirection);
-        float elevation = dot(dir, normalize(upDirection));
-
-        // Above the horizon: horizon -> zenith. Below: fade to a dark ground
-        // haze, which is what you see looking down from altitude.
-        vec3 sky = mix(horizonColor, zenithColor, pow(clamp(elevation, 0.0, 1.0), 0.55));
-        vec3 below = mix(horizonColor, groundColor, pow(clamp(-elevation, 0.0, 1.0), 0.4));
-        vec3 color = elevation >= 0.0 ? sky : below;
-
-        // Cheap sun glow; no scattering integral, just enough to place the sun.
-        float sunDot = max(dot(dir, normalize(sunDirection)), 0.0);
-        color += vec3(1.0, 0.92, 0.78) * pow(sunDot, 350.0) * 2.0 * sunIntensity;
-        color += vec3(1.0, 0.85, 0.65) * pow(sunDot, 12.0) * 0.12 * sunIntensity;
-
-        gl_FragColor = vec4(color, 1.0);
-        #include <colorspace_fragment>
-      }
-    `,
-  });
 }

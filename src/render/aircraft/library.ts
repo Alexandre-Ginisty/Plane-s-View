@@ -24,7 +24,7 @@
  * that trade they are on.
  */
 
-import { TextureLoader, SRGBColorSpace, type Texture } from 'three';
+import { ImageBitmapLoader, SRGBColorSpace, Texture, TextureLoader } from 'three';
 
 import { parsePvm, texturesOf, withLivery, type LoadedModel } from './pvm';
 import { shapeFor } from './shapes';
@@ -55,16 +55,6 @@ let catalogue: Promise<Catalogue | null> | null = null;
 const models = new Map<string, Promise<LoadedModel | null>>();
 
 /**
- * Models built in code rather than downloaded, by type code — the sandbox's
- * armed airframes. Consulted before the catalogue, and never livered.
- */
-const builtIn = new Map<string, () => LoadedModel | null>();
-
-export function registerBuiltInModel(typeCode: string, build: () => LoadedModel | null): void {
-  builtIn.set(typeCode.toUpperCase(), build);
-}
-
-/**
  * The catalogue, fetched once — but only *cached* once it has succeeded.
  *
  * A failure is not cached, and that distinction matters more here than
@@ -88,12 +78,39 @@ async function loadCatalogue(): Promise<Catalogue | null> {
   return result;
 }
 
+/*
+ * Decoded off the main thread. An `<img>` is decoded lazily, inside the
+ * texture upload of the first frame that draws it — for a set of 2048-pixel
+ * sheets that is hundreds of milliseconds with the picture frozen, at the very
+ * moment the view changes. An `ImageBitmap` arrives decoded; flipped at decode
+ * time, since the upload's own flip does not apply to it.
+ */
+const bitmaps =
+  typeof createImageBitmap === 'function'
+    ? new ImageBitmapLoader().setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none' })
+    : null;
+
 function loadTexture(name: string): Promise<Texture | null> {
   return new Promise((resolve) => {
+    if (bitmaps) {
+      bitmaps.load(
+        `${BASE}/${name}`,
+        (bitmap) => {
+          const texture = new Texture(bitmap);
+          // The liveries are authored as colour, not as data.
+          texture.colorSpace = SRGBColorSpace;
+          texture.flipY = false;
+          texture.needsUpdate = true;
+          resolve(texture);
+        },
+        undefined,
+        () => resolve(null),
+      );
+      return;
+    }
     new TextureLoader().load(
       `${BASE}/${name}`,
       (texture) => {
-        // The liveries are authored as colour, not as data.
         texture.colorSpace = SRGBColorSpace;
         texture.flipY = true;
         resolve(texture);
@@ -162,9 +179,6 @@ export async function loadModelFor(
 ): Promise<LoadedModel | null> {
   if (!typeCode) return null;
 
-  const own = builtIn.get(typeCode.toUpperCase());
-  if (own) return own();
-
   const index = await loadCatalogue();
   if (!index) return null;
 
@@ -191,6 +205,27 @@ export async function loadModelFor(
   // worse lie than the substitution itself.
   const exact = index.types[upper] === id;
 
+  const model = await loadModelById(id);
+  if (model === null) return null;
+
+  const paint = exact ? await loadLivery(index, id, operator ?? null) : null;
+  return paint ? withLivery(model, paint) : model;
+}
+
+/** The converted model a type is drawn with — its own, or its kind's stand-in — or null. */
+export async function modelIdFor(typeCode: string | null, category?: string | null): Promise<string | null> {
+  if (!typeCode) return null;
+  const index = await loadCatalogue();
+  if (!index) return null;
+  const upper = typeCode.toUpperCase();
+  return index.types[upper] ?? index.fallback[shapeFor(upper, category ?? null).kind] ?? null;
+}
+
+/**
+ * A converted file by its id — a model, or a cockpit (`f16-cockpit`) — shared
+ * with every other caller that asks for it.
+ */
+export async function loadModelById(id: string): Promise<LoadedModel | null> {
   let pending = models.get(id);
   if (!pending) {
     pending = fetchModel(id);
@@ -203,10 +238,7 @@ export async function loadModelFor(
   // verdict that the type has no model. The identity check keeps that retry
   // from evicting a newer attempt someone else has already started.
   if (model === null && models.get(id) === pending) models.delete(id);
-  if (model === null) return null;
-
-  const paint = exact ? await loadLivery(index, id, operator ?? null) : null;
-  return paint ? withLivery(model, paint) : model;
+  return model;
 }
 
 /**

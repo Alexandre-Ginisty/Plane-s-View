@@ -1,14 +1,13 @@
 /**
  * What the sandbox lets you fly.
  *
- * The four armed airframes built in `models.ts`, then every model in the
- * converted hangar — "any aircraft we have", which is the point: flying an
- * A380 at treetop height with missiles under the wings is exactly the kind of
- * thing a sandbox is for. Each entry says how it flies (an arcade spec, not a
- * flight model) and what it shoots.
+ * The combat hangar — real airframes converted from FlightGear
+ * (`tools/fgmodel/combat.mjs`), armed — then every model in the civil hangar:
+ * "any aircraft we have", which is the point: flying an A380 at treetop height
+ * with missiles under the wings is exactly the kind of thing a sandbox is for.
+ * Each entry says how it flies when it has no flight model (an arcade spec)
+ * and what it shoots.
  */
-
-import { SANDBOX_TYPES } from './models';
 
 export type SandboxGroup = 'combat' | 'airliner' | 'regional' | 'light' | 'helicopter';
 export type Weapon = 'missile' | 'rockets';
@@ -57,10 +56,19 @@ const LIGHT: FlightSpec = { cruiseKt: 150, minKt: 65, boostKt: 230, turnDegS: 18
 const HELI: FlightSpec = { cruiseKt: 120, minKt: 0, boostKt: 175, turnDegS: 45, maxBankDeg: 25, maxPitchDeg: 14, heli: true, accelKt: 45 };
 
 const COMBAT: SandboxAircraft[] = [
-  { id: 'viper', type: SANDBOX_TYPES.viper, name: 'Viper', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Fast jet fighter · heat-seeking missiles' },
-  { id: 'warthog', type: SANDBOX_TYPES.warthog, name: 'Warthog', group: 'combat', weapon: 'rockets', flight: ATTACK, blurb: 'Ground-attack jet · rocket salvos' },
-  { id: 'striker', type: SANDBOX_TYPES.striker, name: 'Striker', group: 'combat', weapon: 'rockets', flight: HELI, blurb: 'Attack helicopter · hovers · rockets' },
-  { id: 'corsair', type: SANDBOX_TYPES.corsair, name: 'Corsair', group: 'combat', weapon: 'missile', flight: WARBIRD, blurb: 'Propeller fighter · missiles' },
+  { id: 'viper', type: 'F16', name: 'F-16 Fighting Falcon', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Fly-by-wire fighter · afterburner · heat-seekers' },
+  { id: 'hornet', type: 'F18', name: 'F/A-18 Hornet', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Carrier fighter · twin afterburners' },
+  { id: 'eagle', type: 'F15', name: 'F-15C Eagle', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Air-superiority fighter · big and fast' },
+  { id: 'tomcat', type: 'F14', name: 'F-14B Tomcat', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Swing-wing interceptor' },
+  { id: 'mirage', type: 'MIR2', name: 'Mirage 2000-5', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Delta-wing fighter · afterburner' },
+  { id: 'gripen', type: 'GRIF', name: 'JAS 39 Gripen', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Light canard-delta fighter' },
+  { id: 'fulcrum', type: 'MG29', name: 'MiG-29 Fulcrum', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Twin-engine agile fighter' },
+  { id: 'fishbed', type: 'MG21', name: 'MiG-21bis', group: 'combat', weapon: 'missile', flight: FIGHTER, blurb: 'Cold-War delta interceptor' },
+  { id: 'warthog', type: 'A10', name: 'A-10 Thunderbolt II', group: 'combat', weapon: 'rockets', flight: ATTACK, blurb: 'Ground-attack jet · rocket salvos' },
+  { id: 'frogfoot', type: 'SU25', name: 'Su-25 Frogfoot', group: 'combat', weapon: 'rockets', flight: ATTACK, blurb: 'Armoured attack jet · rockets' },
+  { id: 'striker', type: 'H64', name: 'AH-64 Apache', group: 'combat', weapon: 'rockets', flight: HELI, blurb: 'Attack helicopter · hovers · rockets' },
+  { id: 'corsair', type: 'F4U', name: 'F4U Corsair', group: 'combat', weapon: 'missile', flight: WARBIRD, blurb: 'Gull-wing propeller fighter' },
+  { id: 'mustang', type: 'P51', name: 'P-51D Mustang', group: 'combat', weapon: 'missile', flight: WARBIRD, blurb: 'Propeller fighter · Merlin V-12' },
 ];
 
 /** The converted hangar: model id → a type it answers to, its name, its group. */

@@ -25,6 +25,7 @@ import { BufferAttribute, BufferGeometry, Sphere, Texture, Vector3 } from 'three
 
 import { wrapTileX } from '@/core/math/geo';
 import type { TileLoader } from '@/tiles/loader';
+import { isNoDataTile } from '@/tiles/placeholder';
 import { TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import type { TerrainWorkerPool } from '@/workers/pool';
 import { meshResolutionFor, skirtFloorFor } from './constants';
@@ -202,6 +203,13 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
 
     if (signal.aborted || node.textureGen !== gen) {
       if (signal.aborted) ctx.finish(node, 'texture', gen, 'aborted');
+      return;
+    }
+
+    // A grey "Map data not yet available" picture served as a real tile:
+    // keep the ancestor's imagery, as past the layer's maximum zoom.
+    if (isNoDataTile(result.data)) {
+      ctx.finish(node, 'texture', gen, 'exhausted');
       return;
     }
 

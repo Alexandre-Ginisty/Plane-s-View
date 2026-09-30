@@ -33,20 +33,28 @@ import {
 } from '@/core/math/geo';
 import type { SampledAircraft } from '@/state/traffic';
 
-export type CameraMode = 'cockpit' | 'chase' | 'wing' | 'orbit';
+export type CameraMode = 'cockpit' | 'cabin' | 'chase' | 'wing' | 'orbit';
+
+/** Inside the aircraft, or looking at it from outside. */
+export type CameraGroup = 'interior' | 'exterior';
 
 export interface CameraModeInfo {
   id: CameraMode;
+  group: CameraGroup;
   label: string;
   hint: string;
 }
 
 export const CAMERA_MODES: readonly CameraModeInfo[] = [
-  { id: 'cockpit', label: 'Cockpit', hint: 'Eyes forward from the flight deck' },
-  { id: 'chase', label: 'Chase', hint: 'Behind and above, following the tail' },
-  { id: 'wing', label: 'Wing', hint: 'Off the left wingtip, looking back in' },
-  { id: 'orbit', label: 'Orbit', hint: 'Free look around the aircraft — drag to rotate' },
+  { id: 'cockpit', group: 'interior', label: 'Cockpit', hint: 'Eyes forward from the flight deck' },
+  { id: 'cabin', group: 'interior', label: 'Window', hint: 'A window seat in the cabin — or the hold, in a freighter' },
+  { id: 'chase', group: 'exterior', label: 'Chase', hint: 'Behind and above, following the tail' },
+  { id: 'wing', group: 'exterior', label: 'Wing', hint: 'Off the left wingtip, looking back in' },
+  { id: 'orbit', group: 'exterior', label: 'Orbit', hint: 'Free look around the aircraft — drag to rotate' },
 ];
+
+/** A view from inside the airframe: the camera is a head, not a drone. */
+export const isInterior = (mode: CameraMode): boolean => mode === 'cockpit' || mode === 'cabin';
 
 export interface AircraftFrame {
   /** Aircraft position in ECEF. */

@@ -398,8 +398,19 @@ const ROWS: readonly Row[] = [
   // thing on screen moving at 500 kt at 2000 ft.
   ['EUFI', { length: 15.9, spanRatio: 0.68, sweepDeg: 53, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
   ['RFAL', { length: 15.3, spanRatio: 0.71, sweepDeg: 48, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
-  ['F16', { length: 15.0, spanRatio: 0.67, sweepDeg: 40, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
-  ['F15', { length: 19.4, spanRatio: 0.68, sweepDeg: 45, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  // Lengths of the fighters with a converted model match that model's own
+  // (see `tools/fgmodel/combat.mjs`), because it is scaled by them.
+  ['F16', { length: 15.06, spanRatio: 0.66, sweepDeg: 40, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['F15', { length: 19.43, spanRatio: 0.67, sweepDeg: 45, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['F14', { length: 19.1, spanRatio: 1.02, sweepDeg: 20, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['F18', { length: 17.07, spanRatio: 0.72, sweepDeg: 26, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['MIR2', { length: 14.36, spanRatio: 0.63, sweepDeg: 58, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['GRIF', { length: 14.1, spanRatio: 0.6, sweepDeg: 45, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['MG29', { length: 17.32, spanRatio: 0.66, sweepDeg: 42, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
+  ['MG21', { length: 15.76, spanRatio: 0.45, sweepDeg: 57, engines: 0, engineMount: 'none', radiusRatio: 0.065, dihedralDeg: 0 }],
+  ['SU25', { length: 15.33, spanRatio: 0.94, sweepDeg: 20, engines: 0, engineMount: 'none', radiusRatio: 0.07, dihedralDeg: 0 }],
+  ['F4U', { ...SINGLE, length: 10.2, spanRatio: 1.22, radiusRatio: 0.072, dihedralDeg: 6 }],
+  ['P51', { ...SINGLE, length: 9.83, spanRatio: 1.15, radiusRatio: 0.07 }],
   ['F35', { length: 15.6, spanRatio: 0.67, sweepDeg: 35, engines: 0, engineMount: 'none', radiusRatio: 0.08, dihedralDeg: 0 }],
   ['HAWK', { length: 11.9, spanRatio: 0.79, sweepDeg: 26, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
   ['TOR', { length: 16.7, spanRatio: 0.80, sweepDeg: 45, engines: 0, engineMount: 'none', radiusRatio: 0.075, dihedralDeg: 0 }],
@@ -430,11 +441,8 @@ export const EXACT: ReadonlyMap<string, Partial<AirframeShape>> = new Map([
   ['E3TF', { length: 46.6, spanRatio: 1.00, sweepDeg: 35, engines: 4 }],
   ['A124', { length: 69.1, spanRatio: 1.17, sweepDeg: 32, engines: 4 }],
   ['C5M', { length: 75.5, spanRatio: 0.89, sweepDeg: 25, engines: 4 }],
-  // The sandbox's own airframes (`sandbox/models.ts`). Not real designators,
-  // and chosen so no real one can collide with them.
-  ['SBF1', { kind: 'jet', length: 15, spanRatio: 0.63, sweepDeg: 40, engines: 0, engineMount: 'none', radiusRatio: 0.055, dihedralDeg: 0 }],
-  ['SBA1', { kind: 'jet', length: 16.3, spanRatio: 1.07, sweepDeg: 0, engines: 2, engineMount: 'tail', radiusRatio: 0.062, dihedralDeg: 3 }],
-  ['SBP1', { kind: 'piston', length: 10.2, spanRatio: 1.22, sweepDeg: 0, engines: 0, engineMount: 'none', radiusRatio: 0.072, dihedralDeg: 6 }],
+  // Exact: as a prefix it would claim every A10x.
+  ['A10', { length: 16.26, spanRatio: 1.07, sweepDeg: 0, engines: 2, engineMount: 'tail', radiusRatio: 0.062, dihedralDeg: 3 }],
 ]);
 
 /**
@@ -467,8 +475,8 @@ export const ROTORCRAFT_TYPES: ReadonlySet<string> = new Set([
   // under the `H1` range: common training helicopters, and every one of them
   // was drawn as a fixed-wing aircraft.
   'H269', 'H500', 'HUGH', 'B47G', 'B47J', 'EN28', 'EN48', 'R100', 'SCOR',
-  // The sandbox's attack helicopter (`sandbox/models.ts`).
-  'SBH1',
+  // The sandbox's attack helicopter.
+  'H64',
 ]);
 
 /** Prefixes that are unambiguously rotorcraft. See the note above. */
@@ -504,7 +512,7 @@ export const ROTOR_LENGTH: Readonly<Record<string, number>> = {
   A109: 13.0, A139: 16.7, A169: 14.6, A189: 19.5,
   S76: 16.0, S92: 20.9, S70: 19.8, UH60: 19.8, CH47: 30.1, CH53: 30.2,
   BK17: 13.0, NH90: 19.6, PUMA: 18.2, MI8: 18.2,
-  SBH1: 17.7,
+  H64: 17.7,
 };
 
 /** Sailplanes: the other silhouette nothing else in the table can express. */

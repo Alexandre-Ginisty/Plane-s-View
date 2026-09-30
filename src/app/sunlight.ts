@@ -10,9 +10,7 @@
 
 import type { Vector3 } from 'three';
 
-import { enuBasis } from '@/core/math/geo';
-import { fogDensityFor } from '@/render/atmosphere';
-import { sunDirectionEcef, sunElevation } from '@/core/sun';
+import { sunDirectionEcef } from '@/core/sun';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
 
@@ -22,25 +20,11 @@ import type { Globe } from '@/render/globe';
  * same vector each frame and allocating one per frame is exactly the kind of
  * churn that shows up as a periodic GC pause in a first-person view.
  */
-export function updateSunlight(
-  engine: Engine,
-  globe: Globe,
-  sunVec: Vector3,
-  upVec: Vector3,
-  lat: number,
-  lon: number,
-): void {
+export function updateSunlight(engine: Engine, globe: Globe, sunVec: Vector3): void {
   const dir = sunDirectionEcef();
   sunVec.set(dir[0], dir[1], dir[2]);
-
-  const basis = enuBasis(lat, lon);
-  upVec.set(basis.up[0], basis.up[1], basis.up[2]);
-
-  const elevation = sunElevation(lat, lon);
-  engine.setSky(sunVec, upVec, elevation);
+  // The sky, the haze and the light on the models all come from the one
+  // atmosphere, which works out the sun's elevation from the camera itself.
+  engine.setSky(sunVec);
   globe.setSun(sunVec);
-
-  // Terrain fades into the same colour the sky shows at the horizon, so the
-  // edge of loaded terrain has nothing to give it away.
-  globe.setAtmosphere(engine.horizonColor, fogDensityFor(elevation));
 }

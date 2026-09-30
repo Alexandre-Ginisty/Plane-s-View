@@ -21,7 +21,7 @@ import { buildAircraftModel, disposeAircraftModel, shapeFor } from '@/render/air
 import { loadModelFor } from '@/render/aircraft/library';
 import type { LoadedModel } from '@/render/aircraft/pvm';
 import type { SampledAircraft } from '@/state/traffic';
-import type { Effects } from './particles';
+import type { Effects, FireHandle } from './particles';
 
 /** Gravity, exaggerated so a fall from cruise does not take two minutes. */
 const GRAVITY = 26;
@@ -29,6 +29,7 @@ const GRAVITY = 26;
 const SMOKE_S = 75;
 const FLAMES_S = 25;
 const CHAR = new Color(0x2b2724);
+const _p = new Vector3();
 
 export type WreckState = 'falling' | 'down';
 
@@ -54,7 +55,10 @@ export class Wreck {
   private speedH: number;
   private vertical: number;
   private ground = Number.NaN;
-  private emit = 0;
+  /** The fire following the wreck down, once lit. */
+  private fire: FireHandle | null = null;
+  private readonly velocityAtImpact = new Vector3();
+  private readonly secondaries: { at: number; along: number; strength: number }[] = [];
   /** Materials this wreck owns, so it can char them without charring every A320. */
   private readonly owned: MeshLambertMaterial[] = [];
   private procedural: ReturnType<typeof buildAircraftModel> | null = null;
@@ -137,14 +141,13 @@ export class Wreck {
     if (this.state === 'down') {
       // Still placed every frame: the floating origin can move under it.
       this.place();
+      const before = this.sinceImpact;
       this.sinceImpact += dt;
-      this.emit += dt;
-      const flames = this.sinceImpact < FLAMES_S;
-      const interval = this.sinceImpact < 6 ? 0.05 : 0.18;
-      if (this.sinceImpact < SMOKE_S) {
-        while (this.emit > interval) {
-          this.emit -= interval;
-          this.effects.groundFire(this.position.x, this.position.y, this.position.z, flames, Math.max(0.6, this.lengthM / 40));
+      // The tanks that survived the impact letting go, one after another.
+      for (const s of this.secondaries) {
+        if (before < s.at && this.sinceImpact >= s.at) {
+          _p.copy(this.position).addScaledVector(this.velocityAtImpact, s.along);
+          this.effects.secondary(_p, this.lengthM, s.strength);
         }
       }
       this.char(Math.min(1, this.sinceImpact / 3));
@@ -175,15 +178,9 @@ export class Wreck {
     }
 
     this.place();
-    this.emit += dt;
-    while (this.emit > 0.03) {
-      this.emit -= 0.03;
-      this.effects.burn(
-        this.position.x, this.position.y, this.position.z,
-        this.velocity.x, this.velocity.y, this.velocity.z,
-        Math.max(0.7, this.lengthM / 35),
-      );
-    }
+    // The fire rides the wreck down; its flames and smoke are left behind as a trail.
+    this.fire ??= this.effects.startFire(this.position, this.lengthM, 90);
+    this.effects.moveFire(this.fire, this.position);
   }
 
   private impact(ground: number): void {
@@ -193,12 +190,26 @@ export class Wreck {
     this.altM = ground + this.lengthM * 0.03;
     this.pitch = -8 - Math.random() * 14;
     this.roll = (Math.random() - 0.5) * 50;
+    this.velocityAtImpact.copy(this.velocity);
+    this.effects.impact(this.position, this.velocity, this.lengthM);
     this.speedH = 0;
     this.vertical = 0;
     this.place();
-    const s = Math.max(1.2, this.lengthM / 18);
-    this.effects.explode(this.position.x, this.position.y, this.position.z, s);
-    this.effects.explode(this.position.x, this.position.y, this.position.z, s * 0.6);
+    // The fire that followed it down goes out in the fireball; the wreck
+    // burns where it lies, under a column of smoke.
+    if (this.fire !== null) this.effects.moveFire(this.fire, this.position);
+    this.effects.groundFire(this.position, this.lengthM, FLAMES_S);
+    // A few tanks survive the impact and go up in the next second or two,
+    // strung along the direction it was going.
+    const n = 2 + Math.floor(Math.random() * 3);
+    this.velocityAtImpact.normalize();
+    for (let i = 0; i < n; i++) {
+      this.secondaries.push({
+        at: 0.25 + Math.random() * 1.8,
+        along: (Math.random() * 0.8 + 0.1) * this.lengthM * 1.5,
+        strength: 0.5 + Math.random() * 0.8,
+      });
+    }
     this.onImpact(this);
   }
 

@@ -8,7 +8,7 @@ const viper = sandboxAircraft('viper');
 const striker = sandboxAircraft('striker');
 
 function flight(spec = viper.flight, altM = 2000): ArcadeFlight {
-  return new ArcadeFlight(spec, { lat: 48.85, lon: 2.35, altM, headingDeg: 0 }, 'sandbox', 'SBF1', 'VIPER');
+  return new ArcadeFlight(spec, { lat: 48.85, lon: 2.35, altM, headingDeg: 0 }, 'sandbox', 'F16', 'VIPER');
 }
 
 describe('ArcadeFlight', () => {

@@ -68,12 +68,15 @@ import {
   Scene,
   Vector3,
   type PerspectiveCamera,
+  type WebGLRenderer,
 } from 'three';
+import { prewarm } from './prewarm';
 import { FEET_TO_METRES, ecefToGeodetic, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
-import { isSurfaceVehicle, shapeFor } from './aircraft';
+import { isSurfaceVehicle, shapeFor, type AirframeShape } from './aircraft';
+import { AircraftLights, lightSeed } from './aircraftLights';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
@@ -92,6 +95,16 @@ import type { OverlayFrame, OverlayPalette } from './overlay';
  * it cost was the look of the sky.
  */
 const MAX_RANGE_M = 20_000;
+
+/**
+ * At night, traffic beyond the drawing range still shows — as its lights.
+ * A beacon is visible from much further than this; the limit is what the
+ * sky can hold without becoming a starfield of traffic.
+ */
+const LIGHTS_RANGE_M = 90_000;
+
+/** Height below which the landing lights are on: the rule is ten thousand feet. */
+const LANDING_LIGHTS_FT = 10_000;
 
 /** How many of the nearest aircraft get their own airframe and livery. */
 const DETAIL_COUNT = 10;
@@ -201,6 +214,8 @@ interface Airframe {
   rotor: boolean;
   size: number;
   clearance: number;
+  /** Where its lights go. */
+  shape: AirframeShape;
 }
 
 /**
@@ -253,6 +268,10 @@ class InstancedModel {
 
 export class Traffic3D {
   readonly scene = new Scene();
+  /** Every aircraft's lights, the one being ridden included (see `OwnAircraft`). */
+  readonly lights = new AircraftLights();
+  /** To put a detailed airframe on the GPU before it replaces the stand-in (see `prewarm`). */
+  warm: { renderer: WebGLRenderer; scene: Scene } | null = null;
 
   private fixedWing: InstancedModel | null = null;
   private rotorcraft: InstancedModel | null = null;
@@ -278,6 +297,7 @@ export class Traffic3D {
 
   constructor(private readonly origin: FloatingOrigin) {
     this.scene.matrixAutoUpdate = false;
+    this.scene.add(this.lights.points);
 
     /*
      * Nothing is drawn until the airframes arrive, and that is deliberate.
@@ -318,6 +338,8 @@ export class Traffic3D {
     hidden?: ReadonlySet<string>,
   ): void {
     this.cameraRender.copy(cameraEcef);
+    this.lights.begin();
+    const farLightsSq = this.lights.night > 0.05 ? LIGHTS_RANGE_M * LIGHTS_RANGE_M : 0;
     if (this.fixedWing) this.fixedWing.count = 0;
     if (this.rotorcraft) this.rotorcraft.count = 0;
     let culled = 0;
@@ -344,6 +366,8 @@ export class Traffic3D {
       const dSq = dx * dx + dy * dy + dz * dz;
       if (dSq > gateSq) {
         culled++;
+        // Too far to draw, near enough to see its lights by night.
+        if (dSq < farLightsSq) this.addFarLights(sample, ecef);
         continue;
       }
 
@@ -404,6 +428,7 @@ export class Traffic3D {
       // else — no floor, no ramp, no chart symbol.
       this.dummy.scale.setScalar(airframe.size);
       this.dummy.updateMatrix();
+      this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT);
 
       const type = registry.knownTypeCode(sample.hex);
       if (type && detailRank < DETAIL_KEEP) {
@@ -470,7 +495,7 @@ export class Traffic3D {
     this.detailed.set(sample.hex, entry);
     this.scene.add(group);
 
-    void loadModelFor(type, operator, sample.latest.category).then((model) => {
+    void loadModelFor(type, operator, sample.latest.category).then(async (model) => {
       // Superseded, dropped, or disposed while downloading.
       if (!model || this.disposed || this.detailed.get(sample.hex) !== entry) return;
       for (const part of model.parts) {
@@ -487,6 +512,9 @@ export class Traffic3D {
         if (part.role === 'gear') entry.gear.push(mesh);
         group.add(mesh);
       }
+      // The stand-in keeps the aircraft on screen until its own airframe is
+      // on the GPU; a livery arriving is otherwise a frozen frame.
+      if (this.warm) await prewarm(this.warm.renderer, group, this.warm.scene);
       entry.loaded = true;
     });
     return entry;
@@ -799,6 +827,19 @@ export class Traffic3D {
    * for the few per cent with no type code yet, and upgrades the instant the
    * lookup lands.
    */
+  /** An aircraft beyond the drawing range: its lights only, at its reported position. */
+  private addFarLights(sample: SampledAircraft, ecef: readonly [number, number, number]): void {
+    const airframe = this.classify(sample);
+    const altM = sample.altFt * FEET_TO_METRES;
+    const frame = aircraftFrame(sample, altM);
+    this.dummy.position.set(ecef[0] - this.origin.current[0], ecef[1] - this.origin.current[1], ecef[2] - this.origin.current[2]);
+    this.basis.makeBasis(frame.right, frame.forward, frame.up);
+    this.dummy.quaternion.setFromRotationMatrix(this.basis);
+    this.dummy.scale.setScalar(airframe.size);
+    this.dummy.updateMatrix();
+    this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT);
+  }
+
   private classify(sample: SampledAircraft): Airframe {
     const memo = this.airframes.get(sample.hex);
     if (memo) return memo;
@@ -809,6 +850,7 @@ export class Traffic3D {
       rotor: shape.kind === 'rotorcraft',
       size: shape.length,
       clearance: clearanceFor(shape),
+      shape,
     };
 
     if (type) {
@@ -830,5 +872,6 @@ export class Traffic3D {
     this.detailed.clear();
     this.fixedWing?.dispose();
     this.rotorcraft?.dispose();
+    this.lights.dispose();
   }
 }

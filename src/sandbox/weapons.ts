@@ -59,6 +59,9 @@ export const SALVO: Record<Weapon, { rounds: number; spacing: number; cooldown: 
 
 /** Most rounds in flight at once. */
 const MAX_ROUNDS = 24;
+/** Metres of flight between two puffs of exhaust. */
+const TRAIL_SPACING_M: Record<Weapon, number> = { missile: 9, rockets: 7 };
+const _puff = new Vector3();
 
 const _dir = new Vector3();
 const _want = new Vector3();
@@ -173,15 +176,19 @@ export class Weapons {
 
       const ground = groundBelow(r.position);
       if (r.age > s.life || (Number.isFinite(ground) && ground > 0.5)) {
-        this.effects.pop(r.position.x, r.position.y, r.position.z);
+        this.effects.pop(r.position);
         this.remove(i);
         continue;
       }
 
-      r.trail += dt;
-      while (r.trail > 0.018) {
-        r.trail -= 0.018;
-        this.effects.exhaust(r.position.x, r.position.y, r.position.z, r.kind === 'missile');
+      // The trail is laid by distance, not time: a puff every few metres
+      // whatever the speed, walked back along this step so it is continuous.
+      r.trail += newSpeed * dt;
+      const step = TRAIL_SPACING_M[r.kind];
+      while (r.trail > step) {
+        r.trail -= step;
+        _puff.copy(r.position).addScaledVector(_dir, -r.trail);
+        this.effects.exhaust(_puff, r.velocity, r.kind === 'missile');
       }
 
       r.mesh.position.set(r.position.x - o[0], r.position.y - o[1], r.position.z - o[2]);

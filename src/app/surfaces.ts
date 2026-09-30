@@ -84,6 +84,9 @@ export function createSurfaces(
 
   const traffic3d = new Traffic3D(origin);
   const ownAircraft = new OwnAircraft(origin);
+  ownAircraft.lights = traffic3d.lights;
+  ownAircraft.warm = { renderer: engine.renderer, scene: engine.scene };
+  traffic3d.warm = { renderer: engine.renderer, scene: engine.scene };
   const pov = new PovController(origin);
   const pins3d = new Pins3D(origin);
   const overlay = new ViewOverlay(pinOverlay);

@@ -17,7 +17,9 @@ import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
 import type { OwnAircraft } from '@/render/ownAircraft';
-import type { PovController, CameraMode } from '@/render/pov';
+import { isInterior, type PovController, type CameraGroup, type CameraMode } from '@/render/pov';
+import { isFreighter } from '@/data/freighters';
+import { SANDBOX_ENABLED } from '@/sandbox/enabled';
 import type { Traffic3D } from '@/render/traffic3d';
 import type { Pins3D } from '@/render/pins3d';
 import type { ViewOverlay } from '@/render/overlay';
@@ -46,17 +48,30 @@ import { app } from '@/state/appStore.svelte';
 import { ConnectionSupervisor } from './connection';
 import { FALLBACK_VIEW, initialView } from './geolocate';
 import { PovSession } from './povSession';
-import { findRandomAircraft } from './shuffle';
+import { findRandomAircraft, type ShuffleResult } from './shuffle';
 import { CATCH_LABELS, acceptsForCatch, pickNearby, type CatchKind } from './catch';
 import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
+import { hazeForVisibility } from '@/render/sky/model';
 import { SandboxSession } from '@/sandbox/session';
 import { sandboxAircraft } from '@/sandbox/catalog';
 import { publishTelemetry } from './telemetry';
+import { Cockpit, emptyReadings } from '@/render/cockpit';
+import { shapeFor } from '@/render/aircraft';
+import { loadModelFor, operatorOf } from '@/render/aircraft/library';
+import { fillContacts, readingsFromFlight, readingsFromSample } from './cockpitReadings';
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
+/**
+ * Degrees added to the lens inside the cockpit: a person sees the panel at
+ * the bottom of their vision and the sky above the canopy bow at once, and a
+ * 60° lens cannot show both. Simulators widen it for the same reason.
+ */
+const COCKPIT_FOV_BOOST_DEG = 12;
+/** Radians the cockpit view rests below the boresight, for the same reason. */
+const COCKPIT_REST_PITCH = -0.12;
 
 /**
  * The view the auto camera picks for each moment worth one.
@@ -72,6 +87,9 @@ const DIRECTED_VIEWS: Partial<Record<FlightPhase, CameraMode>> = {
   final: 'cockpit',
   rollout: 'cockpit',
 };
+
+/** How long an aircraft found ahead of time is still worth flying into, ms. */
+const NEXT_SHUFFLE_FRESH_MS = 75_000;
 
 /** Whole-chain failures in a row before the user is told the feed is down. */
 const FEED_FAILURES_BEFORE_NOTICE = 3;
@@ -120,7 +138,9 @@ export class Orchestrator {
   private dossierToken = 0;
 
   private readonly sunVec = new Vector3();
-  private readonly upVec = new Vector3();
+  /** The 3D cockpit around the first-person camera, and what its instruments show. */
+  private readonly cockpit = new Cockpit();
+  private readonly readings = emptyReadings();
   private readonly cameraEcefVec = new Vector3();
 
   private lastSamples: SampledAircraft[] = [];
@@ -135,6 +155,8 @@ export class Orchestrator {
   private phaseEventId = 0;
   /** The view the user chose, restored when the auto camera lets go. */
   private userCameraMode: CameraMode = 'cockpit';
+  /** The view last chosen inside and outside, for switching between the two. */
+  private readonly lastInGroup: Record<CameraGroup, CameraMode> = { interior: 'cockpit', exterior: 'chase' };
   /** True while the auto camera is holding the view. */
   private directing = false;
   /**
@@ -144,6 +166,17 @@ export class Orchestrator {
   private directorSuppressedFor: FlightPhase | null = null;
   /** Newest "take me somewhere else" search; older ones land nowhere. */
   private shuffleToken = 0;
+  /**
+   * The next "somewhere else", found ahead of time. The search walks several
+   * regions of the world over a feed that is often rate-limited — anything from
+   * half a second to ten — so it is done while the user is still flying, and
+   * the button only has to take what is ready. The aircraft's model, its
+   * interiors and the ground under it are warmed at the same time.
+   */
+  private nextShuffle: { found: ShuffleResult; at: number } | null = null;
+  private preparingShuffle = false;
+  private lastShuffleSearch = 0;
+  private povEnteredAt = 0;
 
   /** The sandbox game, while one is being played. */
   private sandbox: SandboxSession | null = null;
@@ -237,6 +270,9 @@ export class Orchestrator {
 
     const surfaces = createSurfaces(canvas, this.origin, pinOverlay);
     this.engine = surfaces.engine;
+    this.engine.origin = this.origin;
+    this.engine.overlay = this.cockpit;
+    this.cockpit.renderer = this.engine.renderer;
     this.globe = surfaces.globe;
     this.traffic3d = surfaces.traffic3d;
     this.ownAircraft = surfaces.ownAircraft;
@@ -264,7 +300,8 @@ export class Orchestrator {
 
     if (import.meta.env.DEV) {
       // Debug handle. Dev-only: nothing in the production bundle reaches it.
-      (window as unknown as Record<string, unknown>)['__planesview'] = this;
+      // `__pv` carries the store too, for driving the app from a script.
+      Object.assign(window, { __planesview: this, __pv: { orchestrator: this, app } });
     }
 
     /*
@@ -290,6 +327,10 @@ export class Orchestrator {
     this.connection.tick(dt);
 
     const inPov = app.view === 'pov';
+    if (!inPov && this.cockpit.visible) {
+      this.cockpit.visible = false;
+      app.cockpit3d = false;
+    }
     this.renderHold = inPov ? 0.8 : Math.max(0, this.renderHold - dt);
     engine.renderEnabled = inPov || this.renderHold > 0;
 
@@ -336,6 +377,9 @@ export class Orchestrator {
         (2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight;
       pov.setViewport(radiansPerPixel);
 
+      pov.crisp = false;
+      pov.shake = 0;
+      pov.speedFovDeg = isInterior(app.cameraMode) ? COCKPIT_FOV_BOOST_DEG : 0;
       pov.update(engine.camera, flying, dt, (lat, lon) => globe.sampleHeight(lat, lon));
       this.trackPhase(flying, dt, globe.sampleHeight(flying.lat, flying.lon));
 
@@ -344,7 +388,7 @@ export class Orchestrator {
       this.pins3d?.update(app.pins, engine.camera, engine.viewportHeight, (lat, lon) =>
         globe.sampleHeight(lat, lon),
       );
-      this.applySunlight(flying.lat, flying.lon);
+      this.applySunlight();
       this.maybePrefetch(dt, flying);
       this.maybeFollow(dt, flying.hex);
 
@@ -372,12 +416,14 @@ export class Orchestrator {
           // Also shown while flying across to it from another aircraft, so
           // what the camera is heading for is an aeroplane, not empty sky —
           // until the very end, when the camera is about to be inside it.
-          app.cameraMode !== 'cockpit' || (pov.transitionProgress ?? 1) < 0.9,
+          !isInterior(app.cameraMode) || (pov.transitionProgress ?? 1) < 0.9,
           dt,
           (lat, lon) => globe.sampleHeight(lat, lon),
         );
         this.ownAircraft.setSun(this.sunVec);
       }
+      this.updateCockpit(flying, null, dt);
+      this.commitLights();
 
       // Text over the view: pin names, and the aircraft that can be clicked.
       if (this.overlay) {
@@ -400,6 +446,91 @@ export class Orchestrator {
   }
 
   /**
+   * The cockpit for the aircraft being ridden, when the view is inside it and
+   * not flying between views; its instruments filled from the flight model in
+   * the sandbox and from the feed otherwise.
+   */
+  private updateCockpit(sample: SampledAircraft, sb: SandboxSession | null, dt: number): void {
+    const pov = this.pov!;
+    const engine = this.engine!;
+    const globe = this.globe!;
+    const show =
+      app.view === 'pov' &&
+      isInterior(app.cameraMode) &&
+      (pov.transitionProgress ?? 1) >= 0.9 &&
+      !(sb && (sb.crashed || sb.killCamActive));
+    this.cockpit.visible = show;
+    if (app.cockpit3d !== show) app.cockpit3d = show;
+    const type = sb ? sb.type : registry.knownTypeCode(sample.hex);
+    const shape = pov.airframe ?? shapeFor(type, sample.latest.category ?? null);
+    // A freighter's cabin is its hold. The sandbox flies nobody's cargo.
+    const freighter = !sb && isFreighter(sample.latest.callsign);
+    // Both interiors loaded and on the GPU whatever the view, so stepping inside is instant.
+    if (app.view === 'pov') this.cockpit.prefetch(type, shape, freighter);
+    if (!show) {
+      pov.setRestPitch(0);
+      return;
+    }
+
+    const seat = app.cameraMode === 'cabin' ? 'cabin' : 'cockpit';
+    this.cockpit.setAirframe(type, shape, seat, freighter);
+    // From the flight deck, a little down onto the panel; from a seat, out of its window.
+    const look = seat === 'cabin' ? this.cockpit.look : null;
+    if (look) pov.setRestLook(look.yaw, look.pitch);
+    else pov.setRestPitch(seat === 'cockpit' ? COCKPIT_REST_PITCH : 0);
+    const r = this.readings;
+    readingsFromSample(r, sample, globe.sampleHeight(sample.lat, sample.lon));
+    let lockHex: string | null = null;
+    if (sb) {
+      const f = sb.readout;
+      if (f) readingsFromFlight(r, f);
+      const w = app.weather;
+      r.windFromDeg = w?.windDirectionDeg ?? null;
+      r.windKt = w?.windSpeedMs != null ? w.windSpeedMs * 1.943_84 : null;
+      lockHex = sb.lockHex;
+      r.weapon = {
+        name: sb.aircraft.weapon === 'missile' ? 'AIM-9' : 'RKT',
+        ready: sb.readiness,
+        lock: lockHex ? sb.lockLevel : null,
+        targetRangeM: null,
+        targetName: null,
+      };
+    }
+    fillContacts(r, this.traffic3d!.inRange, engine.camera.position, pov.bodyQuaternion, sample.altFt, lockHex);
+    if (r.weapon && lockHex) {
+      const c = r.contacts.find((k) => k.locked);
+      r.weapon.targetRangeM = c ? c.rangeM : null;
+      const t = this.traffic3d!.inRange.find((k) => k.hex === lockHex);
+      r.weapon.targetName = t ? (t.sample.latest.callsign?.trim() || t.hex.toUpperCase()) : null;
+    }
+    this.cockpit.update(engine.camera, pov.bodyQuaternion, this.sunVec, r, dt);
+  }
+
+  /**
+   * The flight model felt through the camera: shaken by a blast, by the
+   * buffet of a stall or an overspeed, by the rumble of the afterburner and
+   * the runway; the lens a touch wider as the speed builds.
+   */
+  private shakeAndLens(sb: SandboxSession): void {
+    const pov = this.pov!;
+    pov.crisp = true;
+    const f = sb.readout;
+    let shake = sb.shake;
+    let fov = 0;
+    if (f) {
+      if (f.stalled) shake = Math.max(shake, 0.55);
+      else if (f.stallWarning) shake = Math.max(shake, 0.32);
+      if (f.overspeed) shake = Math.max(shake, 0.4);
+      if (f.g > 6.5) shake = Math.max(shake, Math.min(0.45, (f.g - 6.5) / 6));
+      if (f.afterburner > 0.02) shake = Math.max(shake, 0.1 * f.afterburner);
+      if (f.onGround && f.iasKt > 20) shake = Math.max(shake, Math.min(0.3, f.iasKt / 500));
+      fov = Math.min(1, Math.max(0, (f.iasKt - 120) / 480)) * 4;
+    }
+    pov.shake = shake;
+    pov.speedFovDeg = isInterior(app.cameraMode) ? fov + COCKPIT_FOV_BOOST_DEG : fov * 0.6;
+  }
+
+  /**
    * One frame of the sandbox: the same stack as the cockpit — camera, terrain,
    * traffic, the aircraft's own model, the overlay — around an aircraft the
    * keyboard flies instead of the feed, plus the game on top.
@@ -411,7 +542,9 @@ export class Orchestrator {
     const traffic3d = this.traffic3d!;
     const heightAt = (lat: number, lon: number): number => globe.sampleHeight(lat, lon);
 
+    sb.observeWind(dt, app.weather, samples);
     const player = sb.stepPlayer(dt, heightAt);
+    this.shakeAndLens(sb);
     pov.setViewport((2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight);
 
     const killCam = sb.placeKillCam(engine.camera, dt);
@@ -427,7 +560,7 @@ export class Orchestrator {
     this.killCamWas = killCam;
 
     this.pins3d?.update(app.pins, engine.camera, engine.viewportHeight, heightAt);
-    this.applySunlight(player.lat, player.lon);
+    this.applySunlight();
     this.maybePrefetch(dt, player);
     globe.update(engine.camera, dt, engine.viewportHeight);
 
@@ -436,12 +569,14 @@ export class Orchestrator {
 
     if (this.ownAircraft) {
       const visible =
-        !sb.crashed && (killCam || app.cameraMode !== 'cockpit' || (pov.transitionProgress ?? 1) < 0.9);
+        !sb.crashed && (killCam || !isInterior(app.cameraMode) || (pov.transitionProgress ?? 1) < 0.9);
       this.ownAircraft.update(player, sb.type, visible, dt, heightAt);
       this.ownAircraft.setSun(this.sunVec);
     }
+    this.updateCockpit(player, sb, dt);
+    this.commitLights();
 
-    sb.stepWorld(dt, traffic3d, heightAt);
+    sb.stepWorld(dt, traffic3d, heightAt, engine.camera);
 
     if (this.overlay) {
       const frame = this.overlay.begin();
@@ -457,7 +592,13 @@ export class Orchestrator {
     }
 
     const airframe = pov.airframe;
-    if (airframe && !sb.crashed) this.audio.update(airframe, flightRegime(player), app.cameraMode);
+    if (airframe && !sb.crashed) {
+      // The flight model knows its real engine output; the feed's aircraft only imply one.
+      const regime = flightRegime(player);
+      const power = sb.enginePower;
+      if (power !== null) regime.power = power;
+      this.audio.update(airframe, regime, app.cameraMode);
+    }
     return player;
   }
 
@@ -494,11 +635,23 @@ export class Orchestrator {
     };
   }
 
-  private applySunlight(lat: number, lon: number): void {
+  /** The frame's aircraft lights — traffic and the aircraft being ridden — to the GPU. */
+  private commitLights(): void {
+    const engine = this.engine!;
+    const camera = engine.camera;
+    const pxPerRad = engine.viewportHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    this.traffic3d?.lights.commit(performance.now() / 1000, pxPerRad);
+  }
+
+  private applySunlight(): void {
     const engine = this.engine;
     const globe = this.globe;
     if (!engine || !globe) return;
-    updateSunlight(engine, globe, this.sunVec, this.upVec, lat, lon);
+    updateSunlight(engine, globe, this.sunVec);
+    this.ownAircraft?.setLight(engine.atmosphere.light);
+    this.traffic3d?.lights.setLight(engine.atmosphere.light);
+    this.cockpit.setLight(engine.atmosphere.light);
+    engine.atmosphere.setHaze(hazeForVisibility(app.weather?.visibilityM ?? null));
   }
 
   private maybePrefetch(dt: number, sample: SampledAircraft): void {
@@ -522,6 +675,8 @@ export class Orchestrator {
     // Keep the viewport query centred on the aircraft so nearby traffic keeps
     // arriving once the map is no longer driving it.
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
+
+    this.prepareNextShuffle();
   }
 
   /**
@@ -575,7 +730,11 @@ export class Orchestrator {
     if (this.directorSuppressedFor !== null && this.directorSuppressedFor !== phase) {
       this.directorSuppressedFor = null;
     }
-    const want = app.autoCamera && this.directorSuppressedFor === null ? DIRECTED_VIEWS[phase] : undefined;
+    let want = app.autoCamera && this.directorSuppressedFor === null ? DIRECTED_VIEWS[phase] : undefined;
+    // A passenger at the window keeps the window: the runway rushing by out
+    // of it is the same event, seen from the seat that was chosen.
+    const chosen = this.directing ? this.userCameraMode : app.cameraMode;
+    if (want === 'cockpit' && chosen === 'cabin') want = 'cabin';
 
     if (want) {
       if (!this.directing) {
@@ -621,8 +780,10 @@ export class Orchestrator {
       st.crashes = sb.score.crashes;
       st.ready = Math.round(sb.readiness * 20) / 20;
       st.lock = sb.lockHex;
+      st.lockLevel = Math.round(sb.lockLevel * 20) / 20;
       st.killCam = sb.killCamActive;
       st.crashed = sb.crashed;
+      st.flight = sb.readout;
     }
     if (app.view === 'pov') {
       app.phase = this.phaseTracker.phase;
@@ -675,6 +836,7 @@ export class Orchestrator {
   enterPov(): void {
     const hex = app.selectedHex;
     if (!hex) return;
+    this.povEnteredAt = performance.now();
 
     const sample = this.traffic.sampleOne(hex);
     if (!sample) {
@@ -694,7 +856,7 @@ export class Orchestrator {
     // to stream in after the transition.
     const ecef = geodeticToEcef(sample.lat, sample.lon, sample.altFt * FEET_TO_METRES);
     this.origin.rebase(ecef);
-    this.applySunlight(sample.lat, sample.lon);
+    this.applySunlight();
 
     // Warm the area before the camera arrives, so the first frame of the
     // cockpit view already has terrain under it.
@@ -729,8 +891,7 @@ export class Orchestrator {
     const token = ++this.shuffleToken;
 
     try {
-      const found = await findRandomAircraft((query, signal) =>
-        this.client.fetchOnce(query, signal), { excludeHex: app.selectedHex });
+      const found = this.takeNextShuffle() ?? (await this.searchShuffle());
 
       if (token !== this.shuffleToken) return;
 
@@ -741,7 +902,8 @@ export class Orchestrator {
 
       // Into the store before selecting: `select` and `enterPov` both read the
       // track, and this aircraft is nowhere near the viewport query that has
-      // been running, so nothing else would have put it there.
+      // been running, so nothing else would have put it there. A report found
+      // ahead of time is carried forward from its fix time by the track.
       this.traffic.ingestOne(found.aircraft);
 
       // Point the feed at the new place *first*. Otherwise the next poll is
@@ -749,7 +911,9 @@ export class Orchestrator {
       // just stepped into goes unrefreshed until the session gives up on it.
       this.query = { lat: found.aircraft.lat, lon: found.aircraft.lon, radiusNm: 80 };
 
-      await this.select(found.aircraft.hex);
+      // Not awaited: the flight card fills in when the dossier lands; the
+      // aircraft is flown from the first frame.
+      void this.select(found.aircraft.hex);
       if (token !== this.shuffleToken) return;
 
       this.enterPov();
@@ -761,6 +925,43 @@ export class Orchestrator {
       // pressed Escape while the search was running.
       app.shuffling = false;
     }
+  }
+
+  private searchShuffle(): Promise<ShuffleResult | null> {
+    this.lastShuffleSearch = performance.now();
+    return findRandomAircraft((query, signal) => this.client.fetchOnce(query, signal), { excludeHex: app.selectedHex });
+  }
+
+  /** The aircraft found ahead of time, if it is still fresh enough to fly into. */
+  private takeNextShuffle(): ShuffleResult | null {
+    const next = this.nextShuffle;
+    this.nextShuffle = null;
+    if (!next || performance.now() - next.at > NEXT_SHUFFLE_FRESH_MS || next.found.aircraft.hex === app.selectedHex) return null;
+    return next.found;
+  }
+
+  /**
+   * Find the next "somewhere else" in the background, and warm what arriving
+   * there will need. Not before the current aircraft has settled — its own
+   * tiles and models come first — and not more often than the feed can bear.
+   */
+  private prepareNextShuffle(): void {
+    if (this.preparingShuffle || this.sandbox || app.view !== 'pov' || app.shuffling) return;
+    const now = performance.now();
+    if (now - this.povEnteredAt < 8000 || now - this.lastShuffleSearch < 20_000) return;
+    if (this.nextShuffle && now - this.nextShuffle.at < NEXT_SHUFFLE_FRESH_MS * 0.7) return;
+    this.preparingShuffle = true;
+    void this.searchShuffle()
+      .then((found) => {
+        if (!found) return;
+        this.nextShuffle = { found, at: performance.now() };
+        const a = found.aircraft;
+        const type = registry.knownTypeCode(a.hex);
+        void loadModelFor(type, operatorOf(a.callsign), a.category);
+        if (type) this.cockpit.prefetch(type, shapeFor(type, a.category), isFreighter(a.callsign));
+        this.globe?.prefetchAlong(a.lat, a.lon, a.trackDeg ?? 0, (a.groundSpeedKt ?? 0) * KNOTS_TO_MPS, 20, 12);
+      })
+      .finally(() => (this.preparingShuffle = false));
   }
 
   exitPov(): void {
@@ -860,8 +1061,19 @@ export class Orchestrator {
   /** The user choosing a view. Also takes it back from the auto camera. */
   setCameraMode(mode: CameraMode): void {
     this.userCameraMode = mode;
+    this.lastInGroup[isInterior(mode) ? 'interior' : 'exterior'] = mode;
     if (this.directing) this.directorSuppressedFor = this.phaseTracker.phase;
     this.applyCameraMode(mode);
+  }
+
+  /** Inside or outside: back to the view last chosen there. */
+  setCameraGroup(group: CameraGroup): void {
+    if ((isInterior(app.cameraMode) ? 'interior' : 'exterior') === group) return;
+    this.setCameraMode(this.lastInGroup[group]);
+  }
+
+  toggleCameraGroup(): void {
+    this.setCameraGroup(isInterior(app.cameraMode) ? 'exterior' : 'interior');
   }
 
   private applyCameraMode(mode: CameraMode): void {
@@ -923,10 +1135,10 @@ export class Orchestrator {
 
   /** Start choosing where to play: the next click on the map picks the place. */
   beginSandbox(): void {
+    if (!SANDBOX_ENABLED) return;
     if (app.view === 'pov') this.exitPov();
     if (app.selectedHex) void this.select(null);
     app.pinMode = false;
-    app.showLayers = false;
     app.sandbox.phase = 'pick';
     // Kept through the hangar, so a second click moves the start.
     this.map?.setPickHandler((lat, lon, name) => {
@@ -988,9 +1200,13 @@ export class Orchestrator {
         const id = ++this.sandboxEventId;
         app.sandbox.feed = [{ id, text: `${victim.callsign} hit the ground`, points }, ...app.sandbox.feed].slice(0, 5);
       },
-      crashed: () => {
+      crashed: (reason) => {
         app.sandbox.crashed = true;
-        app.notify('You crashed — back in the air in a moment.', 'warn', 3000);
+        app.notify(reason ? `${reason} — back in the air in a moment.` : 'You crashed — back in the air in a moment.', 'warn', 3500);
+      },
+      landed: (td) => {
+        const rating = { butter: 'Butter', smooth: 'Smooth', firm: 'Firm', hard: 'Hard' }[td.rating];
+        app.notify(`${rating} landing · ${Math.round(td.verticalSpeedFpm)} fpm · ${Math.round(td.airspeedKt)} kt`, td.rating === 'hard' ? 'warn' : 'info', 4000);
       },
       respawned: () => {
         app.sandbox.crashed = false;
@@ -1030,7 +1246,7 @@ export class Orchestrator {
     this.hoverTraffic = null;
     const ecef = geodeticToEcef(spawn.lat, spawn.lon, 1600);
     this.origin.rebase(ecef);
-    this.applySunlight(spawn.lat, spawn.lon);
+    this.applySunlight();
     this.globe?.prefetchAlong(spawn.lat, spawn.lon, heading, aircraft.flight.cruiseKt * KNOTS_TO_MPS, 40, 12);
     this.query = { lat: spawn.lat, lon: spawn.lon, radiusNm: 60 };
     if (app.sound) void this.audio.enable();

@@ -121,10 +121,12 @@ export class Pins3D {
     return g;
   })();
 
+  // Markers, not scenery: they stay readable through the haze.
   private readonly beamMaterial = new MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     depthWrite: false,
+    fog: false,
   });
 
   private readonly dotMaterial = new SpriteMaterial({
@@ -133,6 +135,7 @@ export class Pins3D {
     transparent: true,
     depthWrite: false,
     sizeAttenuation: false,
+    fog: false,
   });
 
   constructor(private readonly origin: FloatingOrigin) {

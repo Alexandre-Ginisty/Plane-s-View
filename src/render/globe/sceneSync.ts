@@ -17,11 +17,10 @@
  * flashes the parent through the child.
  */
 
-import { Color, Mesh, Scene, Vector3, Vector4 } from 'three';
+import { Mesh, Scene, Vector3, Vector4 } from 'three';
 
 import type { FloatingOrigin } from '@/core/frame';
 import { TerrainMaterial } from '../terrainMaterial';
-import { CLEAR_DAY_DENSITY } from '../atmosphere';
 import { RELIEF, TEXTURE_FADE_SEC, TILE_FADE_SEC } from './constants';
 import type { TileMap } from './eviction';
 import type { TileNode } from './tileNode';
@@ -38,31 +37,14 @@ export class SceneSynchroniser {
   ) {}
 
   private sunDirection = new Vector3(1, 0, 0);
-  private fogColor = new Color(0x8fb2d4);
-  private fogDensity = CLEAR_DAY_DENSITY;
   /** Shadow floor handed to every terrain material. */
   private readonly ambient = RELIEF.ambient;
-  /** Planet centre in render space. Recomputed each frame: the origin moves. */
-  private readonly planetCentre = new Vector3();
 
   setSun(direction: Vector3): void {
     this.sunDirection.copy(direction).normalize();
   }
 
-  setAtmosphere(color: Color, density: number): void {
-    this.fogColor = color;
-    this.fogDensity = density;
-  }
-
   applyRenderSet(dt: number): { triangles: number; deepestZoom: number; rendered: number } {
-    // Render space is ECEF minus the origin, so the planet's centre sits at
-    // minus the origin. Read once per frame rather than per tile.
-    this.planetCentre.set(
-      -this.origin.current[0],
-      -this.origin.current[1],
-      -this.origin.current[2],
-    );
-
     const selected = new Set(this.renderSet);
     let triangles = 0;
     let deepest = 0;
@@ -104,7 +86,6 @@ export class SceneSynchroniser {
 
       material.setFade(node.opacity);
       material.setSun(this.sunDirection);
-      material.setFog(this.fogColor, this.fogDensity, this.planetCentre);
 
       // Deeper tiles draw after shallower ones, so a fading child always
       // composites over the parent it is replacing.
@@ -145,11 +126,7 @@ export class SceneSynchroniser {
   private ensureMesh(node: TileNode): void {
     if (node.mesh || !node.geometry) return;
 
-    const material = new TerrainMaterial({
-      fogColor: this.fogColor,
-      fogDensity: this.fogDensity,
-      ambient: this.ambient,
-    });
+    const material = new TerrainMaterial({ ambient: this.ambient });
     const mesh = new Mesh(node.geometry, material);
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = false; // the quadtree already culled it, and better

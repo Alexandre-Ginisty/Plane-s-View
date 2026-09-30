@@ -27,7 +27,7 @@ export interface BodyAxes {
 export interface Placement {
   /** Written in place: where the camera goes. */
   position: Vector3;
-  /** Written in place, and only by `cockpit` — the others aim at the anchor. */
+  /** Written in place, and only by the interior views — the others aim at the anchor. */
   forward: Vector3;
   /** Written in place: the view's vertical reference. */
   up: Vector3;
@@ -58,6 +58,16 @@ export function placeCamera(
         .copy(anchor)
         .addScaledVector(axes.forward, sizeM * 0.42)
         .addScaledVector(axes.up, sizeM * 0.07);
+      out.forward.copy(axes.forward);
+      return;
+    }
+
+    case 'cabin': {
+      // A window seat on the left, a little ahead of the wing.
+      out.position
+        .copy(anchor)
+        .addScaledVector(axes.forward, sizeM * 0.08)
+        .addScaledVector(axes.right, -sizeM * 0.03);
       out.forward.copy(axes.forward);
       return;
     }

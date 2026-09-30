@@ -53,9 +53,10 @@ const CACHE = join(HERE, '.cache');
  * thing to put in a repository or in front of a phone tether.
  */
 const MAX_TEXTURE_PX = 2048;
-const OUT = join(ROOT, 'public', 'models');
+/** `PVM_OUT` converts elsewhere, to update a few airframes without clearing the shipped set. */
+const OUT = process.env.PVM_OUT ?? join(ROOT, 'public', 'models');
 
-const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
+export const FGADDON = 'https://svn.code.sf.net/p/flightgear/fgaddon/trunk/Aircraft';
 
 /**
  * Objects that exist in the file but never appear in this app's shots.
@@ -119,7 +120,13 @@ const DISCARD =
  * the anchor is gone. A texture sheet says what a part is painted with, not
  * what it is.
  */
-const GEAR = /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo)/i;
+/*
+ * Undercarriage by name. Authors abbreviate — `MLGTorqueLinkL1`, `NLGFitting`,
+ * `mglhlowerstrut`, `lhngdoor` — or write in French (`roueG`, `axeGB`); a leg
+ * the pattern misses is classed as airframe and flown down at cruise, which
+ * from behind turns an airliner into something standing on skids.
+ */
+const GEAR = /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo|mlg|nlg|(^|[^a-z])[mn]lg|drag.?strut|side.?strut|lower.?strut|shock.?strut|torque.?link|axle|mgl[hr]|ng.?door|^roue|^train|^axe[adg][bh]?$)/i;
 
 /** Sprite sheets that only ever paint a special effect. See `DISCARD`. */
 const EFFECT_TEXTURE = /(halo|flare|glow|corona|lightbeam|light_beam)/i;
@@ -585,7 +592,7 @@ export const AIRCRAFT = [
  * `withoutEnlargement` matters — a 512-pixel placards sheet must not be blown
  * up to 2048 on the way through.
  */
-async function shrink(data, base) {
+export async function shrink(data, base) {
   try {
     const encoded = await sharp(data)
       .resize({
@@ -611,7 +618,7 @@ async function shrink(data, base) {
   }
 }
 
-async function fetchCached(url, file) {
+export async function fetchCached(url, file) {
   const target = join(CACHE, file);
   if (existsSync(target)) return readFile(target);
 
@@ -703,7 +710,18 @@ function toAppAxes(v) {
   return [-v[2], -v[0], v[1]];
 }
 
-function roleOf(name, isRotorcraft) {
+/*
+ * `roles` on an entry names its rotors where the author's object names do not
+ * start the way `ROTOR` expects — the Apache's are `Mesh7 mainrotor Group`.
+ * Those rotors are also cut into one object per blade, so the spinner they
+ * make is keyed by role rather than by object (see `side` below): sixteen
+ * blades each turning about its own centroid is not a rotor.
+ */
+function roleOf(name, isRotorcraft, roles) {
+  if (isRotorcraft && roles) {
+    if (roles.tailRotor?.test(name)) return 'tailRotor';
+    if (roles.mainRotor?.test(name)) return 'mainRotor';
+  }
   if (PROPDISC.test(name)) return 'disc';
   if (PROP.test(name)) return 'prop';
   if (isRotorcraft) {
@@ -759,7 +777,7 @@ function faceNormal(p, q, r) {
 }
 
 /** Average face normals across shared positions, for the smooth-shaded faces. */
-function computeNormals(tris) {
+export function computeNormals(tris) {
   const accum = new Map();
   const key = (p) => `${p[0].toFixed(4)},${p[1].toFixed(4)},${p[2].toFixed(4)}`;
 
@@ -787,7 +805,7 @@ function computeNormals(tris) {
 }
 
 /** Weld identical (position, normal, uv) triples into an indexed mesh. */
-function index(tris) {
+export function index(tris) {
   const map = new Map();
   const positions = [];
   const normals = [];
@@ -924,7 +942,7 @@ export async function convert(entry, { quiet = false } = {}) {
      */
     const material = object.surfaces[0]?.material ?? 0;
     const texture = object.texture;
-    const role = roleOf(object.name, Boolean(entry.rotorcraft));
+    const role = roleOf(object.name, Boolean(entry.rotorcraft), entry.roles);
 
     // A propeller's blur disc is a flat sheet on purpose — that is what a disc
     // is — so it is the one thing this test must not be applied to.
@@ -936,7 +954,7 @@ export async function convert(entry, { quiet = false } = {}) {
     if (texture && !textures.includes(texture)) textures.push(texture);
 
     // Spinners are kept whole and separate: each one turns about its own hub.
-    const side = role === 'hull' || role === 'gear' ? '' : `:${object.name}`;
+    const side = role === 'hull' || role === 'gear' ? '' : entry.roles && (role === 'mainRotor' || role === 'tailRotor') ? `:${role}` : `:${object.name}`;
     const key = `${role}${side}|${texture ?? ''}|${material}`;
 
     const group = groups.get(key) ?? { role, texture, material, name: object.name, tris: [] };
@@ -1000,7 +1018,9 @@ export async function convert(entry, { quiet = false } = {}) {
 
   if (!entry.rotorcraft) {
     const ratio = spanRatioOf(() => true);
-    if (ratio < 0.6) {
+    // A delta (MiG-21, Gripen) really is narrower than that; such entries say so.
+    const minSpan = entry.minSpan ?? 0.6;
+    if (ratio < minSpan) {
       throw new Error(
         `${entry.id}: span is only ${(ratio * 100).toFixed(0)}% of length ` +
           `(${(ratio * measured).toFixed(1)} m across ${measured.toFixed(1)} m) — the wings ` +
@@ -1009,7 +1029,7 @@ export async function convert(entry, { quiet = false } = {}) {
     }
 
     const cruise = spanRatioOf((group) => group.role !== 'gear');
-    if (cruise < 0.6) {
+    if (cruise < minSpan) {
       throw new Error(
         `${entry.id}: with the gear retracted the span drops to ${(cruise * 100).toFixed(0)}% ` +
           `of length — a wing has been classified as undercarriage`,
@@ -1390,6 +1410,8 @@ export async function convert(entry, { quiet = false } = {}) {
     license: 'GPL-2.0',
     notices,
     lengthM: +measured.toFixed(3),
+    /** The FlightGear datum's offset from the model's centre, app axes, metres: where the cockpit is placed from. */
+    centreM: centre.map((c) => +c.toFixed(4)),
     textures: kept.map((t) => t.name),
     /** Texture slot an operator livery replaces, or -1 if the model has none. */
     liveryTexture,

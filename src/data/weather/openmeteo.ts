@@ -34,6 +34,7 @@ const CURRENT_FIELDS = [
   'wind_direction_10m',
   'cloud_cover',
   'pressure_msl',
+  'visibility',
   'is_day',
 ].join(',');
 

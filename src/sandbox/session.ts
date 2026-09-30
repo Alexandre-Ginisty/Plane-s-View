@@ -18,39 +18,53 @@ import { Matrix4, PerspectiveCamera, Quaternion, Scene, Vector3 } from 'three';
 import { FEET_TO_METRES, ecefToGeodetic, enuBasis, geodeticToEcef, type Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import { registry } from '@/data/meta/registry';
-import { operatorOf, registerBuiltInModel } from '@/render/aircraft/library';
+import { operatorOf } from '@/render/aircraft/library';
 import { shapeFor } from '@/render/aircraft';
 import { clearanceFor } from '@/render/ground';
 import { aircraftFrame } from '@/render/pov';
 import type { Traffic3D } from '@/render/traffic3d';
 import type { SampledAircraft } from '@/state/traffic';
 import type { SandboxAircraft } from './catalog';
+import { airframeFor } from './airframes';
 import { ArcadeFlight, NO_INPUT, type FlightInput } from './flight';
-import { SANDBOX_TYPES, sandboxModel } from './models';
+import { FLIGHT_KEY_CODES } from '@/flight/controls';
+import type { TouchdownRecord } from '@/flight/types';
+import { GlobeFlight, type FlightReadout } from './realFlight';
+import { WindField, type WindReporter } from './wind';
 import { Effects } from './particles';
 import { Score, type KillAward } from './score';
 import { SALVO, Weapons } from './weapons';
 import { Wreck } from './wreck';
-
-for (const type of Object.values(SANDBOX_TYPES)) registerBuiltInModel(type, () => sandboxModel(type));
 
 /** The player's hex: not a real ICAO address, so it can never collide with one. */
 const PLAYER_HEX = 'sandbox';
 
 /** Wrecks kept at once; the oldest one on the ground goes first. */
 const MAX_WRECKS = 8;
-/** How far off the nose a target can be for an automatic lock, radians. */
+/** How far off the nose the radar looks for a target to lock, radians. */
 const AUTO_LOCK_CONE = (45 * Math.PI) / 180;
+/** How far off the nose the seeker keeps tracking one, radians. */
+const SEEKER_CONE = (60 * Math.PI) / 180;
+/** Seconds of tone before a lock is solid and a missile will guide. */
+const LOCK_TIME_S = 1.1;
 /** Seconds a lock survives its target being out of sight. */
 const LOCK_GRACE_S = 2;
 /** Seconds after a crash before the aircraft is back. */
 const RESPAWN_S = 3.2;
+/** Height a fixed-wing spawn is placed at, metres above sea level (lifted over high ground). */
+const SPAWN_ALT_M = 1600;
+/** Seconds between rebuilds of the winds aloft from the traffic. */
+const WIND_REFRESH_S = 5;
+/** The arcade model's keys; a flight model also takes `FLIGHT_KEY_CODES`. */
+const ARCADE_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'];
 
 export interface SandboxEvents {
   kill(award: KillAward, victim: { callsign: string; type: string | null }): void;
   impact(points: number, victim: { callsign: string }): void;
-  crashed(): void;
+  crashed(reason: string | null): void;
   respawned(): void;
+  /** Wheels down after a flight: how it went. */
+  landed(touchdown: TouchdownRecord): void;
   /** A wreck is falling somewhere the terrain may not be loaded yet. */
   prefetch(lat: number, lon: number, trackDeg: number, speedMps: number): void;
 }
@@ -69,6 +83,9 @@ const _up = new Vector3();
 const _pos = new Vector3();
 const _m = new Matrix4();
 const _look = new Vector3();
+const _wind = { east: 0, north: 0 };
+/** Radar on / off: lock the best target ahead, or drop the lock. */
+export const LOCK_KEY = 'KeyR';
 
 export class SandboxSession {
   readonly scene = new Scene();
@@ -78,7 +95,12 @@ export class SandboxSession {
   readonly downed = new Set<string>();
   readonly aircraft: SandboxAircraft;
 
-  private flight: ArcadeFlight;
+  private flight: ArcadeFlight | GlobeFlight;
+  /** Key-down edges since the last frame, for the flight model's toggles (gear, flaps). */
+  private pressed: string[] = [];
+  private readonly wind = new WindField();
+  private windAge = Infinity;
+  private readonly modelClearance: number;
   private readonly wrecks: Wreck[] = [];
   private readonly keys = new Set<string>();
   private killCam: KillCam | null = null;
@@ -87,6 +109,7 @@ export class SandboxSession {
 
   lockHex: string | null = null;
   private lockLostFor = 0;
+  private lockProgress = 0;
   private cooldown = 0;
   private salvoLeft = 0;
   private salvoTimer = 0;
@@ -97,6 +120,8 @@ export class SandboxSession {
   /** Seconds since start: early on, unknown ground is waited for, not hit. */
   private clock = 0;
   private settled = false;
+  /** 0..1 how hard the camera is being shaken by a blast; decays. */
+  shake = 0;
 
   constructor(
     private readonly origin: FloatingOrigin,
@@ -108,19 +133,30 @@ export class SandboxSession {
     this.scene.matrixAutoUpdate = false;
     this.effects = new Effects(origin);
     this.weapons = new Weapons(origin, this.effects);
-    for (const mesh of this.effects.meshes) this.scene.add(mesh);
+    this.scene.add(this.effects.object);
     this.scene.add(this.weapons.group);
     const shape = shapeFor(aircraft.type, aircraft.flight.heli ? 'A7' : 'A3');
-    this.clearance = clearanceFor(shape) + 1;
+    this.modelClearance = clearanceFor(shape);
+    this.clearance = this.modelClearance + 1;
     this.lengthM = shape.length;
     registry.ingestHints([{ hex: PLAYER_HEX, registration: null, typeCode: aircraft.type }]);
     this.flight = this.newFlight();
   }
 
-  private newFlight(): ArcadeFlight {
+  private newFlight(): ArcadeFlight | GlobeFlight {
     const a = this.aircraft;
     this.settled = false;
     this.clock = 0;
+    const airframe = airframeFor(a, this.lengthM);
+    if (airframe) {
+      return new GlobeFlight(
+        airframe,
+        { lat: this.spawn.lat, lon: this.spawn.lon, altM: SPAWN_ALT_M, headingDeg: this.spawn.headingDeg },
+        { hex: PLAYER_HEX, type: a.type, callsign: a.name.toUpperCase().slice(0, 8), category: 'A3' },
+        this.modelClearance,
+        this.wind,
+      );
+    }
     return new ArcadeFlight(
       a.flight,
       { lat: this.spawn.lat, lon: this.spawn.lon, altM: a.flight.heli ? 450 : 1600, headingDeg: this.spawn.headingDeg },
@@ -158,11 +194,14 @@ export class SandboxSession {
 
   /** Key codes (`KeyboardEvent.code`) held or released. Returns true if used. */
   key(code: string, down: boolean): boolean {
-    const used = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Tab'];
-    if (!used.includes(code)) return false;
+    const real = this.flight instanceof GlobeFlight;
+    const used = code === 'Space' || code === 'Tab' || code === LOCK_KEY || ARCADE_KEYS.includes(code) || (real && FLIGHT_KEY_CODES.has(code));
+    if (!used) return false;
     if (down) {
       if (code === 'Space' && !this.keys.has('Space')) this.trigger();
       if (code === 'Tab' && !this.keys.has('Tab')) this.cycle = true;
+      if (code === LOCK_KEY && !this.keys.has(LOCK_KEY)) this.lockToggle = true;
+      if (!this.keys.has(code)) this.pressed.push(code);
       this.keys.add(code);
     } else {
       this.keys.delete(code);
@@ -173,19 +212,27 @@ export class SandboxSession {
   /** Every key up: the window lost focus, and a held arrow must not stick. */
   releaseAll(): void {
     this.keys.clear();
+    this.pressed.length = 0;
   }
 
   private cycle = false;
+  private lockToggle = false;
   private triggerPulled = false;
 
   private trigger(): void {
     this.triggerPulled = true;
   }
 
-  /** Lock on to an aircraft the player clicked. */
+  /** Lock on to an aircraft the player clicked (or `null` to drop the lock). */
   lock(hex: string | null): void {
+    if (hex !== this.lockHex) this.lockProgress = 0;
     this.lockHex = hex;
     this.lockLostFor = 0;
+  }
+
+  /** 0..1 while the seeker is locking on, 1 once a missile will guide; 0 with no target. */
+  get lockLevel(): number {
+    return this.lockHex ? this.lockProgress : 0;
   }
 
   private input(): FlightInput {
@@ -207,6 +254,8 @@ export class SandboxSession {
     this.clock += dt;
     const f = this.flight;
     const ground = groundAt(f.lat, f.lon);
+    const pressed = this.pressed;
+    this.pressed = [];
 
     if (this.respawnIn > 0) {
       this.respawnIn -= dt;
@@ -217,6 +266,8 @@ export class SandboxSession {
       }
       return this.flight.toSample();
     }
+
+    if (f instanceof GlobeFlight) return this.stepReal(f, dt, ground, pressed, groundAt);
 
     // The terrain under a fresh spawn streams in over the first seconds.
     // Until it has, the aircraft is held rather than flown into a mountain
@@ -235,20 +286,77 @@ export class SandboxSession {
     const alive = f.step(dt, input, ground, this.clearance);
     if (!alive) {
       if (safe) f.altM = ground + this.clearance + 30;
-      else this.crash();
+      else this.crash(null);
     }
     return f.toSample();
   }
 
-  private crash(): void {
+  /**
+   * The flight model's frame. Held in trimmed flight until the terrain under
+   * the spawn is known, then lifted clear of it if need be; flown hands-off
+   * (wings and flight path levelled) while a kill cam has the camera.
+   */
+  private stepReal(
+    f: GlobeFlight,
+    dt: number,
+    ground: number,
+    pressed: string[],
+    groundAt: (lat: number, lon: number) => number,
+  ): SampledAircraft {
+    if (!this.settled) {
+      if (!Number.isFinite(ground)) return f.toSample();
+      const floor = ground + 900;
+      if (f.altM < floor) f.placeAt({ lat: f.lat, lon: f.lon, altM: floor, headingDeg: f.headingDeg });
+      this.settled = true;
+    }
+    f.autopilot = this.killCam !== null;
+    const { touchdown } = f.advance(dt, this.killCam ? new Set() : this.keys, this.killCam ? [] : pressed, groundAt);
+    if (touchdown) this.events.landed(touchdown);
+    if (f.crashed) {
+      // A kill cam is the game flying the aircraft; it does not get to crash it.
+      if (this.killCam) f.placeAt({ lat: f.lat, lon: f.lon, altM: (Number.isFinite(ground) ? ground : 0) + 600, headingDeg: f.headingDeg });
+      else this.crash(f.crashReason);
+    }
+    return f.toSample();
+  }
+
+  private crash(reason: string | null): void {
     const s = this.flight.toSample();
-    const e = geodeticToEcef(s.lat, s.lon, s.altFt * FEET_TO_METRES);
-    this.effects.explode(e[0], e[1], e[2], Math.max(1, this.lengthM / 16));
-    this.effects.explode(e[0], e[1], e[2], 0.7);
+    const altM = s.altFt * FEET_TO_METRES;
+    const frame = aircraftFrame(s, altM);
+    const at = new Vector3(frame.position[0], frame.position[1], frame.position[2]);
+    const velocity = frame.forward.clone().multiplyScalar(this.flight.speedMps);
+    // Into the ground, or broken up in the air (over-stressed).
+    const agl = this.flight instanceof GlobeFlight ? this.flight.aglM : Number.NaN;
+    if (Number.isFinite(agl) && agl > this.lengthM * 2) this.effects.airburst(at, velocity, this.lengthM);
+    else this.effects.impact(at, velocity, this.lengthM);
+    this.shake = 1;
     this.respawnIn = RESPAWN_S;
     this.score.crash();
     this.keys.clear();
-    this.events.crashed();
+    this.events.crashed(reason);
+  }
+
+  /** Systems for the HUD, or null for the arcade model. */
+  get readout(): FlightReadout | null {
+    return this.flight instanceof GlobeFlight && this.respawnIn <= 0 ? this.flight.readout() : null;
+  }
+
+  /** Engine output 0..1 from the flight model, or null for the arcade one. */
+  get enginePower(): number | null {
+    return this.flight instanceof GlobeFlight ? this.flight.enginePower : null;
+  }
+
+  /**
+   * The weather and the traffic, for the wind: the surface wind every call,
+   * the winds aloft from the aircraft that report them every few seconds.
+   */
+  observeWind(dt: number, weather: { windDirectionDeg: number | null; windSpeedMs: number | null } | null, traffic: Iterable<WindReporter>): void {
+    this.wind.setSurface(weather?.windDirectionDeg ?? null, weather?.windSpeedMs ?? null);
+    this.windAge += dt;
+    if (this.windAge < WIND_REFRESH_S) return;
+    this.windAge = 0;
+    this.wind.observe(traffic, this.flight.lat, this.flight.lon);
   }
 
   /**
@@ -256,13 +364,13 @@ export class SandboxSession {
    * frame's aircraft. Returns the time scale the frame ran at, for anything
    * else that wants to share the slow motion.
    */
-  stepWorld(dt: number, traffic: Traffic3D, groundAt: (lat: number, lon: number) => number): void {
+  stepWorld(dt: number, traffic: Traffic3D, groundAt: (lat: number, lon: number) => number, camera: PerspectiveCamera): void {
     // A beat of slow motion as the missile connects, and again on impact.
     const slow = this.killCam && (this.killCam.t < 1.1 || (this.killCam.wreck.state === 'down' && this.killCam.wreck.sinceImpact < 0.7));
     const wdt = slow ? dt * 0.35 : dt;
 
     this.updateLock(dt, traffic);
-    this.updateTrigger(dt, traffic);
+    this.updateTrigger(dt);
 
     const o = this.origin.current;
     const hits = this.weapons.update(
@@ -291,12 +399,23 @@ export class SandboxSession {
       }
     }
 
-    this.effects.update(wdt);
+    // The wind where the player is carries the smoke (it is the same air for
+    // kilometres, and the columns that matter are the ones in view).
+    this.effects.setGround(groundAt);
+    const f = this.flight;
+    const agl = f instanceof GlobeFlight ? f.aglM : 1000;
+    this.wind.at(f.altM, Number.isFinite(agl) ? agl : 1000, _wind);
+    this.effects.update(camera, wdt, _wind.east, _wind.north);
+    this.shake = Math.max(0, this.shake - dt * 1.6);
     if (this.killCam) this.killCam.t += dt;
   }
 
   private updateLock(dt: number, traffic: Traffic3D): void {
     const targets = traffic.targets;
+    if (this.lockToggle) {
+      this.lockToggle = false;
+      this.lock(this.lockHex ? null : this.autoLock(traffic));
+    }
     if (this.cycle) {
       this.cycle = false;
       if (targets.length > 0) {
@@ -309,9 +428,22 @@ export class SandboxSession {
       this.lockHex = null;
       return;
     }
-    const seen = targets.some((t) => t.hex === this.lockHex);
-    this.lockLostFor = seen ? 0 : this.lockLostFor + dt;
-    if (this.lockLostFor > LOCK_GRACE_S) this.lockHex = null;
+    const target = targets.find((t) => t.hex === this.lockHex);
+    // The seeker tones up while the target stays in front of it; off the
+    // nose, the lock decays, and out of sight for long, it is gone.
+    const inCone = target ? this.offNose(target.position) < SEEKER_CONE : false;
+    this.lockProgress = inCone ? Math.min(1, this.lockProgress + dt / LOCK_TIME_S) : Math.max(0, this.lockProgress - dt / LOCK_TIME_S);
+    this.lockLostFor = target ? 0 : this.lockLostFor + dt;
+    if (this.lockLostFor > LOCK_GRACE_S) this.lock(null);
+  }
+
+  /** Angle between the nose and a render-space position, radians. */
+  private offNose(position: Vector3): number {
+    const s = this.flight.toSample();
+    const frame = aircraftFrame(s, s.altFt * FEET_TO_METRES);
+    const o = this.origin.current;
+    _look.set(position.x + o[0] - frame.position[0], position.y + o[1] - frame.position[1], position.z + o[2] - frame.position[2]);
+    return _look.angleTo(frame.forward);
   }
 
   /** The best target off the nose, for a trigger pulled with nothing locked. */
@@ -335,16 +467,16 @@ export class SandboxSession {
     return best;
   }
 
-  private updateTrigger(dt: number, traffic: Traffic3D): void {
+  private updateTrigger(dt: number): void {
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (this.triggerPulled) {
       this.triggerPulled = false;
       if (this.cooldown <= 0 && this.respawnIn <= 0 && !this.killCam) {
-        if (!this.lockHex) this.lock(this.autoLock(traffic));
         const salvo = SALVO[this.aircraft.weapon];
         this.salvoLeft = salvo.rounds;
         this.salvoTimer = 0;
-        this.salvoTarget = this.lockHex;
+        // Guided only on a solid lock; otherwise it flies where it was pointed.
+        this.salvoTarget = this.lockHex && this.lockProgress >= 1 ? this.lockHex : null;
         this.cooldown = salvo.cooldown;
       }
     }
@@ -381,7 +513,12 @@ export class SandboxSession {
       const points = this.score.impact(w.lengthM);
       this.events.impact(points, { callsign: w.callsign });
     });
-    this.effects.explode(at.x, at.y, at.z, Math.max(0.8, wreck.lengthM / 25), wreck.velocity.x, wreck.velocity.y, wreck.velocity.z);
+    this.effects.airburst(at, wreck.velocity, wreck.lengthM);
+    // Felt in the cockpit when it is close.
+    const me = this.flight.toSample();
+    const mine = geodeticToEcef(me.lat, me.lon, me.altFt * FEET_TO_METRES);
+    const d = Math.hypot(at.x - mine[0], at.y - mine[1], at.z - mine[2]);
+    this.shake = Math.max(this.shake, Math.min(0.8, (wreck.lengthM * 6) / Math.max(1, d)));
     this.scene.add(wreck.group);
     this.wrecks.push(wreck);
     this.trimWrecks();

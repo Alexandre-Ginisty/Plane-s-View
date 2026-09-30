@@ -146,6 +146,9 @@ export function perspectiveGain(mode: string): { engine: number; wind: number; c
   switch (mode) {
     case 'cockpit':
       return { engine: 0.55, wind: 1, cutoffHz: 1_800 };
+    case 'cabin':
+      // Beside the engines, behind a thin wall: the cabin's steady roar.
+      return { engine: 0.75, wind: 0.8, cutoffHz: 1_400 };
     case 'wing':
       return { engine: 1, wind: 0.8, cutoffHz: 7_000 };
     case 'chase':

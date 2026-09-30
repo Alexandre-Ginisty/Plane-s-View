@@ -18,7 +18,7 @@
  * a crash rather than a camera placement.
  */
 
-import { Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { Euler, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
 import { DEG2RAD, FEET_TO_METRES, clamp, type Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
@@ -31,14 +31,14 @@ import {
   clearanceFor,
   surfaceAltitudeM,
 } from '@/render/ground';
-import { aircraftFrame, bearingOf, type AircraftFrame, type CameraMode } from './frame';
+import { aircraftFrame, bearingOf, isInterior, type AircraftFrame, type CameraMode } from './frame';
 import { placeCamera } from './placement';
 import type { PovState } from './state';
 
 export type { PovState } from './state';
 
-export { CAMERA_MODES, aircraftFrame } from './frame';
-export type { AircraftFrame, CameraMode } from './frame';
+export { CAMERA_MODES, aircraftFrame, isInterior } from './frame';
+export type { AircraftFrame, CameraGroup, CameraMode, CameraModeInfo } from './frame';
 
 /** Metres of clearance the camera keeps above terrain. */
 const TERRAIN_CLEARANCE_M = 8;
@@ -117,6 +117,7 @@ const MODE_TRANSITION_S = 0.85;
  */
 const ANCHOR_TAU: Record<CameraMode, number> = {
   cockpit: 0.035,
+  cabin: 0.035,
   chase: 0,
   wing: 0,
   orbit: 0,
@@ -199,6 +200,8 @@ const _horizontal = new Vector3();
 const _radial = new Vector3();
 const _startQuat = new Quaternion();
 const _swing = new Vector3();
+const _shake = new Quaternion();
+const _shakeEuler = new Euler();
 const _swingAxis = new Vector3();
 
 /** Orientation looking along `forward` with `up` as the vertical reference. */
@@ -238,7 +241,7 @@ function velocityOf(sample: SampledAircraft, frame: AircraftFrame, out: Vector3)
 
 /** Modes whose whole job is to keep the aircraft in frame. */
 function isSubjectLocked(mode: CameraMode): boolean {
-  return mode !== 'cockpit';
+  return !isInterior(mode);
 }
 
 
@@ -275,6 +278,50 @@ export class PovController {
 
   /** Flip vertical drags, for anyone who prefers to grab the world. */
   invertY = false;
+
+  /**
+   * No smoothing of the aircraft at all: for an aircraft whose motion is
+   * already smooth because it is computed here (the sandbox's flight model,
+   * stepped at 120 Hz), where damping would only put the camera behind the
+   * airframe it is sitting in — the cockpit visibly swimming against the view.
+   * The smoothing exists for the feed's noise, and there is none.
+   */
+  crisp = false;
+
+  /** 0..1 how hard the airframe is shaking (buffet, a blast, a touchdown). */
+  shake = 0;
+
+  /** Degrees added to the lens with speed: a subtle sense of it, as in a real cockpit's peripheral vision. */
+  speedFovDeg = 0;
+
+  /**
+   * Where the view from inside rests, radians: pitch below the boresight and
+   * yaw left of the nose. With a cockpit drawn, the eye looks a little down,
+   * the way simulators set their default view so the panel is in it as well
+   * as the sky; from a window seat, it looks out of the window. Recentring
+   * returns here.
+   */
+  private restPitch = 0;
+  private restYaw = 0;
+
+  setRestPitch(radians: number): void {
+    this.setRestLook(0, radians);
+  }
+
+  setRestLook(yaw: number, pitch: number): void {
+    if (yaw === this.restYaw && pitch === this.restPitch) return;
+    // A view still at its old rest moves with it; one the user has turned stays turned.
+    if (isInterior(this.state.mode) && Math.abs(this.state.lookPitch - this.restPitch) < 1e-6 && Math.abs(this.state.lookYaw - this.restYaw) < 1e-6) {
+      this.state.lookPitch = pitch;
+      this.state.lookYaw = yaw;
+    }
+    this.restPitch = pitch;
+    this.restYaw = yaw;
+  }
+
+  /** The airframe's attitude the camera was built on this frame, shake included; camera convention. */
+  readonly bodyQuaternion = new Quaternion();
+  private shakeClock = 0;
 
   /** Outside views: how much nearer or further than home, eased towards. */
   private swingZoom = 1;
@@ -381,8 +428,8 @@ export class PovController {
       };
     }
     this.state.mode = mode;
-    this.state.lookYaw = 0;
-    this.state.lookPitch = 0;
+    this.state.lookYaw = isInterior(mode) ? this.restYaw : 0;
+    this.state.lookPitch = isInterior(mode) ? this.restPitch : 0;
     this.swingZoomTarget = 1;
     this.fovTarget = this.baseFov;
   }
@@ -410,7 +457,8 @@ export class PovController {
         this.state.orbitPitch = clamp(this.state.orbitPitch - vy * k, -1.3, 1.4);
         return;
       }
-      case 'cockpit': {
+      case 'cockpit':
+      case 'cabin': {
         // Zoomed in, the same drag covers less of the world: keep the point
         // under the cursor under the cursor.
         const k = this.radPerPx * LOOK_DRAG_GAIN * this.zoomScale;
@@ -439,7 +487,8 @@ export class PovController {
       case 'orbit':
         this.orbitDistanceTarget = clamp(this.orbitDistanceTarget * Math.exp(delta * 0.001), 25, 4000);
         return;
-      case 'cockpit': {
+      case 'cockpit':
+      case 'cabin': {
         if (this.baseFov === null) return;
         const current = this.fovTarget ?? this.baseFov;
         this.fovTarget = clamp(current * Math.exp(delta * 0.0008), MIN_FOV_DEG, this.baseFov);
@@ -537,14 +586,37 @@ export class PovController {
       this.smoothedAnchor.addScaledVector(_residual, 1 - Math.exp(-dt / anchorTau));
     }
 
-    if (!firstFrame) {
+    if (this.crisp) {
+      this.smoothedAnchor.copy(aircraft);
+      this.smoothedBody.copy(bodyQuaternion);
+    } else if (!firstFrame) {
       this.smoothedBody.slerp(bodyQuaternion, 1 - Math.exp(-dt / BODY_TAU));
     }
 
+    // Shake: a few incommensurate sines, not noise, so it reads as airframe
+    // vibration rather than as a jittering camera. Applied to the airframe the
+    // camera is built on, so the cockpit shakes with the head and the world
+    // shakes against both.
+    this.shakeClock += dt;
+    const sk = this.shake * this.shake;
+    this.bodyQuaternion.copy(this.smoothedBody);
+    if (sk > 1e-4) {
+      const t = this.shakeClock;
+      const a = sk * 0.012;
+      _shake.setFromEuler(
+        _shakeEuler.set(
+          a * (Math.sin(t * 37.1) + 0.6 * Math.sin(t * 71.3 + 1.1)),
+          a * 0.6 * (Math.sin(t * 29.7 + 2.1) + 0.5 * Math.sin(t * 83.9)),
+          a * (Math.sin(t * 43.3 + 0.7) + 0.4 * Math.sin(t * 97.1 + 2.3)),
+        ),
+      );
+      this.bodyQuaternion.multiply(_shake);
+    }
+
     // The damped body axes. Three's cameras look down -Z, so forward is -Z.
-    const sForward = _sForward.set(0, 0, -1).applyQuaternion(this.smoothedBody);
-    const sUp = _sUp.set(0, 1, 0).applyQuaternion(this.smoothedBody);
-    const sRight = _sRight.set(1, 0, 0).applyQuaternion(this.smoothedBody);
+    const sForward = _sForward.set(0, 0, -1).applyQuaternion(this.bodyQuaternion);
+    const sUp = _sUp.set(0, 1, 0).applyQuaternion(this.bodyQuaternion);
+    const sRight = _sRight.set(1, 0, 0).applyQuaternion(this.bodyQuaternion);
 
     // Ease the wheel's target rather than jumping to it. See `applyZoom`.
     const zoomK = 1 - Math.exp(-dt / 0.12);
@@ -554,13 +626,16 @@ export class PovController {
 
     if (this.recentring) {
       const k = 1 - Math.exp(-dt / RECENTRE_TAU);
-      this.state.lookYaw -= this.state.lookYaw * k;
-      this.state.lookPitch -= this.state.lookPitch * k;
+      const inside = isInterior(this.state.mode);
+      const rest = inside ? this.restPitch : 0;
+      const restYaw = inside ? this.restYaw : 0;
+      this.state.lookYaw -= (this.state.lookYaw - restYaw) * k;
+      this.state.lookPitch -= (this.state.lookPitch - rest) * k;
       this.swingZoomTarget = 1;
       this.fovTarget = this.baseFov;
-      if (Math.abs(this.state.lookYaw) < 1e-3 && Math.abs(this.state.lookPitch) < 1e-3) {
-        this.state.lookYaw = 0;
-        this.state.lookPitch = 0;
+      if (Math.abs(this.state.lookYaw - restYaw) < 1e-3 && Math.abs(this.state.lookPitch - rest) < 1e-3) {
+        this.state.lookYaw = restYaw;
+        this.state.lookPitch = rest;
         this.recentring = false;
       }
     }
@@ -706,7 +781,7 @@ export class PovController {
   /** Ease the cockpit lens towards the wheel's target. */
   private easeFov(camera: PerspectiveCamera, k: number): void {
     this.baseFov ??= camera.fov;
-    const target = this.state.mode === 'cockpit' ? (this.fovTarget ?? this.baseFov) : this.baseFov;
+    const target = (isInterior(this.state.mode) ? (this.fovTarget ?? this.baseFov) : this.baseFov) + this.speedFovDeg;
     if (Math.abs(camera.fov - target) < 0.01) return;
     camera.fov += (target - camera.fov) * k;
     if (Math.abs(camera.fov - target) < 0.02) camera.fov = target;

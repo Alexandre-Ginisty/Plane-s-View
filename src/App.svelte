@@ -18,12 +18,12 @@
   import ThemeToggle from '@/ui/ThemeToggle.svelte';
   import Diagnostics from '@/ui/Diagnostics.svelte';
   import Hud from '@/ui/Hud.svelte';
-  import LayerPicker from '@/ui/LayerPicker.svelte';
   import Legend from '@/ui/Legend.svelte';
   import Notices from '@/ui/Notices.svelte';
   import StatusBar from '@/ui/StatusBar.svelte';
   import Icon from '@/ui/Icon.svelte';
   import SandboxHangar from '@/ui/sandbox/SandboxHangar.svelte';
+  import { SANDBOX_ENABLED } from '@/sandbox/enabled';
   import SandboxHud from '@/ui/sandbox/SandboxHud.svelte';
 
   let mapContainer: HTMLDivElement;
@@ -191,7 +191,9 @@
       case 'h':
       case 'H':
       case '?':
-        app.showLegend = !app.showLegend;
+        // Flying the sandbox, the card that matters is the controls.
+        if (app.sandbox.phase === 'flying') app.sandbox.showKeys = !app.sandbox.showKeys;
+        else app.showLegend = !app.showLegend;
         break;
       case 'p':
       case 'P':
@@ -199,7 +201,7 @@
         break;
       case 'b':
       case 'B':
-        if (app.sandbox.phase === 'off') o.beginSandbox();
+        if (SANDBOX_ENABLED && app.sandbox.phase === 'off') o.beginSandbox();
         break;
       case 'f':
       case 'F':
@@ -217,6 +219,11 @@
       case 't':
       case 'T':
         void o.catchAircraft('takeoff');
+        break;
+      case 'v':
+      case 'V':
+        // Inside or outside.
+        if (app.view === 'pov') o.toggleCameraGroup();
         break;
       default: {
         // 1-5 select a camera view while flying.
@@ -349,7 +356,6 @@
         <h1 class="brand" style="--i: 0">Planes<span>View</span></h1>
 
         <div class="dock" style="--i: 1" role="toolbar" aria-label="Map">
-          <LayerPicker {orchestrator} />
           <button
             class="tool"
             class:on={app.pinMode}
@@ -379,12 +385,14 @@
             onclick={() => void orchestrator?.catchAircraft('takeoff')}
             title="Step into an aircraft taking off (T)"
           ><Icon name="takeoff" /><span class="text">{CATCH_LABELS.takeoff.verb}</span><span class="kbd">T</span></button>
-          <button
-            class="tool hot"
-            class:on={app.sandbox.phase !== 'off'}
-            onclick={() => (app.sandbox.phase === 'off' ? orchestrator?.beginSandbox() : orchestrator?.cancelSandbox())}
-            title="Sandbox: spawn your own armed aircraft anywhere and shoot down the real traffic (B)"
-          ><Icon name="crosshair" /><span class="text">Sandbox</span><span class="kbd">B</span></button>
+          {#if SANDBOX_ENABLED}
+            <button
+              class="tool hot"
+              class:on={app.sandbox.phase !== 'off'}
+              onclick={() => (app.sandbox.phase === 'off' ? orchestrator?.beginSandbox() : orchestrator?.cancelSandbox())}
+              title="Sandbox: spawn your own armed aircraft anywhere and shoot down the real traffic (B)"
+            ><Icon name="crosshair" /><span class="text">Sandbox</span><span class="kbd">B</span></button>
+          {/if}
         </div>
       </header>
       {#if app.pinMode && !app.cinema}
@@ -595,7 +603,7 @@
     clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
   }
 
-  /* A button inside a dock. Also used by `LayerPicker` and `ThemeToggle`. */
+  /* A button inside a dock. Also used by `ThemeToggle`. */
   .dock :global(.tool) {
     position: relative;
     display: inline-flex;

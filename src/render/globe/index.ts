@@ -43,7 +43,6 @@
  */
 
 import {
-  Color,
   Frustum,
   Matrix4,
   PerspectiveCamera,
@@ -260,10 +259,6 @@ export class Globe {
 
   setSun(direction: Vector3): void {
     this.sync.setSun(direction);
-  }
-
-  setAtmosphere(color: Color, density: number): void {
-    this.sync.setAtmosphere(color, density);
   }
 
   // -------------------------------------------------------------------------
