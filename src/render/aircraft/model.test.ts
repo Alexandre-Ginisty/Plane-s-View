@@ -248,6 +248,16 @@ describe('propeller rate', () => {
     expect(visibleSpinRate(200)).toBeCloseTo(200 / 60, 6);
   });
 
+  it('keeps a rotor turning forwards when the frame rate drops', () => {
+    // A five-bladed rotor repeats every 72°. Past half of that per frame the
+    // eye reads it turning backwards — at 30 fps that was any rotor at all.
+    for (const fps of [144, 60, 45, 30, 20]) {
+      const degPerFrame = (visibleSpinRate(390, 1 / fps) * 360) / fps;
+      expect(degPerFrame).toBeLessThan(72 / 3);
+      expect(degPerFrame).toBeGreaterThan(0);
+    }
+  });
+
   it('hands over from blades to blur disc as the rate climbs', () => {
     expect(bladeOpacity(0)).toBe(1);
     expect(bladeOpacity(2_400)).toBe(0);

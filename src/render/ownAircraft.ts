@@ -124,6 +124,8 @@ export class OwnAircraft {
   private built: AircraftModel | null = null;
   private gearMeshes: Mesh[] = [];
   private spinners: SpinnerNode[] = [];
+  /** Frame time, smoothed: what the spinners' anti-aliasing cap is set from. */
+  private frameSec = 1 / 60;
   /** Materials this instance created and must dispose. Library ones are shared. */
   private owned: { dispose(): void }[] = [];
 
@@ -430,10 +432,11 @@ export class OwnAircraft {
   private animateSpinners(dt: number, power: number): void {
     if (this.spinners.length === 0 || !this.shape) return;
     const shape = this.shape;
+    if (dt > 0 && dt < 0.25) this.frameSec += (dt - this.frameSec) * 0.05;
 
     for (const node of this.spinners) {
       const rpm = this.rpmFor(node.drive, shape, power);
-      node.angle += node.direction * visibleSpinRate(rpm) * Math.PI * 2 * dt;
+      node.angle += node.direction * visibleSpinRate(rpm, this.frameSec) * Math.PI * 2 * dt;
 
       _axis.set(node.axis[0], node.axis[1], node.axis[2]).normalize();
       // Generated geometry is built in the plane normal to +Y, so it is first

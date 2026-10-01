@@ -342,9 +342,29 @@ export const AIRCRAFT = [
   {
     id: 'ec35',
     path: 'ec135',
-    model: 'Models/ec135.ac',
+    /*
+     * The airframe file has no main rotor at all — only the hub cap and the
+     * fenestron's blur disc, which the generic rule then read as the main
+     * rotor and turned about the mast. The blades are in `rotors/`, placed by
+     * `ec135.xml` (its 5° forward mast tilt left out: the rotor is turned
+     * about the airframe's vertical). Their blur copies are dropped; the
+     * renderer fades the blades itself.
+     */
+    parts: [
+      { model: 'Models/ec135.ac' },
+      { model: 'Models/rotors/mainrotor.ac', offset: { x: 3.023, y: 0, z: 1.801 } },
+    ],
+    discard: /^blurred/i,
+    roles: {
+      hull: /^rotor_disc_T$/,
+      mainRotor: /^(blade\d|Flexbeam|pitchlink|scissor|Cylinder\.001|rotorcap)/i,
+      tailRotor: /^Tblade$/,
+    },
     types: ['EC35', 'EC45', 'H135', 'H145'],
-    lengthM: 10.9,
+    // Overall, rotors turning — what the type table means by length, and what
+    // the model is now that it has its rotor. The fuselage alone (10.4 m) was
+    // being scaled up to the overall figure, a quarter too big.
+    lengthM: 12.16,
     rotorcraft: true,
     credit: 'Eurocopter EC135 — FlightGear FGAddon, GPL-2.0',
   },
@@ -352,6 +372,14 @@ export const AIRCRAFT = [
     id: 'bo05',
     path: 'bo105',
     model: 'Models/bo105.ac',
+    // The blur copies of the blades go (the renderer fades the blades itself),
+    // and the tail's blur disc stays put rather than being turned about the mast.
+    discard: /^(disc\d|shadow_rotor)/i,
+    roles: {
+      hull: /^rotor_disc_T$/,
+      mainRotor: /^(blade|pitch_link|star_hub|swashplate_rotor|rotoraxis)/i,
+      tailRotor: /^(tailrotor_blade|tailpitchlink)/i,
+    },
     types: ['BO05', 'EC20', 'H120'],
     lengthM: 11.9,
     rotorcraft: true,
@@ -361,6 +389,16 @@ export const AIRCRAFT = [
     id: 's76c',
     path: 'Sikorsky-76C',
     model: 'Models/s76c.ac',
+    // `fastblade` and `tailfast` are the author's motion-blur stand-ins, shown
+    // in the simulator only at speed. Kept, they were four grey paddles frozen
+    // over the rotor. And without roles each blade turned about its own centre.
+    discard: /^(fastblade|tailfast)/i,
+    // Its four blades are one blade modelled four times over; see `spreadBlade`.
+    bladeCopies: { pattern: /^blade(\d)/i, count: 4, hub: { x: 0, y: 0 } },
+    roles: {
+      mainRotor: /^(blade\d|Rotorhub)/i,
+      tailRotor: /^(TailRotor|TailHub)/i,
+    },
     types: ['S76', 'S92', 'A139', 'AW39'],
     lengthM: 16.0,
     rotorcraft: true,
@@ -370,6 +408,13 @@ export const AIRCRAFT = [
     id: 'as32',
     path: 'as332',
     model: 'Models/as332.ac',
+    // `blurred` is the motion-blur copy of the blades: a frozen grey star kept.
+    discard: /^blurred/i,
+    roles: {
+      hull: /^tailrotordisc$/i,
+      mainRotor: /^(blade|bladegrip)/i,
+      tailRotor: /^tailblade/i,
+    },
     types: ['AS32', 'H225', 'EC25', 'S61'],
     lengthM: 19.5,
     rotorcraft: true,
@@ -733,6 +778,7 @@ function toAppAxes(v) {
  */
 function roleOf(name, isRotorcraft, roles) {
   if (isRotorcraft && roles) {
+    if (roles.hull?.test(name)) return 'hull';
     if (roles.tailRotor?.test(name)) return 'tailRotor';
     if (roles.mainRotor?.test(name)) return 'mainRotor';
   }
@@ -908,6 +954,38 @@ async function loadAssembly(entry) {
   return { materials, root };
 }
 
+/**
+ * `bladeCopies`: a rotor whose blades are modelled as identical copies stacked
+ * in one place, spread round the hub by the simulator's animation (the S-76's
+ * `blade-2` turns by `blade[1]/position-deg`, and so on). Without this they
+ * stay stacked, and a four-bladed rotor is drawn with one blade.
+ *
+ * `hub` is in FlightGear's body frame, metres; blade `k` (from the first
+ * number in its name) is turned by (k − 1) × 360° / `count` about the vertical.
+ */
+function spreadBlade({ pattern, count, hub }, name, tris) {
+  const m = pattern.exec(name);
+  if (!m) return;
+  const k = Number(m[1]) - 1;
+  if (!(k > 0 && k < count)) return;
+  // Body frame to AC3D (x, z, −y), then to app axes, as `loadAssembly` does.
+  const [hx, hy] = toAppAxes([hub.x, hub.z ?? 0, -hub.y]);
+  const a = (k * 2 * Math.PI) / count;
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  const moved = new Set();
+  for (const tri of tris) {
+    for (const p of tri.v) {
+      if (moved.has(p)) continue;
+      moved.add(p);
+      const x = p[0] - hx;
+      const y = p[1] - hy;
+      p[0] = hx + x * c - y * sn;
+      p[1] = hy + x * sn + y * c;
+    }
+  }
+}
+
 export async function convert(entry, { quiet = false } = {}) {
   const say = (...a) => {
     if (!quiet) console.log(...a);
@@ -933,6 +1011,7 @@ export async function convert(entry, { quiet = false } = {}) {
 
     const tris = triangulate(object, transform);
     if (tris.length === 0) continue;
+    if (entry.bladeCopies) spreadBlade(entry.bladeCopies, object.name, tris);
 
     /*
      * Drop the flat helper sheets — per object, before anything is merged.
@@ -990,6 +1069,33 @@ export async function convert(entry, { quiet = false } = {}) {
           box[a][1] = Math.max(box[a][1], p[a]);
         }
       }
+    }
+  }
+  /*
+   * A main rotor counts as the disc it sweeps, not the pose its blades were
+   * modelled in: "length, rotors turning" is what the type table gives, and
+   * an S-76 with its blades parked at 45° otherwise measures two metres short.
+   */
+  {
+    let n = 0;
+    let cx = 0;
+    let cy = 0;
+    for (const group of groups.values()) {
+      if (group.role !== 'mainRotor') continue;
+      for (const tri of group.tris) for (const p of tri.v) (cx += p[0]), (cy += p[1]), n++;
+    }
+    if (n > 0) {
+      cx /= n;
+      cy /= n;
+      let r = 0;
+      for (const group of groups.values()) {
+        if (group.role !== 'mainRotor') continue;
+        for (const tri of group.tris) for (const p of tri.v) r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cy));
+      }
+      box[0][0] = Math.min(box[0][0], cx - r);
+      box[0][1] = Math.max(box[0][1], cx + r);
+      box[1][0] = Math.min(box[1][0], cy - r);
+      box[1][1] = Math.max(box[1][1], cy + r);
     }
   }
   const measured = box[1][1] - box[1][0];

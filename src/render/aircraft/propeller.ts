@@ -179,11 +179,32 @@ function createPropellerDisc(radius: number, segments = 36): BufferGeometry {
   return b.build();
 }
 
-/** The rate a blade mesh is animated at, revolutions per second. See `createPropellerDisc`. */
-export function visibleSpinRate(rpm: number): number {
-  // Capped well below the frame rate so the blades never alias while they are
-  // still the thing being looked at.
-  return Math.min(rpm, 340) / 60;
+/**
+ * Most of a turn a blade mesh may make in one frame, as a fraction of a
+ * revolution: under a third of the gap between the blades of a five-bladed
+ * rotor (72°), so no rotor in the library can read as turning backwards.
+ */
+const MAX_REV_PER_FRAME = 0.065;
+
+/**
+ * The rate a blade mesh is animated at, revolutions per second. See
+ * `createPropellerDisc`.
+ *
+ * ## The rotor that turned backwards
+ *
+ * The cap used to be a fixed 340 rpm. At sixty frames a second that is 34° a
+ * frame, fine for a two-bladed propeller — but a four-bladed rotor repeats
+ * every 90°, and the moment the frame rate dipped below about forty-five (a
+ * city of buildings in view, say) the blades moved more than half a gap per
+ * frame and the eye read them turning slowly the wrong way, then the right
+ * way, as the frame rate wandered. The wagon wheel in a western.
+ *
+ * So the cap is set per frame, from the frame time the caller is running at
+ * (smoothed, so the rotor does not change speed with every hitch).
+ */
+export function visibleSpinRate(rpm: number, frameSec = 1 / 60): number {
+  const cap = MAX_REV_PER_FRAME / Math.max(frameSec, 1 / 144);
+  return Math.min(rpm / 60, cap);
 }
 
 /** How solid the blades are, against the blur disc, at a given rate. */

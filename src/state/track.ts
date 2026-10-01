@@ -47,6 +47,22 @@ import type { AircraftState } from '@/data/types';
 const G = 9.80665;
 
 /**
+ * One step of a critically damped return to zero, exact for any `dt`.
+ * Returns the new value and rate.
+ */
+function settle(x: number, v: number, omega: number, dt: number): [number, number] {
+  const decay = Math.exp(-omega * dt);
+  const c = v + omega * x;
+  return [(x + c * dt) * decay, (v - omega * c * dt) * decay];
+}
+
+/** Smoothstep over 0..1, clamped. */
+const smooth01 = (x: number): number => {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/**
  * How long an aircraft may go unheard before it is dimmed, then removed.
  * Receiver coverage is patchy: an aircraft crossing a gap should not vanish
  * and reappear, but one that has genuinely landed or left must not linger.
@@ -80,15 +96,17 @@ const TRAIL_CAPACITY = 240;
  * The correction is not wrong — it is the filter doing its job. What is wrong
  * is applying it to the *picture* instantaneously. So the filter keeps its
  * exact answer and the renderer carries a decaying offset: at the instant of
- * the update the drawn position is unchanged, and over the next half second it
- * slides onto the corrected track. Nothing is invented and nothing is delayed;
- * the discontinuity is spread over frames the eye reads as motion.
+ * the update the drawn position (and speed) is unchanged, and over the next
+ * second or so it settles onto the corrected track. Nothing is invented and
+ * nothing is delayed; the discontinuity is spread over frames the eye reads as
+ * motion.
  *
- * Half a second is long enough that a typical few-metre correction is
- * imperceptible and short enough that the drawn position is never meaningfully
- * behind the filter — at 250 m/s the worst case is a fraction of a fuselage.
+ * The time constant of a critically damped settle: long enough that a typical
+ * few-metre correction is imperceptible and short enough that the drawn
+ * position is never meaningfully behind the filter — at 250 m/s the worst case
+ * is a fraction of a fuselage.
  */
-const CORRECTION_TAU = 0.5;
+const CORRECTION_TAU = 0.4;
 
 /**
  * Largest correction worth absorbing, metres. Past this, snap.
@@ -99,6 +117,39 @@ const CORRECTION_TAU = 0.5;
  * time constant because the eye tracks the residual, not the exponential.
  */
 const MAX_ABSORBED_M = 400;
+
+/**
+ * The share of its own speed an aircraft keeps while a correction is absorbed.
+ *
+ * ## The helicopter that slid backwards
+ *
+ * Decaying the offset exponentially moves the drawn position at
+ * `offset / CORRECTION_TAU`, whatever the aircraft is doing. For an airliner a
+ * correction is metres against 250 m/s and nobody sees it. For a helicopter at
+ * twenty knots, a ten-metre correction against the direction of travel is a
+ * backward slide at twice its forward speed, after every report: forward,
+ * back, forward, back. Every slow aircraft did it; the helicopters, slowest
+ * and most often watched up close, did it worst.
+ *
+ * So the along-track part of the offset is absorbed no faster than leaves the
+ * aircraft this much of its speed (it slows, it never reverses), and no faster
+ * than `MAX_SURGE` beyond it when catching up. Across track it still decays at
+ * `CORRECTION_TAU` — there is no direction of travel to contradict.
+ */
+const MIN_PROGRESS = 0.3;
+const MAX_SURGE = 0.6;
+
+/** Along-track offset tolerated before the limits above give way, seconds of travel. */
+const ALONG_SLACK_SEC = 2.5;
+
+/** Below this ground speed there is no direction of travel worth protecting, m/s. */
+const CREEP_MPS = 1.5;
+
+/** How slowly corrections are absorbed at a standstill: a hover wanders, it does not twitch. */
+const HOVER_TAU = 1.6;
+
+/** Turn rate and acceleration are read off successive reports, smoothed over this, seconds. */
+const DERIVED_TAU = 2;
 
 export interface TrailPoint {
   lat: number;
@@ -172,6 +223,19 @@ export class AircraftTrack {
   private smoothedPitch = 0;
 
   /**
+   * Turn rate and along-track acceleration, read off successive reports.
+   *
+   * Most aircraft do not broadcast a turn rate — no helicopter does, and no
+   * light aircraft — so without these every one of them turned wings level.
+   */
+  private derivedTurnRate = 0;
+  private derivedAccel = 0;
+  private lastVelocityFix: { t: number; trackDeg: number; speed: number } | null = null;
+
+  /** Set once the airframe is known; until then the emitter category decides. */
+  private rotorcraftKnown: boolean | null = null;
+
+  /**
    * Correction still being absorbed, in the local frame. See `CORRECTION_TAU`.
    *
    * Added to the filter's answer and decayed every rendered frame, so it is a
@@ -182,9 +246,21 @@ export class AircraftTrack {
   private offsetE = 0;
   private offsetN = 0;
   private offsetU = 0;
+  /** How fast the offset is changing, m/s — so the drawn *speed* is continuous too. */
+  private rateE = 0;
+  private rateN = 0;
+  private rateU = 0;
 
-  /** The last position actually drawn, and when. Null until the first frame. */
-  private rendered: { atMs: number; e: number; n: number; u: number } | null = null;
+  /** The last position and velocity actually drawn, and when. Null until the first frame. */
+  private rendered: {
+    atMs: number;
+    e: number;
+    n: number;
+    u: number;
+    ve: number;
+    vn: number;
+    vu: number;
+  } | null = null;
 
   private readonly trail: TrailPoint[] = [];
 
@@ -316,6 +392,7 @@ export class AircraftTrack {
       const velVar = velocityVariance(s);
       this.east.updateVelocity(vel.ve, velVar);
       this.north.updateVelocity(vel.vn, velVar);
+      this.deriveRates(s);
     }
 
     const altM = this.altitudeOf(s) * FEET_TO_METRES;
@@ -331,6 +408,40 @@ export class AircraftTrack {
     if (Math.abs(this.east.x) > REANCHOR_DISTANCE_M || Math.abs(this.north.x) > REANCHOR_DISTANCE_M) {
       this.reanchor(s.lat, s.lon);
     }
+  }
+
+  /** Is this a helicopter? Known from the airframe once looked up, else from the category. */
+  get rotorcraft(): boolean {
+    return this.rotorcraftKnown ?? this.latest.category === 'A7';
+  }
+
+  setRotorcraft(value: boolean): void {
+    this.rotorcraftKnown = value;
+  }
+
+  /**
+   * Turn rate and acceleration from this report's velocity against the last.
+   *
+   * Taken from the broadcast velocity rather than the filter's: ADS-B ground
+   * speed and track come from the aircraft's own navigator and are far
+   * steadier than anything differentiated out of positions.
+   */
+  private deriveRates(s: AircraftState): void {
+    const speed = (s.groundSpeedKt ?? 0) * KNOTS_TO_MPS;
+    const trackDeg = s.trackDeg ?? s.headingDeg ?? 0;
+    const last = this.lastVelocityFix;
+    this.lastVelocityFix = { t: s.fixTime, trackDeg, speed };
+    if (!last) return;
+
+    const dt = (s.fixTime - last.t) / 1000;
+    // Too close together to differentiate, or too far apart to mean anything.
+    if (dt < 0.4 || dt > 15) return;
+    const k = 1 - Math.exp(-dt / DERIVED_TAU);
+    // Below a few metres a second the track is mostly noise.
+    const turn = speed > 6 && last.speed > 6 ? clamp(angleDeltaDeg(last.trackDeg, trackDeg) / dt, -12, 12) : 0;
+    this.derivedTurnRate += (turn - this.derivedTurnRate) * k;
+    const accel = clamp((speed - last.speed) / dt, -4, 4);
+    this.derivedAccel += (accel - this.derivedAccel) * k;
   }
 
   /**
@@ -350,14 +461,19 @@ export class AircraftTrack {
     const u = last.u - this.up.peek(dt);
 
     if (Math.hypot(e, n, u) > MAX_ABSORBED_M) {
-      this.offsetE = 0;
-      this.offsetN = 0;
-      this.offsetU = 0;
+      this.offsetE = this.offsetN = this.offsetU = 0;
+      this.rateE = this.rateN = this.rateU = 0;
       return;
     }
     this.offsetE = e;
     this.offsetN = n;
     this.offsetU = u;
+    // And the velocity: the filter's new answer has a new speed, and taking it
+    // up in one frame is a lurch — after every report, which on a slow
+    // aircraft is the whole motion pumping.
+    this.rateE = last.ve - this.east.v;
+    this.rateN = last.vn - this.north.v;
+    this.rateU = last.vu - this.up.v;
   }
 
   /**
@@ -370,8 +486,84 @@ export class AircraftTrack {
     if (measured !== null) return clamp(measured, -67, 67);
 
     const omega = turnRateDegSec * DEG2RAD;
-    if (Math.abs(omega) < 1e-4 || groundSpeedMs < 20) return 0;
+    // A helicopter banks into a turn at any speed; an aeroplane below twenty
+    // metres a second is on the ground, where turning is steering.
+    const minSpeed = this.rotorcraft ? 5 : 20;
+    if (Math.abs(omega) < 1e-4 || groundSpeedMs < minSpeed) return 0;
     return clamp(Math.atan2(omega * groundSpeedMs, G) * RAD2DEG, -35, 35);
+  }
+
+  /**
+   * Pitch.
+   *
+   * An aeroplane's nose follows its flight path, so the climb gradient is the
+   * right answer. A helicopter's does not: it climbs on collective with the
+   * nose where it was, and points the nose at the ground to go faster — the
+   * rotor disc is tilted forward to pull it along, and the fuselage hangs
+   * under it. So for a rotorcraft pitch comes from speed (a few degrees nose
+   * up in the hover, nose down in the cruise) and from acceleration (nose
+   * down to accelerate, flared nose up to slow down).
+   */
+  private targetPitch(groundSpeedMs: number): number {
+    if (this.rotorcraft) {
+      if (this.latest.onGround) return 0;
+      const cruise = smooth01(groundSpeedMs / 60);
+      const fromSpeed = 3 - 7 * cruise;
+      const fromAccel = -Math.atan2(this.derivedAccel, G) * RAD2DEG * 0.8;
+      return clamp(fromSpeed + fromAccel, -14, 12);
+    }
+    // Climb gradient -> pitch. Not true pitch (which needs angle of attack),
+    // but it is the right sign and magnitude and it reads correctly.
+    return groundSpeedMs > 5 ? clamp(Math.atan2(this.up.v, groundSpeedMs) * RAD2DEG, -20, 25) : 0;
+  }
+
+  /**
+   * Bleed off the correction being absorbed. See `CORRECTION_TAU` and
+   * `MIN_PROGRESS`.
+   *
+   * Critically damped rather than a plain exponential: the offset and its
+   * rate both settle to zero, so neither the drawn position nor the drawn
+   * speed ever steps.
+   */
+  private decayOffset(dt: number): void {
+    [this.offsetU, this.rateU] = settle(this.offsetU, this.rateU, 1 / CORRECTION_TAU, dt);
+
+    const ve = this.east.v;
+    const vn = this.north.v;
+    const speed = Math.hypot(ve, vn);
+    // Hovering or parked: no direction to protect, only a twitch to avoid.
+    const omega = speed < CREEP_MPS ? 1 / HOVER_TAU : 1 / CORRECTION_TAU;
+    const prevE = this.offsetE;
+    const prevN = this.offsetN;
+    [this.offsetE, this.rateE] = settle(this.offsetE, this.rateE, omega, dt);
+    [this.offsetN, this.rateN] = settle(this.offsetN, this.rateN, omega, dt);
+    if (speed < CREEP_MPS) return;
+
+    // Along track, the step just taken may slow the aircraft but not reverse
+    // it, and may hurry it but not double it.
+    const ux = ve / speed;
+    const uy = vn / speed;
+    const prevAlong = prevE * ux + prevN * uy;
+    const along = this.offsetE * ux + this.offsetN * uy;
+    const cross = -this.offsetE * uy + this.offsetN * ux;
+    const crossRate = -this.rateE * uy + this.rateN * ux;
+    let alongRate = this.rateE * ux + this.rateN * uy;
+
+    // Past the slack, the excess goes at the unconstrained rate: an offset
+    // must always end up absorbed, however slowly the aircraft is moving.
+    const slack = Math.max(25, speed * ALONG_SLACK_SEC);
+    const excess = Math.max(0, Math.abs(prevAlong) - slack) * (1 - Math.exp(-omega * dt));
+    const lo = -(1 - MIN_PROGRESS) * speed * dt - excess;
+    const hi = MAX_SURGE * speed * dt + excess;
+    const step = along - prevAlong;
+    const limited = clamp(step, lo, hi);
+    if (limited !== step) alongRate = limited / dt;
+    const a = prevAlong + limited;
+
+    this.offsetE = a * ux - cross * uy;
+    this.offsetN = a * uy + cross * ux;
+    this.rateE = alongRate * ux - crossRate * uy;
+    this.rateN = alongRate * uy + crossRate * ux;
   }
 
   /**
@@ -385,18 +577,23 @@ export class AircraftTrack {
 
     // Decay first, so the offset the caller sees is the one for *this* frame
     // rather than the previous one's.
-    if (smoothingDt > 0) {
-      const remaining = Math.exp(-smoothingDt / CORRECTION_TAU);
-      this.offsetE *= remaining;
-      this.offsetN *= remaining;
-      this.offsetU *= remaining;
-    }
+    if (smoothingDt > 0) this.decayOffset(smoothingDt);
 
     const e = this.east.peek(dt) + this.offsetE;
     const n = this.north.peek(dt) + this.offsetN;
     const altM = this.up.peek(dt) + this.offsetU;
 
-    if (smoothingDt > 0) this.rendered = { atMs: now, e, n, u: altM };
+    if (smoothingDt > 0) {
+      this.rendered = {
+        atMs: now,
+        e,
+        n,
+        u: altM,
+        ve: this.east.v + this.rateE,
+        vn: this.north.v + this.rateN,
+        vu: this.up.v + this.rateU,
+      };
+    }
 
     const lat = clamp(this.anchorLat + n / this.mPerDegLat, -90, 90);
     const lon = wrapLongitude(this.anchorLon + e / this.mPerDegLon);
@@ -408,23 +605,29 @@ export class AircraftTrack {
       ? wrapHeading(Math.atan2(ve, vn) * RAD2DEG)
       : this.latest.trackDeg ?? this.smoothedHeading;
 
-    const turnRate = this.latest.trackRateDegSec ?? 0;
-    const targetHeading = this.latest.headingDeg ?? trackDeg;
+    const turnRate = this.latest.trackRateDegSec ?? this.derivedTurnRate;
+    const measuredHeading = this.latest.headingDeg;
+    const targetHeading = measuredHeading ?? trackDeg;
     const targetRoll = this.targetRoll(turnRate, groundSpeedMs);
-
-    // Climb gradient -> pitch. Not true pitch (which needs angle of attack),
-    // but it is the right sign and magnitude and it reads correctly.
-    const targetPitch =
-      groundSpeedMs > 5
-        ? clamp(Math.atan2(this.up.v, groundSpeedMs) * RAD2DEG, -20, 25)
-        : 0;
+    const targetPitch = this.targetPitch(groundSpeedMs);
 
     if (smoothingDt > 0) {
       // Exponential smoothing with a time constant, so the result does not
       // depend on frame rate. Attitude is cosmetic and must never jitter.
-      const k = 1 - Math.exp(-smoothingDt / 0.35);
+      const rotor = this.rotorcraft;
+      const k = 1 - Math.exp(-smoothingDt / (rotor ? 0.8 : 0.35));
+      /*
+       * Heading, when it is not broadcast, is the track — and at a walking
+       * pace the track is noise: a hovering helicopter's drifts all round the
+       * compass, and an airliner being pushed back has one pointing out of its
+       * tail. So below a few metres a second the nose holds where it was, and
+       * the slower the aircraft the more gently it follows.
+       */
+      const follow = measuredHeading !== null ? 1 : smooth01((groundSpeedMs - 2.5) / 4.5);
+      const headingTau = 0.35 + 0.85 * (1 - smooth01((groundSpeedMs - 8) / 52));
+      const kh = (1 - Math.exp(-smoothingDt / headingTau)) * follow;
       this.smoothedHeading = wrapHeading(
-        this.smoothedHeading + angleDeltaDeg(this.smoothedHeading, targetHeading) * k,
+        this.smoothedHeading + angleDeltaDeg(this.smoothedHeading, targetHeading) * kh,
       );
       this.smoothedRoll += (targetRoll - this.smoothedRoll) * k;
       this.smoothedPitch += (targetPitch - this.smoothedPitch) * k;

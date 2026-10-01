@@ -72,7 +72,7 @@ import { FEET_TO_METRES, ecefToGeodetic, geodeticToEcef } from '@/core/math/geo'
 import type { FloatingOrigin } from '@/core/frame';
 import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
-import { isSurfaceVehicle, shapeFor, type AirframeShape } from './aircraft';
+import { isSurfaceVehicle, rotorRpm, shapeFor, visibleSpinRate, type AirframeShape } from './aircraft';
 import { AircraftLights, lightSeed } from './aircraftLights';
 import { Contrails } from './contrails';
 import { loadModelFor, operatorOf } from './aircraft/library';
@@ -194,6 +194,8 @@ export interface DesignatorOptions {
 interface Detailed {
   group: Group;
   gear: Mesh[];
+  /** A helicopter's rotors: turned while it flies. See `spinRotors`. */
+  rotors: { mesh: Mesh; axis: Vector3; rpm: number; angle: number }[];
   /** Where its lights are fitted, once loaded. */
   anchors: LightAnchors | null;
   /** Type and operator it was built for; a change rebuilds it. */
@@ -277,6 +279,9 @@ export class Traffic3D {
 
   private fixedWing: InstancedModel | null = null;
   private rotorcraft: InstancedModel | null = null;
+  /** For turning nearby helicopters' rotors: the last update, and the frame time smoothed. */
+  private lastUpdateMs = 0;
+  private frameSec = 1 / 60;
   private disposed = false;
 
   private readonly dummy = new Object3D();
@@ -341,6 +346,11 @@ export class Traffic3D {
     terrainHeightAt?: (lat: number, lon: number) => number,
   ): void {
     this.cameraRender.copy(cameraEcef);
+    const nowMs = performance.now();
+    const stepSec = this.lastUpdateMs > 0 ? Math.min(0.25, (nowMs - this.lastUpdateMs) / 1000) : 0;
+    this.lastUpdateMs = nowMs;
+    if (stepSec > 0) this.frameSec += (stepSec - this.frameSec) * 0.05;
+    const frameSec = stepSec;
     this.lights.begin();
     const farLightsSq = this.lights.night > 0.05 ? LIGHTS_RANGE_M * LIGHTS_RANGE_M : 0;
     if (this.fixedWing) this.fixedWing.count = 0;
@@ -447,6 +457,8 @@ export class Traffic3D {
             d.group.matrixWorldNeedsUpdate = true;
             const gearDown = sample.latest.onGround === true || aglM < GEAR_DOWN_AGL_M;
             for (const g of d.gear) g.visible = gearDown;
+            // A helicopter on the pad may well be shut down; one in the air never is.
+            if (d.rotors.length > 0 && sample.latest.onGround !== true) this.spinRotors(d, frameSec);
             continue;
           }
         }
@@ -496,7 +508,7 @@ export class Traffic3D {
     const group = new Group();
     group.matrixAutoUpdate = false;
     group.visible = false;
-    const entry: Detailed = { group, gear: [], anchors: null, key, loaded: false };
+    const entry: Detailed = { group, gear: [], rotors: [], anchors: null, key, loaded: false };
     this.detailed.set(sample.hex, entry);
     this.scene.add(group);
 
@@ -516,6 +528,16 @@ export class Traffic3D {
         // spin, and a translucent disc on a still blade reads as a smudge.
         if (part.role === 'disc') continue;
         if (part.role === 'gear' && !model.fixedGear) entry.gear.push(mesh);
+        if (part.role === 'mainRotor' || part.role === 'tailRotor') {
+          const main = rotorRpm(shapeFor(type, sample.latest.category));
+          entry.rotors.push({
+            mesh,
+            axis: new Vector3(part.axis[0], part.axis[1], part.axis[2]).normalize(),
+            // Geared off the main rotor, as on the aircraft being flown.
+            rpm: part.role === 'mainRotor' ? main : main * 5.2,
+            angle: Math.random() * Math.PI * 2,
+          });
+        }
         group.add(mesh);
       }
       // The stand-in keeps the aircraft on screen until its own airframe is
@@ -524,6 +546,22 @@ export class Traffic3D {
       entry.loaded = true;
     });
     return entry;
+  }
+
+  /**
+   * Turn a nearby helicopter's rotors.
+   *
+   * A stand-in rotorcraft in the instanced layer cannot have its own rotor
+   * angle, but the few drawn with their own model can, and those are the ones
+   * close enough to see the blades: stationary blades on a helicopter in
+   * flight read as an autorotation, or a failure.
+   */
+  private spinRotors(d: Detailed, stepSec: number): void {
+    for (const r of d.rotors) {
+      r.angle = (r.angle + visibleSpinRate(r.rpm, this.frameSec) * Math.PI * 2 * stepSec) % (Math.PI * 2);
+      r.mesh.quaternion.setFromAxisAngle(r.axis, r.angle);
+      r.mesh.updateMatrix();
+    }
   }
 
   /**

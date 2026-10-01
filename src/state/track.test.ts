@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { clamp } from '@/core/math/geo';
 import { AircraftTrack } from './track';
 import type { AircraftState, ProviderId } from '@/data/types';
 
@@ -266,5 +267,126 @@ describe('the drawn position never jumps when a report lands', () => {
     const again = track.sampleAt(T0 + 2000, 0);
     expect(again.lat).toBe(before.lat);
     expect(again.lon).toBe(before.lon);
+  });
+});
+
+describe('a helicopter moves like one', () => {
+  /**
+   * The complaint: "l'hélicoptère … glisse arrière avant". Every report
+   * corrected the drawn position at a rate set by the correction alone, so a
+   * ten-metre correction on an aircraft doing twenty knots slid it backwards
+   * at twice its speed, once per report. And its attitude came from the
+   * aeroplane rules: nose up to climb, wings level in every turn.
+   *
+   * A helicopter flown through a realistic profile — slow, hover-taxi slow,
+   * fast, turning — reported every three seconds with the noise and latency a
+   * real feed has.
+   */
+  const FRAME = 1 / 60;
+
+  function fly(): { backFrames: number; pitch: [number, number]; roll: [number, number] } {
+    let seed = 7;
+    const rnd = (): number => (seed = (seed * 16_807) % 2_147_483_647) / 2_147_483_647;
+    const gauss = (): number => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+
+    let e = 0;
+    let n = 0;
+    let hdg = 40;
+    let v = 12;
+    let alt = 250;
+    let track: AircraftTrack | null = null;
+    let nextFix = 0;
+    let prev: { lat: number; lon: number } | null = null;
+    let backFrames = 0;
+    const pitch: [number, number] = [0, 0];
+    const roll: [number, number] = [0, 0];
+
+    for (let t = 0; t < 120; t += FRAME) {
+      const targetV = t < 30 ? 12 : t < 50 ? 3 : t < 80 ? 30 : t < 100 ? 8 : 25;
+      v += clamp(targetV - v, -1.2 * FRAME, 1.2 * FRAME);
+      hdg += (t > 60 && t < 75 ? 6 : t > 100 && t < 110 ? -8 : 0) * FRAME;
+      const vz = t > 50 && t < 65 ? 3 : 0;
+      alt += vz * FRAME;
+      const h = (hdg * Math.PI) / 180;
+      e += v * Math.sin(h) * FRAME;
+      n += v * Math.cos(h) * FRAME;
+      const now = T0 + t * 1000;
+
+      if (t >= nextFix) {
+        nextFix += 3;
+        const age = 0.3 + rnd() * 0.7;
+        const s = state({
+          hex: 'heli01',
+          category: 'A7',
+          headingDeg: null,
+          lat: (n - v * Math.cos(h) * age + gauss() * 6) / 110_540,
+          lon: (e - v * Math.sin(h) * age + gauss() * 6) / 111_320,
+          altGeomFt: Math.round((alt * 3.2808) / 25) * 25,
+          geomRateFpm: Math.round((vz * 196.85) / 64) * 64,
+          groundSpeedKt: Math.round((v / 0.514_444 + gauss() * 0.5) * 10) / 10,
+          trackDeg: hdg + gauss() * (v < 5 ? 8 : 1.5),
+          fixTime: now - age * 1000,
+          observedAt: now,
+        });
+        if (track) track.update(s);
+        else track = new AircraftTrack(s);
+      }
+      if (!track) continue;
+
+      const s = track.sampleAt(now, FRAME);
+      if (prev && t > 5) {
+        const along =
+          (s.lon - prev.lon) * 111_320 * Math.sin(h) + (s.lat - prev.lat) * 110_540 * Math.cos(h);
+        if (along < 0) backFrames++;
+        pitch[0] = Math.min(pitch[0], s.pitchDeg);
+        pitch[1] = Math.max(pitch[1], s.pitchDeg);
+        roll[0] = Math.min(roll[0], s.rollDeg);
+        roll[1] = Math.max(roll[1], s.rollDeg);
+      }
+      prev = { lat: s.lat, lon: s.lon };
+    }
+    return { backFrames, pitch, roll };
+  }
+
+  const result = fly();
+
+  it('never slides backwards between reports', () => {
+    expect(result.backFrames).toBe(0);
+  });
+
+  it('keeps a helicopter attitude: no nose-high climbs, nose down to go fast', () => {
+    expect(result.pitch[1]).toBeLessThan(12);
+    expect(result.pitch[0]).toBeLessThan(-3);
+  });
+
+  it('banks into turns that are never broadcast', () => {
+    expect(result.roll[1]).toBeGreaterThan(8);
+    expect(result.roll[0]).toBeLessThan(-8);
+  });
+
+  it('holds its heading in a hover instead of spinning with the noise', () => {
+    const hover = new AircraftTrack(
+      state({ hex: 'hover1', category: 'A7', lat: 0, lon: 0, groundSpeedKt: 0.5, trackDeg: 10, headingDeg: null }),
+    );
+    for (let t = 0; t < 20_000; t += 16) hover.sampleAt(T0 + t, 0.016);
+    const start = hover.sampleAt(T0 + 20_000, 0.016).headingDeg;
+    for (let k = 1; k <= 10; k++) {
+      hover.update(
+        state({
+          hex: 'hover1',
+          category: 'A7',
+          lat: (k % 2 ? 3 : -3) / 111_320,
+          lon: 0,
+          groundSpeedKt: 1,
+          trackDeg: (k * 97) % 360,
+          headingDeg: null,
+          fixTime: T0 + 20_000 + k * 3000,
+          observedAt: T0 + 20_000 + k * 3000,
+        }),
+      );
+      for (let t = 0; t < 3000; t += 16) hover.sampleAt(T0 + 20_000 + k * 3000 + t, 0.016);
+    }
+    const end = hover.sampleAt(T0 + 50_000, 0.016).headingDeg;
+    expect(Math.abs(((end - start + 540) % 360) - 180)).toBeLessThan(5);
   });
 });

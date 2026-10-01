@@ -444,7 +444,12 @@ export class Orchestrator {
       // `@/state/regime`): sound saying climb power while the propellers said
       // idle would be more noticeable than either being wrong on its own.
       const airframe = pov.airframe;
-      if (airframe) this.audio.update(airframe, flightRegime(flying), app.cameraMode);
+      if (airframe) {
+        this.audio.update(airframe, flightRegime(flying), app.cameraMode);
+        // The type code is surer than the emitter category, which many
+        // helicopters leave unset; the track flies it as one from here on.
+        this.traffic.get(flying.hex)?.setRotorcraft(airframe.kind === 'rotorcraft');
+      }
     }
 
     this.publish(dt, flying ?? selected, samples.length);
