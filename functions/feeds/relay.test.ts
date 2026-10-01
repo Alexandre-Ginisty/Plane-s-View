@@ -25,9 +25,9 @@ interface Captured {
 let captured: Captured[] = [];
 
 /** A context shaped like the one Cloudflare Pages hands the function. */
-function contextFor(path: string[], search = ''): Parameters<typeof onRequestGet>[0] {
+function contextFor(path: string[], search = '', headers: Record<string, string> = {}): Parameters<typeof onRequestGet>[0] {
   return {
-    request: new Request(`https://planesview.example/feeds/${path.join('/')}${search}`),
+    request: new Request(`https://planesview.example/feeds/${path.join('/')}${search}`, { headers }),
     params: { path },
     waitUntil: () => undefined,
   };
@@ -80,44 +80,79 @@ describe('the allowlist', () => {
   });
 
   it('sends every allowed target to its own fixed origin', async () => {
-    const expected: Record<string, string> = {
-      'adsb-lol': 'https://api.adsb.lol/',
-      'adsb-fi': 'https://opendata.adsb.fi/',
-      'airplanes-live': 'https://api.airplanes.live/',
-      opensky: 'https://opensky-network.org/',
-      planespotters: 'https://api.planespotters.net/',
+    const expected: Record<string, [string, string[]]> = {
+      'adsb-lol': ['https://api.adsb.lol/', ['v2', 'hex', '4ca7b5']],
+      'adsb-fi': ['https://opendata.adsb.fi/', ['api', 'v2', 'hex', '4ca7b5']],
+      'airplanes-live': ['https://api.airplanes.live/', ['v2', 'hex', '4ca7b5']],
+      opensky: ['https://opensky-network.org/', ['api', 'states', 'all']],
+      planespotters: ['https://api.planespotters.net/', ['pub', 'photos', 'hex', '4ca7b5']],
     };
-    for (const [target, origin] of Object.entries(expected)) {
+    for (const [target, [origin, path]] of Object.entries(expected)) {
       captured = [];
-      await onRequestGet(contextFor([target, 'v2', 'all']));
+      await onRequestGet(contextFor([target, ...path]));
       expect(captured[0]!.url.startsWith(origin)).toBe(true);
     }
   });
 });
 
 describe('path handling', () => {
-  it('cannot climb out of the upstream origin with traversal', async () => {
-    await onRequestGet(contextFor(['adsb-lol', '..', '..', 'admin']));
-    const url = new URL(captured[0]!.url);
-    expect(url.origin).toBe('https://api.adsb.lol');
-    // Encoded, so it is a path segment named ".." rather than a move upwards.
-    expect(url.pathname).not.toContain('/../');
+  it('relays the paths the app sends', async () => {
+    for (const path of [
+      ['adsb-lol', 'v2', 'point', '48.85341', '2.34880', '120'],
+      ['adsb-lol', 'v2', 'hex', '~a1b2c3'],
+      ['adsb-fi', 'api', 'v2', 'lat', '-33.94610', 'lon', '151.17720', 'dist', '60'],
+      ['planespotters', 'pub', 'photos', 'hex', '3C6444'],
+    ]) {
+      const res = await onRequestGet(contextFor(path));
+      expect(res.status, path.join('/')).toBe(200);
+    }
+    await onRequestGet(contextFor(['opensky', 'api', 'states', 'all'], '?lamin=1&lomin=2&lamax=3&lomax=4&extended=1'));
+    expect(new URL(captured.at(-1)!.url).search).toBe('?lamin=1&lomin=2&lamax=3&lomax=4&extended=1');
   });
 
-  it('cannot smuggle a second host through the path', async () => {
-    await onRequestGet(contextFor(['adsb-lol', 'https://evil.example/x']));
-    expect(new URL(captured[0]!.url).origin).toBe('https://api.adsb.lol');
+  it('refuses any other path on an allowed origin', async () => {
+    for (const path of [
+      ['adsb-lol', 'v2', 'all'],
+      ['adsb-lol', '..', '..', 'admin'],
+      ['adsb-lol', 'https://evil.example/x'],
+      ['adsb-lol', 'v2', 'hex', '4ca7b5', 'extra'],
+      ['opensky', 'api', 'tracks', 'all'],
+      ['planespotters', 'pub', 'photos', 'reg', 'G-EUPT'],
+    ]) {
+      const res = await onRequestGet(contextFor(path));
+      expect(res.status, path.join('/')).toBe(404);
+    }
+    expect(captured).toHaveLength(0);
   });
 
-  it('passes the query string through, since the feeds need it', async () => {
-    await onRequestGet(contextFor(['adsb-lol', 'v2', 'lat', '51.5'], '?limit=200'));
-    expect(new URL(captured[0]!.url).search).toBe('?limit=200');
+  it('refuses query parameters the route does not take', async () => {
+    const lol = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '?limit=200'));
+    expect(lol.status).toBe(404);
+    const sky = await onRequestGet(contextFor(['opensky', 'api', 'states', 'all'], '?icao24=abc&time=0'));
+    expect(sky.status).toBe(404);
+    expect(captured).toHaveLength(0);
+  });
+
+  it('refuses another website calling it from its visitors\' browsers', async () => {
+    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '', { 'Sec-Fetch-Site': 'cross-site' }));
+    expect(res.status).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
+
+  it('does not follow an upstream redirect', async () => {
+    vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+      expect(init.redirect).toBe('manual');
+      return Promise.resolve(new Response(null, { status: 302, headers: { Location: 'https://evil.example/' } }));
+    });
+    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    expect(res.status).toBe(502);
+    expect(res.headers.get('Location')).toBeNull();
   });
 });
 
 describe('what comes back', () => {
   it('identifies the project upstream, as the feeds ask', async () => {
-    await onRequestGet(contextFor(['adsb-lol', 'v2', 'all']));
+    await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     const headers = captured[0]!.init.headers as Record<string, string>;
     expect(headers['User-Agent']).toContain('PlanesView');
   });
@@ -125,7 +160,7 @@ describe('what comes back', () => {
   it('is not readable by another website', async () => {
     // It used to answer `Access-Control-Allow-Origin: *`, which let any site
     // on the internet spend this deployment's request budget.
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'all']));
+    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 
@@ -138,16 +173,17 @@ describe('what comes back', () => {
         }),
       ),
     );
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'all']));
+    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.headers.get('Content-Type')).toContain('application/json');
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
   });
 
   it('reports an unreachable upstream without describing it', async () => {
     vi.stubGlobal('fetch', () =>
       Promise.reject(new Error('connect ECONNREFUSED 10.0.3.4:443 via relay-edge-7')),
     );
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'all']));
+    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.status).toBe(502);
 
     const body = (await res.json()) as Record<string, unknown>;

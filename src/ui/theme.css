@@ -449,36 +449,3 @@ button {
   .pv-pin-remove { opacity: 0.8; }
 }
 
-/*
- * The sandbox's chosen start on the map (`map2d/map.ts`). Two rings that
- * pulse outward and a centre cross, in the warm accent: it is an action.
- */
-.pv-spawn {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  pointer-events: none;
-}
-.pv-spawn span {
-  position: absolute;
-  inset: 0;
-  border: 2px solid #ffb02e;
-  border-radius: 50%;
-  animation: pv-spawn-ring 1.8s var(--ease) infinite;
-}
-.pv-spawn span + span { animation-delay: 0.9s; }
-.pv-spawn i {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%) rotate(45deg);
-  border: 2px solid #ffb02e;
-  background: rgba(255, 176, 46, 0.25);
-  box-shadow: 0 0 12px rgba(255, 176, 46, 0.8);
-}
-@keyframes pv-spawn-ring {
-  from { transform: scale(0.3); opacity: 1; }
-  to { transform: scale(1.4); opacity: 0; }
-}

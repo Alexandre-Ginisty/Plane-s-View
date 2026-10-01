@@ -1,17 +1,15 @@
 /**
- * Filling the cockpit's readings: from the feed for a live aircraft, from the
- * flight model for the sandbox's, and the traffic around either for the
- * radar and the navigation display.
+ * Filling the cockpit's readings from the feed, and the traffic around for
+ * the radar and the navigation display.
  *
  * Directions to other aircraft are taken in the frame the cockpit is drawn in
- * — the attitude the camera was built on — so the HUD's target box lands on
- * the target it is boxing, not a frame of smoothing away from it.
+ * — the attitude the camera was built on — so a contact sits where the
+ * aircraft is, not a frame of smoothing away from it.
  */
 
 import { Quaternion, Vector3 } from 'three';
 
 import type { CockpitReadings } from '@/render/cockpit';
-import type { FlightReadout } from '@/sandbox/realFlight';
 import type { SampledAircraft } from '@/state/traffic';
 
 const FT = 3.280_84;
@@ -45,33 +43,8 @@ export function readingsFromSample(r: CockpitReadings, s: SampledAircraft, groun
   r.overspeed = false;
   r.windFromDeg = s.latest.windDirectionDeg ?? null;
   r.windKt = s.latest.windSpeedKt ?? null;
-  r.weapon = null;
-  r.target = null;
   r.stickX = Math.max(-1, Math.min(1, s.rollDeg / 30)) * 0.3;
   r.stickY = 0;
-}
-
-/** The flight model's systems on top of what the sample carries. */
-export function readingsFromFlight(r: CockpitReadings, f: FlightReadout): void {
-  r.iasKt = f.iasKt;
-  r.mach = f.jet ? f.mach : null;
-  r.vsFpm = f.verticalFpm;
-  r.aoaDeg = f.aoaDeg;
-  r.betaDeg = f.betaDeg;
-  r.g = f.g;
-  r.throttle = f.throttle;
-  r.afterburner = f.afterburner;
-  r.rpm = f.rpm;
-  r.jet = f.jet;
-  r.flapsDeg = f.flapsDeg;
-  r.gear = f.gear;
-  r.brake = f.brake;
-  r.speedBrake = f.speedBrake;
-  r.stall = f.stalled;
-  r.stallWarning = f.stallWarning;
-  r.overspeed = f.overspeed;
-  r.stickX = f.stickX;
-  r.stickY = f.stickY;
 }
 
 /**
@@ -84,20 +57,16 @@ export function fillContacts(
   eye: Vector3,
   body: Quaternion,
   ownAltFt: number,
-  lockHex: string | null,
 ): void {
   _inv.copy(body).invert();
   r.contacts.length = 0;
-  r.target = null;
   for (const c of inRange) {
     _d.copy(c.position).sub(eye);
     const range = _d.length();
     if (range < 1) continue;
     _d.divideScalar(range).applyQuaternion(_inv);
-    const locked = c.hex === lockHex;
     // Bearing off the nose in the aircraft's own horizontal plane.
-    r.contacts.push({ az: Math.atan2(_d.x, -_d.z), rangeM: range, relAltFt: c.sample.altFt - ownAltFt, locked });
-    if (locked) r.target = { x: _d.x, y: _d.y, z: -_d.z };
+    r.contacts.push({ az: Math.atan2(_d.x, -_d.z), rangeM: range, relAltFt: c.sample.altFt - ownAltFt });
     if (r.contacts.length >= 40) break;
   }
 }

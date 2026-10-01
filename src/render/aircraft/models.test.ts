@@ -112,10 +112,13 @@ describe('every converted model', () => {
     // Everything roled `gear` is hidden above circuit height. A lifting surface
     // misclassified as undercarriage therefore vanishes in the cruise, and it
     // always takes span with it — which is the one thing a fuselage does not
-    // have. Normalised models are unit length along +Y, so this is a ratio.
+    // have. Measured against the model's own span rather than a fixed ratio: a
+    // MiG-21's delta spans under half its length, and that is not a lost wing.
+    const all = extentOf(model, () => true);
     const cruise = extentOf(model, (part) => part.role !== 'gear');
     expect(cruise, 'nothing is drawn at cruise').not.toBeNull();
-    expect(cruise!.x / cruise!.y, `${model.header.id} has no wings at cruise`).toBeGreaterThan(0.6);
+    expect(cruise!.x / all!.x, `${model.header.id} loses span at cruise`).toBeGreaterThan(0.9);
+    expect(cruise!.x / cruise!.y, `${model.header.id} has no wings at cruise`).toBeGreaterThan(0.4);
   });
 
   it.each(files)('%s keeps its undercarriage underneath it', (file) => {

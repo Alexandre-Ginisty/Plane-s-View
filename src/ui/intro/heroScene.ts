@@ -63,7 +63,7 @@ const HERO_POOL: readonly { type: string; model: string; operators: readonly str
 
 const drawn = HERO_POOL[Math.floor(Math.random() * HERO_POOL.length)]!;
 /** This visit's aeroplane: a type first, so no one type dominates, then a livery. */
-export const HERO_AIRCRAFT = {
+const HERO_AIRCRAFT = {
   type: drawn.type,
   model: drawn.model,
   operator: drawn.operators[Math.floor(Math.random() * drawn.operators.length)]!,

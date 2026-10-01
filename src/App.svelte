@@ -22,7 +22,6 @@
   import Notices from '@/ui/Notices.svelte';
   import StatusBar from '@/ui/StatusBar.svelte';
   import Icon from '@/ui/Icon.svelte';
-  import { SANDBOX_ENABLED } from '@/sandbox/enabled';
 
   let mapContainer: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -157,19 +156,11 @@
     const o = orchestrator;
     if (!o) return;
 
-    // Flying in the sandbox, the arrows, space, shift and tab are the
-    // controls, and nothing else may have them.
-    if (app.sandbox.phase === 'flying' && app.view === 'pov' && o.sandboxKey(event.code, true)) {
-      event.preventDefault();
-      return;
-    }
-
     switch (event.key) {
       case 'Escape':
         // The key closes whatever is on top before it changes the view, so it
         // never both dismisses a panel and ejects the user in one press.
         if (app.cinema) app.cinema = false;
-        else if (app.sandbox.phase === 'pick' || app.sandbox.phase === 'hangar') o.cancelSandbox();
         else if (app.pinMode) app.pinMode = false;
         else if (app.showLegend) app.showLegend = false;
         else if (app.view === 'pov') o.exitPov();
@@ -189,17 +180,11 @@
       case 'h':
       case 'H':
       case '?':
-        // Flying the sandbox, the card that matters is the controls.
-        if (app.sandbox.phase === 'flying') app.sandbox.showKeys = !app.sandbox.showKeys;
-        else app.showLegend = !app.showLegend;
+        app.showLegend = !app.showLegend;
         break;
       case 'p':
       case 'P':
         if (app.view === 'map') app.pinMode = !app.pinMode;
-        break;
-      case 'b':
-      case 'B':
-        if (SANDBOX_ENABLED && app.sandbox.phase === 'off') o.beginSandbox();
         break;
       case 'f':
       case 'F':
@@ -230,15 +215,6 @@
         if (app.view === 'pov' && mode) o.setCameraMode(mode.id);
       }
     }
-  }
-
-  function onKeyup(event: KeyboardEvent): void {
-    if (app.sandbox.phase === 'flying') orchestrator?.sandboxKey(event.code, false);
-  }
-
-  /** A key held when the window loses focus never gets its key-up. */
-  function onBlur(): void {
-    orchestrator?.sandboxReleaseKeys();
   }
 
   function onPointerDown(event: PointerEvent): void {
@@ -304,7 +280,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} onkeyup={onKeyup} onblur={onBlur} />
+<svelte:window onkeydown={onKeydown} />
 
 <main
   class:pov={app.view === 'pov'}
@@ -383,14 +359,6 @@
             onclick={() => void orchestrator?.catchAircraft('takeoff')}
             title="Step into an aircraft taking off (T)"
           ><Icon name="takeoff" /><span class="text">{CATCH_LABELS.takeoff.verb}</span><span class="kbd">T</span></button>
-          {#if SANDBOX_ENABLED}
-            <button
-              class="tool hot"
-              class:on={app.sandbox.phase !== 'off'}
-              onclick={() => (app.sandbox.phase === 'off' ? orchestrator?.beginSandbox() : orchestrator?.cancelSandbox())}
-              title="Sandbox: spawn your own armed aircraft anywhere and shoot down the real traffic (B)"
-            ><Icon name="crosshair" /><span class="text">Sandbox</span><span class="kbd">B</span></button>
-          {/if}
         </div>
       </header>
       {#if app.pinMode && !app.cinema}
@@ -402,25 +370,9 @@
           {/if}
         </p>
       {/if}
-      {#if app.sandbox.phase === 'pick'}
-        <div class="pick-hint" role="status">
-          <span class="reticle"><Icon name="crosshair" size={22} /></span>
-          <div>
-            <strong>Sandbox · choose where to start</strong>
-            <span>Click anywhere in the world. Real traffic near that spot becomes your target.</span>
-          </div>
-          <button class="chip" onclick={() => orchestrator?.cancelSandbox()}>Cancel <span class="kbd">Esc</span></button>
-        </div>
-      {:else if app.sandbox.phase === 'hangar'}
-        <!-- Loaded on demand: the sandbox is off by default and is most of the flight code. -->
-        {#await import('@/ui/sandbox/SandboxHangar.svelte') then { default: SandboxHangar }}<SandboxHangar {orchestrator} />{/await}
-      {/if}
       {#if !app.cinema}<AircraftPanel {orchestrator} />{/if}
     {:else if !app.cinema}
       <Hud {orchestrator} />
-      {#if app.sandbox.phase === 'flying'}
-        {#await import('@/ui/sandbox/SandboxHud.svelte') then { default: SandboxHud }}<SandboxHud />{/await}
-      {/if}
     {/if}
 
     {#if !app.cinema}
@@ -644,14 +596,6 @@
   .dock :global(.tool:disabled) { opacity: 0.5; cursor: progress; }
   .dock .kbd { margin-left: 2px; opacity: 0.7; }
 
-  /* The sandbox is the loud one: warm, because it is the one that starts a game. */
-  .dock .tool.hot { color: var(--accent-warm); }
-  .dock .tool.hot::after { background: var(--accent-warm); }
-  .dock .tool.hot:hover,
-  .dock .tool.hot.on { color: var(--accent-warm); background: rgb(var(--warm-rgb) / 0.12); }
-  .dock .tool.hot :global(.icon) { animation: spin-slow 6s linear infinite; }
-  @keyframes spin-slow { to { transform: rotate(360deg); } }
-
   .count {
     min-width: 17px;
     padding: 1px 5px;
@@ -665,51 +609,11 @@
   .actions { margin-left: auto; }
 
   @media (max-width: 1180px) {
-    .actions .tool:not(.hot) .text { display: none; }
+    .actions .tool .text { display: none; }
   }
   @media (max-width: 760px) {
     .dock .text, .dock .kbd { display: none; }
     .actions { margin-left: 0; }
-  }
-
-  /* Choosing where the sandbox starts: a banner that says what a click does. */
-  .pick-hint {
-    position: absolute;
-    top: 76px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 21;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 14px 12px 12px;
-    max-width: calc(100vw - 32px);
-    background: var(--bg-elevated);
-    border: 1px solid rgb(var(--warm-rgb) / 0.5);
-    box-shadow: var(--shadow), 0 0 24px rgb(var(--warm-rgb) / 0.18);
-    backdrop-filter: blur(14px);
-    animation: drop-in 0.4s var(--ease);
-  }
-  .pick-hint div { display: flex; flex-direction: column; gap: 2px; }
-  .pick-hint strong {
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent-warm);
-  }
-  .pick-hint div span { font-size: 12.5px; color: var(--text-dim); }
-  .reticle {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    color: var(--accent-warm);
-    border: 1px solid rgb(var(--warm-rgb) / 0.5);
-    animation: pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    50% { box-shadow: 0 0 0 6px rgb(var(--warm-rgb) / 0.12); }
   }
 
   .boot {

@@ -18,6 +18,15 @@
  * or to launder traffic — the failure mode that makes naive CORS proxies
  * dangerous to deploy.
  *
+ * ## And only for the requests the app makes
+ *
+ * Each target also has the exact shape of the paths the client sends
+ * (`ROUTES`), and the query parameters it may carry. A matching origin is not
+ * enough: an allowlisted host still has endpoints this project has no business
+ * calling on a stranger's behalf, and every request it relays spends the
+ * goodwill of a service donating its bandwidth. Upstream redirects are not
+ * followed, so an origin cannot hand the relay on to one that is not listed.
+ *
  * ## And it is same-origin
  *
  * It used to answer `Access-Control-Allow-Origin: *`, which is the other half
@@ -47,6 +56,28 @@ const CACHE_SECONDS: Record<string, number> = {
   opensky: 5,
   planespotters: 86_400,
 };
+
+/**
+ * The paths each target answers, after the target segment, and the query
+ * parameters allowed with them. Hex identifiers are ICAO 24-bit addresses,
+ * with readsb's `~` prefix for the non-ICAO ones; coordinates are decimal.
+ */
+const NUM = String.raw`-?\d{1,3}(?:\.\d{1,6})?`;
+const HEX = '~?[0-9a-f]{6}';
+const READSB = new RegExp(`^v2/(?:point/${NUM}/${NUM}/\\d{1,3}|hex/${HEX})$`, 'i');
+const ROUTES: Record<string, { path: RegExp; query: readonly string[] }> = {
+  'adsb-lol': { path: READSB, query: [] },
+  'airplanes-live': { path: READSB, query: [] },
+  'adsb-fi': { path: new RegExp(`^api/v2/(?:lat/${NUM}/lon/${NUM}/dist/\\d{1,3}|hex/${HEX})/?$`, 'i'), query: [] },
+  opensky: { path: /^api\/states\/all$/, query: ['lamin', 'lomin', 'lamax', 'lomax', 'extended'] },
+  planespotters: { path: new RegExp(`^pub/photos/hex/${HEX}$`, 'i'), query: [] },
+};
+
+/** Longest URL the client ever builds, with room to spare. */
+const MAX_URL_LENGTH = 512;
+
+/** Largest body relayed: a dense 250 nm circle is a few megabytes. */
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 interface PagesContext {
   request: Request;
@@ -80,6 +111,9 @@ function baseHeaders(extra: Record<string, string> = {}): Record<string, string>
   return {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
+    // Data, never a document: nothing in a reply may run, frame or load.
+    'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; sandbox",
+    'Cross-Origin-Resource-Policy': 'same-origin',
     Vary: 'Origin',
     ...extra,
   };
@@ -122,9 +156,24 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     );
   }
 
+  // Another website's page calling this deployment from its visitors'
+  // browsers. Browsers say so; scripts elsewhere can lie, but then they spend
+  // their own requests, not borrowed visitors'.
+  const site = context.request.headers.get('Sec-Fetch-Site');
+  if (site === 'cross-site') return json({ error: 'Forbidden' }, 403);
+
+  const incoming = new URL(context.request.url);
+  const route = ROUTES[target];
+  const rest = segments.slice(1).join('/');
+  if (!route || !route.path.test(rest) || incoming.href.length > MAX_URL_LENGTH) {
+    return json({ error: 'Unknown relay path' }, 404);
+  }
+  for (const key of incoming.searchParams.keys()) {
+    if (!route.query.includes(key)) return json({ error: 'Unknown relay path' }, 404);
+  }
+
   const origin = UPSTREAM[target]!;
   const upstreamPath = segments.slice(1).map(encodeURIComponent).join('/');
-  const incoming = new URL(context.request.url);
 
   // Rebuilt from parts, never concatenated from user input, so the origin is
   // fixed by the allowlist and the path cannot escape it.
@@ -142,8 +191,16 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       },
       // Collapses concurrent identical requests across all visitors.
       cf: { cacheTtl: ttl, cacheEverything: true },
+      // A redirect would be the upstream choosing where the relay goes next.
+      redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
     } as RequestInit);
+
+    if (upstream.status >= 300 && upstream.status < 400) {
+      return json({ error: 'Upstream redirected', target }, 502);
+    }
+    const length = Number(upstream.headers.get('Content-Length') ?? 0);
+    if (length > MAX_BODY_BYTES) return json({ error: 'Upstream reply too large', target }, 502);
 
     const headers = baseHeaders({
       'Content-Type': safeContentType(upstream.headers.get('Content-Type')),

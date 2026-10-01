@@ -1,6 +1,6 @@
 /**
- * The sandbox's combat hangar: real FlightGear airframes for the aircraft the
- * sandbox arms.
+ * The military hangar: real FlightGear airframes for the fighters, attack
+ * aircraft and helicopters that show up in the live feed.
  *
  * Build-time only, like `convert.mjs`, and additive: it converts just these
  * entries and merges them into the existing `public/models/index.json` and
@@ -31,7 +31,7 @@ export const COMBAT = [
     id: 'f16',
     path: 'f16',
     // The nozzle is a file of its own, placed by `F-16.xml`; the afterburner
-    // flame and the drag chute are effects, drawn here by the sandbox itself.
+    // flame and the drag chute are left out: neither is part of the airframe.
     parts: [{ model: 'Models/f16.ac' }, { model: 'Models/nozzle-GE.ac', offset: { x: -3.08, y: -1.485, z: 1.255 } }],
     discard: /flame|chute/i,
     types: ['F16', 'F16X'],

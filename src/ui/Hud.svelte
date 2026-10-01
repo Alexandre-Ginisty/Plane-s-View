@@ -83,7 +83,6 @@
     app.phaseEvent && Date.now() - app.phaseEvent.at < 3500 ? app.phaseEvent : null,
   );
 
-  const sandbox = $derived(app.sandbox.phase === 'flying');
   const MODE_ICONS: Record<string, IconName> = { cockpit: 'cockpit', cabin: 'window', chase: 'chase', wing: 'wing', orbit: 'orbit' };
 
   /*
@@ -175,7 +174,7 @@
       <p class="banner info" role="status">{degraded.advice}</p>
     {/if}
 
-    {#if !sandbox}<FlightCard {sample} {orchestrator} />{/if}
+    <FlightCard {sample} {orchestrator} />
 
     {#if toast}
       {#key toast.id}
@@ -232,16 +231,14 @@
           aria-label={app.sound ? 'Mute the engines' : 'Hear the engines'}
           aria-pressed={app.sound}
         ><Icon name={app.sound ? 'sound' : 'mute'} size={17} /></button>
-        {#if !sandbox}
-          <button
-            class="round"
-            class:active={app.autoCamera}
-            onclick={() => app.setAutoCamera(!app.autoCamera)}
-            title="Auto camera: pick the view for takeoffs and landings (A)"
-            aria-label="Auto camera"
-            aria-pressed={app.autoCamera}
-          ><Icon name="auto" size={17} /></button>
-        {/if}
+        <button
+          class="round"
+          class:active={app.autoCamera}
+          onclick={() => app.setAutoCamera(!app.autoCamera)}
+          title="Auto camera: pick the view for takeoffs and landings (A)"
+          aria-label="Auto camera"
+          aria-pressed={app.autoCamera}
+        ><Icon name="auto" size={17} /></button>
         <button
           class="round"
           onclick={() => (app.cinema = true)}
@@ -253,7 +250,7 @@
 
     <button class="exit" onclick={() => orchestrator.exitPov()}>
       <Icon name="back" size={15} />
-      <span>{sandbox ? 'Leave sandbox' : 'Back to map'}</span>
+      <span>Back to map</span>
       <span class="kbd">Esc</span>
     </button>
   </div>

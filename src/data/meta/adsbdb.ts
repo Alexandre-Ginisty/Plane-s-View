@@ -9,7 +9,7 @@
  */
 
 import { DIRECT } from '@/data/endpoints';
-import { fetchJson, HttpError } from '@/data/http';
+import { fetchJson, HttpError, httpsUrl } from '@/data/http';
 import type { Airline, Airport, AircraftMeta, FlightRoute } from '@/data/types';
 
 interface AdsbdbAirport {
@@ -122,8 +122,8 @@ export async function fetchAirframe(
     registeredCountryIso: s(a.registered_owner_country_iso_name),
     icaoTypeCode: s(a.icao_type),
     operatorFlagCode: s(a.registered_owner_operator_flag_code),
-    photoUrl: s(a.url_photo),
-    photoThumbnailUrl: s(a.url_photo_thumbnail),
+    photoUrl: httpsUrl(a.url_photo),
+    photoThumbnailUrl: httpsUrl(a.url_photo_thumbnail),
   };
 }
 

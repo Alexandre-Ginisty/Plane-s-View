@@ -201,7 +201,7 @@ const COCKPITS = [
     eye: { x: -15.2, y: -0.5, z: 1.59 },
   },
   /*
-   * The sandbox's combat aircraft. A fighter's cockpit is spread over its main
+   * The military aircraft. A fighter's cockpit is spread over its main
    * model and a dozen instrument files, and all of it is within arm's reach:
    * `within` is left at nothing and the whole airframe is cut to the space
    * about the seat. Eyes from each aircraft's view 0.

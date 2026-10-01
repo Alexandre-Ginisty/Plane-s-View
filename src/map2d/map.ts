@@ -15,7 +15,6 @@
 
 import {
   Map as MapLibreMap,
-  Marker,
   NavigationControl,
   ScaleControl,
   type GeoJSONSource,
@@ -67,9 +66,6 @@ export class SelectionMap {
   private labels: PlaceLabels | null = null;
   private pins: MapPins | null = null;
   private pinMode = false;
-  /** While set, a click picks a place for the sandbox instead of anything else. */
-  private pickHandler: ((lat: number, lon: number, name: string) => void) | null = null;
-  private spawnMarker: Marker | null = null;
   /**
    * Fetch a source, or null while the style is still parsing.
    *
@@ -271,12 +267,6 @@ export class SelectionMap {
     const map = this.map;
     if (!map) return;
 
-    if (this.pickHandler) {
-      const { lat, lng } = e.lngLat;
-      this.pickHandler(lat, lng, this.labels?.nearestName(lat, lng, 40) ?? formatCoordinates(lat, lng));
-      return;
-    }
-
     if (this.pinMode) {
       this.placePin(e.lngLat.lat, e.lngLat.lng);
       return;
@@ -332,35 +322,6 @@ export class SelectionMap {
     this.pinMode = on;
     const canvas = this.map?.getCanvas();
     if (canvas) canvas.style.cursor = on ? 'crosshair' : '';
-  }
-
-  /**
-   * Hand the next clicks to `handler` — the sandbox choosing where to start —
-   * or give them back with null.
-   */
-  setPickHandler(handler: ((lat: number, lon: number, name: string) => void) | null): void {
-    this.pickHandler = handler;
-    const canvas = this.map?.getCanvas();
-    if (canvas) canvas.style.cursor = handler ? 'crosshair' : this.pinMode ? 'crosshair' : '';
-  }
-
-  /** The sandbox's chosen start, as a pulsing target on the map; null clears it. */
-  showSpawn(at: { lat: number; lon: number } | null): void {
-    if (!at) {
-      this.spawnMarker?.remove();
-      this.spawnMarker = null;
-      return;
-    }
-    const map = this.map;
-    if (!map) return;
-    if (!this.spawnMarker) {
-      const el = document.createElement('div');
-      el.className = 'pv-spawn';
-      el.innerHTML = '<span></span><span></span><i></i>';
-      this.spawnMarker = new Marker({ element: el }).setLngLat([at.lon, at.lat]).addTo(map);
-    } else {
-      this.spawnMarker.setLngLat([at.lon, at.lat]);
-    }
   }
 
   setPins(pins: readonly Pin[]): void {

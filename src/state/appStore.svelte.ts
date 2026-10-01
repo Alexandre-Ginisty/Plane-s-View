@@ -19,7 +19,6 @@ import { applyTheme, saveTheme, type Theme } from '@/ui/theme';
 import type { AircraftDossier, CurrentWeather } from '@/data/types';
 import type { SampledAircraft } from '@/state/traffic';
 import type { FlightPhase, PhaseEvent } from '@/state/phase';
-import type { FlightReadout } from '@/sandbox/realFlight';
 
 /**
  * Read a boolean preference, falling back when storage is unavailable.
@@ -44,35 +43,6 @@ function storeFlag(key: string, value: boolean): void {
 }
 
 type ViewMode = 'map' | 'pov';
-
-/** Where the sandbox is: off, choosing a place, choosing an aircraft, or flying. */
-type SandboxPhase = 'off' | 'pick' | 'hangar' | 'flying';
-
-interface SandboxState {
-  phase: SandboxPhase;
-  spawn: { lat: number; lon: number; name: string } | null;
-  aircraftId: string;
-  score: number;
-  best: number;
-  kills: number;
-  streak: number;
-  crashes: number;
-  /** 0 while reloading, 1 ready. */
-  ready: number;
-  lock: string | null;
-  /** 0..1 while the seeker tones up on `lock`, 1 once a missile will guide. */
-  lockLevel: number;
-  /** The key reference card, shown on demand (H). */
-  showKeys: boolean;
-  killCam: boolean;
-  crashed: boolean;
-  /** The last kill or impact, for the centre-screen announcement. */
-  banner: { id: number; title: string; detail: string; points: number } | null;
-  /** Recent kills, newest first. */
-  feed: { id: number; text: string; points: number }[];
-  /** The flight model's systems, or null when the aircraft flies the arcade model. */
-  flight: FlightReadout | null;
-}
 
 /** A place the user marked on the map, to find again from the air. */
 export interface Pin {
@@ -303,26 +273,6 @@ class AppStore {
     this.invertY = on;
     storeFlag('planesview.invertY', on);
   }
-
-  sandbox = $state<SandboxState>({
-    phase: 'off',
-    spawn: null,
-    aircraftId: 'viper',
-    score: 0,
-    best: 0,
-    kills: 0,
-    streak: 0,
-    crashes: 0,
-    ready: 1,
-    lock: null,
-    lockLevel: 0,
-    showKeys: false,
-    killCam: false,
-    crashed: false,
-    banner: null,
-    feed: [],
-    flight: null,
-  });
 
   private noticeId = 0;
 

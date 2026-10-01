@@ -234,3 +234,21 @@ export class CircuitBreaker {
     }
   }
 }
+
+/**
+ * An `https:` URL from a third-party reply, or null.
+ *
+ * Photo links and image sources come from community APIs and go straight
+ * into `href` and `src`. A `javascript:` or `data:` value there would be the
+ * upstream writing into this page; the CSP refuses it too, but a link nobody
+ * vetted should not reach the DOM in the first place.
+ */
+export function httpsUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch {
+    return null;
+  }
+}

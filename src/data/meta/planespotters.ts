@@ -12,7 +12,7 @@
  */
 
 import { relayUrl } from '@/data/endpoints';
-import { fetchJson, HttpError } from '@/data/http';
+import { fetchJson, HttpError, httpsUrl } from '@/data/http';
 import type { AircraftPhoto } from '@/data/types';
 
 interface PlanespottersPhoto {
@@ -47,13 +47,13 @@ export async function fetchPhotoByHex(
   if (body.error) throw new Error(`Planespotters: ${body.error}`);
 
   const photo = body.photos?.[0];
-  const thumb = photo?.thumbnail?.src;
+  const thumb = httpsUrl(photo?.thumbnail?.src);
   if (!photo || !thumb) return null;
 
   return {
     thumbnailUrl: thumb,
-    largeUrl: photo.thumbnail_large?.src ?? thumb,
-    photographer: photo.photographer?.trim() || null,
-    link: photo.link ?? null,
+    largeUrl: httpsUrl(photo.thumbnail_large?.src) ?? thumb,
+    photographer: typeof photo.photographer === 'string' ? photo.photographer.trim().slice(0, 120) || null : null,
+    link: httpsUrl(photo.link),
   };
 }

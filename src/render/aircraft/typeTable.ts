@@ -475,7 +475,7 @@ export const ROTORCRAFT_TYPES: ReadonlySet<string> = new Set([
   // under the `H1` range: common training helicopters, and every one of them
   // was drawn as a fixed-wing aircraft.
   'H269', 'H500', 'HUGH', 'B47G', 'B47J', 'EN28', 'EN48', 'R100', 'SCOR',
-  // The sandbox's attack helicopter.
+  // The Apache.
   'H64',
 ]);
 

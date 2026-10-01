@@ -38,7 +38,7 @@ import type { PovState } from './state';
 export type { PovState } from './state';
 
 export { CAMERA_MODES, aircraftFrame, isInterior } from './frame';
-export type { AircraftFrame, CameraGroup, CameraMode, CameraModeInfo } from './frame';
+export type { AircraftFrame, CameraGroup, CameraMode } from './frame';
 
 /** Metres of clearance the camera keeps above terrain. */
 const TERRAIN_CLEARANCE_M = 8;
@@ -278,15 +278,6 @@ export class PovController {
 
   /** Flip vertical drags, for anyone who prefers to grab the world. */
   invertY = false;
-
-  /**
-   * No smoothing of the aircraft at all: for an aircraft whose motion is
-   * already smooth because it is computed here (the sandbox's flight model,
-   * stepped at 120 Hz), where damping would only put the camera behind the
-   * airframe it is sitting in — the cockpit visibly swimming against the view.
-   * The smoothing exists for the feed's noise, and there is none.
-   */
-  crisp = false;
 
   /** 0..1 how hard the airframe is shaking (buffet, a blast, a touchdown). */
   shake = 0;
@@ -586,10 +577,7 @@ export class PovController {
       this.smoothedAnchor.addScaledVector(_residual, 1 - Math.exp(-dt / anchorTau));
     }
 
-    if (this.crisp) {
-      this.smoothedAnchor.copy(aircraft);
-      this.smoothedBody.copy(bodyQuaternion);
-    } else if (!firstFrame) {
+    if (!firstFrame) {
       this.smoothedBody.slerp(bodyQuaternion, 1 - Math.exp(-dt / BODY_TAU));
     }
 

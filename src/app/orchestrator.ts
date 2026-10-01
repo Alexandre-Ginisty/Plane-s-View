@@ -19,7 +19,6 @@ import type { Globe } from '@/render/globe';
 import type { OwnAircraft } from '@/render/ownAircraft';
 import { isInterior, type PovController, type CameraGroup, type CameraMode } from '@/render/pov';
 import { isFreighter } from '@/data/freighters';
-import { SANDBOX_ENABLED } from '@/sandbox/enabled';
 import type { Traffic3D } from '@/render/traffic3d';
 import type { Pins3D } from '@/render/pins3d';
 import type { ViewOverlay } from '@/render/overlay';
@@ -54,14 +53,11 @@ import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
 import { hazeForVisibility } from '@/render/sky/model';
-// The sandbox is loaded on demand (see `launchSandbox`): off by default, and
-// with the flight model and the effects it is the bulk of the code.
-import type { SandboxSession } from '@/sandbox/session';
 import { publishTelemetry } from './telemetry';
 import { Cockpit, emptyReadings } from '@/render/cockpit';
 import { shapeFor } from '@/render/aircraft';
 import { loadModelFor, operatorOf } from '@/render/aircraft/library';
-import { fillContacts, readingsFromFlight, readingsFromSample } from './cockpitReadings';
+import { fillContacts, readingsFromSample } from './cockpitReadings';
 import { WindField } from '@/data/weather/wind';
 import { fetchCurrentWeather } from '@/data/weather/openmeteo';
 import type { ContrailInputs } from '@/render/contrails';
@@ -191,10 +187,6 @@ export class Orchestrator {
   private lastShuffleSearch = 0;
   private povEnteredAt = 0;
 
-  /** The sandbox game, while one is being played. */
-  private sandbox: SandboxSession | null = null;
-  private killCamWas = false;
-  private sandboxEventId = 0;
   /**
    * Seconds the 3D view keeps drawing after it was left, so the cross-fade
    * back to the map has something to fade. See `Engine.renderEnabled`.
@@ -364,9 +356,7 @@ export class Orchestrator {
 
     let flying: SampledAircraft | null = null;
 
-    if (inPov && this.sandbox) {
-      flying = this.sandboxFrame(dt, samples, this.sandbox);
-    } else if (inPov) {
+    if (inPov) {
       // Coast on the last known fix rather than ejecting. The camera holds
       // position, the terrain keeps streaming, and `maybeFollow` keeps asking
       // for the aircraft by hex until it answers.
@@ -390,7 +380,6 @@ export class Orchestrator {
         (2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight;
       pov.setViewport(radiansPerPixel);
 
-      pov.crisp = false;
       pov.shake = 0;
       pov.speedFovDeg = isInterior(app.cameraMode) ? COCKPIT_FOV_BOOST_DEG : 0;
       pov.update(engine.camera, flying, dt, (lat, lon) => globe.sampleHeight(lat, lon));
@@ -438,7 +427,7 @@ export class Orchestrator {
         );
         this.ownAircraft.setSun(this.sunVec);
       }
-      this.updateCockpit(flying, null, dt);
+      this.updateCockpit(flying, dt);
       this.commitLights();
 
       // Text over the view: pin names, and the aircraft that can be clicked.
@@ -463,24 +452,22 @@ export class Orchestrator {
 
   /**
    * The cockpit for the aircraft being ridden, when the view is inside it and
-   * not flying between views; its instruments filled from the flight model in
-   * the sandbox and from the feed otherwise.
+   * not flying between views; its instruments filled from the feed.
    */
-  private updateCockpit(sample: SampledAircraft, sb: SandboxSession | null, dt: number): void {
+  private updateCockpit(sample: SampledAircraft, dt: number): void {
     const pov = this.pov!;
     const engine = this.engine!;
     const globe = this.globe!;
     const show =
       app.view === 'pov' &&
       isInterior(app.cameraMode) &&
-      (pov.transitionProgress ?? 1) >= 0.9 &&
-      !(sb && (sb.crashed || sb.killCamActive));
+      (pov.transitionProgress ?? 1) >= 0.9;
     this.cockpit.visible = show;
     if (app.cockpit3d !== show) app.cockpit3d = show;
-    const type = sb ? sb.type : registry.knownTypeCode(sample.hex);
+    const type = registry.knownTypeCode(sample.hex);
     const shape = pov.airframe ?? shapeFor(type, sample.latest.category ?? null);
-    // A freighter's cabin is its hold. The sandbox flies nobody's cargo.
-    const freighter = !sb && isFreighter(sample.latest.callsign);
+    // A freighter's cabin is its hold.
+    const freighter = isFreighter(sample.latest.callsign);
     // Both interiors loaded and on the GPU whatever the view, so stepping inside is instant.
     if (app.view === 'pov') this.cockpit.prefetch(type, shape, freighter);
     if (!show) {
@@ -496,126 +483,8 @@ export class Orchestrator {
     else pov.setRestPitch(seat === 'cockpit' ? COCKPIT_REST_PITCH : 0);
     const r = this.readings;
     readingsFromSample(r, sample, globe.sampleHeight(sample.lat, sample.lon));
-    let lockHex: string | null = null;
-    if (sb) {
-      const f = sb.readout;
-      if (f) readingsFromFlight(r, f);
-      const w = app.weather;
-      r.windFromDeg = w?.windDirectionDeg ?? null;
-      r.windKt = w?.windSpeedMs != null ? w.windSpeedMs * 1.943_84 : null;
-      lockHex = sb.lockHex;
-      r.weapon = {
-        name: sb.aircraft.weapon === 'missile' ? 'AIM-9' : 'RKT',
-        ready: sb.readiness,
-        lock: lockHex ? sb.lockLevel : null,
-        targetRangeM: null,
-        targetName: null,
-      };
-    }
-    fillContacts(r, this.traffic3d!.inRange, engine.camera.position, pov.bodyQuaternion, sample.altFt, lockHex);
-    if (r.weapon && lockHex) {
-      const c = r.contacts.find((k) => k.locked);
-      r.weapon.targetRangeM = c ? c.rangeM : null;
-      const t = this.traffic3d!.inRange.find((k) => k.hex === lockHex);
-      r.weapon.targetName = t ? (t.sample.latest.callsign?.trim() || t.hex.toUpperCase()) : null;
-    }
+    fillContacts(r, this.traffic3d!.inRange, engine.camera.position, pov.bodyQuaternion, sample.altFt);
     this.cockpit.update(engine.camera, pov.bodyQuaternion, this.sunVec, r, dt);
-  }
-
-  /**
-   * The flight model felt through the camera: shaken by a blast, by the
-   * buffet of a stall or an overspeed, by the rumble of the afterburner and
-   * the runway; the lens a touch wider as the speed builds.
-   */
-  private shakeAndLens(sb: SandboxSession): void {
-    const pov = this.pov!;
-    pov.crisp = true;
-    const f = sb.readout;
-    let shake = sb.shake;
-    let fov = 0;
-    if (f) {
-      if (f.stalled) shake = Math.max(shake, 0.55);
-      else if (f.stallWarning) shake = Math.max(shake, 0.32);
-      if (f.overspeed) shake = Math.max(shake, 0.4);
-      if (f.g > 6.5) shake = Math.max(shake, Math.min(0.45, (f.g - 6.5) / 6));
-      if (f.afterburner > 0.02) shake = Math.max(shake, 0.1 * f.afterburner);
-      if (f.onGround && f.iasKt > 20) shake = Math.max(shake, Math.min(0.3, f.iasKt / 500));
-      fov = Math.min(1, Math.max(0, (f.iasKt - 120) / 480)) * 4;
-    }
-    pov.shake = shake;
-    pov.speedFovDeg = isInterior(app.cameraMode) ? fov + COCKPIT_FOV_BOOST_DEG : fov * 0.6;
-  }
-
-  /**
-   * One frame of the sandbox: the same stack as the cockpit — camera, terrain,
-   * traffic, the aircraft's own model, the overlay — around an aircraft the
-   * keyboard flies instead of the feed, plus the game on top.
-   */
-  private sandboxFrame(dt: number, samples: SampledAircraft[], sb: SandboxSession): SampledAircraft {
-    const engine = this.engine!;
-    const globe = this.globe!;
-    const pov = this.pov!;
-    const traffic3d = this.traffic3d!;
-    const heightAt = (lat: number, lon: number): number => globe.sampleHeight(lat, lon);
-
-    sb.observeWind(dt, app.weather, samples);
-    const player = sb.stepPlayer(dt, heightAt);
-    this.shakeAndLens(sb);
-    pov.setViewport((2 * Math.tan((engine.camera.fov * DEG2RAD) / 2)) / engine.viewportHeight);
-
-    const killCam = sb.placeKillCam(engine.camera, dt);
-    if (!killCam) {
-      if (this.killCamWas) {
-        // Back to the player, flown rather than cut.
-        const from = sb.cameraPose(engine.camera);
-        const to = geodeticToEcef(player.lat, player.lon, player.altFt * FEET_TO_METRES);
-        pov.beginTransition(from.position, from.quaternion, new Vector3(to[0], to[1], to[2]), { duration: 1.6 });
-      }
-      pov.update(engine.camera, player, dt, heightAt);
-    }
-    this.killCamWas = killCam;
-
-    this.pins3d?.update(app.pins, engine.camera, engine.viewportHeight, heightAt);
-    this.applySunlight();
-    this.maybePrefetch(dt, player);
-    globe.update(engine.camera, dt, engine.viewportHeight);
-
-    this.cameraEcefVec.copy(engine.camera.position);
-    traffic3d.update(samples, this.cameraEcefVec, null, heightAt, sb.downed);
-
-    if (this.ownAircraft) {
-      const visible =
-        !sb.crashed && (killCam || !isInterior(app.cameraMode) || (pov.transitionProgress ?? 1) < 0.9);
-      this.ownAircraft.update(player, sb.type, visible, dt, heightAt);
-      this.ownAircraft.setSun(this.sunVec);
-    }
-    this.updateCockpit(player, sb, dt);
-    this.commitLights();
-
-    sb.stepWorld(dt, traffic3d, heightAt, engine.camera);
-
-    if (this.overlay) {
-      const frame = this.overlay.begin();
-      this.pins3d?.drawLabels(frame, engine.camera);
-      if (!killCam && !sb.crashed) {
-        traffic3d.drawLabels(frame, engine.camera, {
-          hoverHex: this.hoverTraffic,
-          lockHex: sb.lockHex,
-          ownAltFt: player.altFt,
-          action: 'click to lock',
-        });
-      }
-    }
-
-    const airframe = pov.airframe;
-    if (airframe && !sb.crashed) {
-      // The flight model knows its real engine output; the feed's aircraft only imply one.
-      const regime = flightRegime(player);
-      const power = sb.enginePower;
-      if (power !== null) regime.power = power;
-      this.audio.update(airframe, regime, app.cameraMode);
-    }
-    return player;
   }
 
   /**
@@ -832,21 +701,6 @@ export class Orchestrator {
 
     app.selected = selected;
     if (this.pov) app.viewHeadingDeg = this.pov.viewHeadingDeg;
-    const sb = this.sandbox;
-    if (sb) {
-      const st = app.sandbox;
-      st.score = sb.score.points;
-      st.best = sb.score.best;
-      st.kills = sb.score.kills;
-      st.streak = sb.score.streak;
-      st.crashes = sb.score.crashes;
-      st.ready = Math.round(sb.readiness * 20) / 20;
-      st.lock = sb.lockHex;
-      st.lockLevel = Math.round(sb.lockLevel * 20) / 20;
-      st.killCam = sb.killCamActive;
-      st.crashed = sb.crashed;
-      st.flight = sb.readout;
-    }
     if (app.view === 'pov') {
       app.phase = this.phaseTracker.phase;
       app.touchdownInS = this.phaseInput ? secondsToTouchdown(this.phaseInput) : null;
@@ -1008,7 +862,7 @@ export class Orchestrator {
    * tiles and models come first — and not more often than the feed can bear.
    */
   private prepareNextShuffle(): void {
-    if (this.preparingShuffle || this.sandbox || app.view !== 'pov' || app.shuffling) return;
+    if (this.preparingShuffle || app.view !== 'pov' || app.shuffling) return;
     const now = performance.now();
     if (now - this.povEnteredAt < 8000 || now - this.lastShuffleSearch < 20_000) return;
     if (this.nextShuffle && now - this.nextShuffle.at < NEXT_SHUFFLE_FRESH_MS * 0.7) return;
@@ -1027,10 +881,6 @@ export class Orchestrator {
   }
 
   exitPov(): void {
-    if (this.sandbox) {
-      this.exitSandbox();
-      return;
-    }
     // Abandon any search in flight: landing in a random aircraft several
     // seconds after the user asked to go back to the map is not a feature.
     this.shuffleToken++;
@@ -1069,11 +919,6 @@ export class Orchestrator {
   /** A click in the 3D view: step across to the aircraft there, if any. */
   clickAt(x: number, y: number): boolean {
     if (!this.hoverAt(x, y) || !this.hoverTraffic) return false;
-    // In the sandbox a click picks a target rather than an aircraft to ride.
-    if (this.sandbox) {
-      this.sandbox.lock(this.sandbox.lockHex === this.hoverTraffic ? null : this.hoverTraffic);
-      return true;
-    }
     this.switchTo(this.hoverTraffic);
     return true;
   }
@@ -1089,7 +934,7 @@ export class Orchestrator {
   switchTo(hex: string): void {
     const engine = this.engine;
     const pov = this.pov;
-    if (!engine || !pov || hex === app.selectedHex || this.sandbox) return;
+    if (!engine || !pov || hex === app.selectedHex) return;
 
     const from = new Vector3(
       engine.camera.position.x + this.origin.current[0],
@@ -1151,7 +996,7 @@ export class Orchestrator {
    * seconds and that any newer choice should silently cancel.
    */
   async catchAircraft(kind: CatchKind): Promise<void> {
-    if (app.shuffling || this.sandbox) return;
+    if (app.shuffling) return;
     const label = CATCH_LABELS[kind].noun;
 
     const near = app.selected ?? this.map?.center ?? FALLBACK_VIEW;
@@ -1189,165 +1034,6 @@ export class Orchestrator {
     } finally {
       app.shuffling = false;
     }
-  }
-
-  // -------------------------------------------------------------------------
-  // Sandbox
-  // -------------------------------------------------------------------------
-
-  /** Start choosing where to play: the next click on the map picks the place. */
-  beginSandbox(): void {
-    if (!SANDBOX_ENABLED) return;
-    if (app.view === 'pov') this.exitPov();
-    if (app.selectedHex) void this.select(null);
-    app.pinMode = false;
-    app.sandbox.phase = 'pick';
-    // Kept through the hangar, so a second click moves the start.
-    this.map?.setPickHandler((lat, lon, name) => {
-      app.sandbox.spawn = { lat, lon, name };
-      this.map?.showSpawn({ lat, lon });
-      // Start pulling traffic and terrain for the place now, while the
-      // aircraft is being chosen, so both are there on arrival.
-      this.query = { lat, lon, radiusNm: 60 };
-      this.globe?.prefetchAlong(lat, lon, 0, 0, 1, 12);
-      app.sandbox.phase = 'hangar';
-    });
-  }
-
-  cancelSandbox(): void {
-    this.map?.setPickHandler(null);
-    this.map?.showSpawn(null);
-    app.sandbox.phase = 'off';
-    app.sandbox.spawn = null;
-  }
-
-  /** Take off from the chosen place in the chosen aircraft. */
-  async launchSandbox(aircraftId: string): Promise<void> {
-    const [{ SandboxSession }, { sandboxAircraft }] = await Promise.all([import('@/sandbox/session'), import('@/sandbox/catalog')]);
-    const spawn = app.sandbox.spawn;
-    const engine = this.engine;
-    if (!spawn || !engine || !this.pov) return;
-    const aircraft = sandboxAircraft(aircraftId);
-    app.sandbox.aircraftId = aircraft.id;
-    this.map?.setPickHandler(null);
-    this.map?.showSpawn(null);
-
-    // Face the nearest traffic, so there is something to fly at.
-    let heading = 0;
-    let nearest = 150_000;
-    for (const s of this.lastSamples) {
-      const d = haversineMetres(spawn.lat, spawn.lon, s.lat, s.lon);
-      if (d < nearest && d > 2000) {
-        nearest = d;
-        const y = Math.sin((s.lon - spawn.lon) * DEG2RAD) * Math.cos(s.lat * DEG2RAD);
-        const x =
-          Math.cos(spawn.lat * DEG2RAD) * Math.sin(s.lat * DEG2RAD) -
-          Math.sin(spawn.lat * DEG2RAD) * Math.cos(s.lat * DEG2RAD) * Math.cos((s.lon - spawn.lon) * DEG2RAD);
-        heading = (Math.atan2(y, x) / DEG2RAD + 360) % 360;
-      }
-    }
-
-    this.sandbox?.dispose();
-    const sb = new SandboxSession(this.origin, aircraft, { lat: spawn.lat, lon: spawn.lon, headingDeg: heading }, {
-      kill: (award, victim) => {
-        const id = ++this.sandboxEventId;
-        app.sandbox.banner = {
-          id,
-          title: award.label,
-          detail: `${victim.callsign}${victim.type ? ` · ${victim.type}` : ''}`,
-          points: award.points,
-        };
-        app.sandbox.feed = [{ id, text: `${victim.callsign} shot down`, points: award.points }, ...app.sandbox.feed].slice(0, 5);
-      },
-      impact: (points, victim) => {
-        const id = ++this.sandboxEventId;
-        app.sandbox.feed = [{ id, text: `${victim.callsign} hit the ground`, points }, ...app.sandbox.feed].slice(0, 5);
-      },
-      crashed: (reason) => {
-        app.sandbox.crashed = true;
-        app.notify(reason ? `${reason} — back in the air in a moment.` : 'You crashed — back in the air in a moment.', 'warn', 3500);
-      },
-      landed: (td) => {
-        const rating = { butter: 'Butter', smooth: 'Smooth', firm: 'Firm', hard: 'Hard' }[td.rating];
-        app.notify(`${rating} landing · ${Math.round(td.verticalSpeedFpm)} fpm · ${Math.round(td.airspeedKt)} kt`, td.rating === 'hard' ? 'warn' : 'info', 4000);
-      },
-      respawned: () => {
-        app.sandbox.crashed = false;
-        const pov = this.pov;
-        const cam = this.engine?.camera;
-        if (!pov || !cam) return;
-        const from = new Vector3(
-          cam.position.x + this.origin.current[0],
-          cam.position.y + this.origin.current[1],
-          cam.position.z + this.origin.current[2],
-        );
-        const quat = cam.quaternion.clone();
-        pov.reset();
-        const to = geodeticToEcef(spawn.lat, spawn.lon, 1600);
-        pov.beginTransition(from, quat, new Vector3(to[0], to[1], to[2]));
-      },
-      prefetch: (lat, lon, track, speed) => this.globe?.prefetchAlong(lat, lon, track, speed, 30, 12),
-    });
-    this.sandbox = sb;
-    engine.scene.add(sb.scene);
-
-    const st = app.sandbox;
-    st.score = 0;
-    st.kills = 0;
-    st.streak = 0;
-    st.crashes = 0;
-    st.best = sb.score.best;
-    st.banner = null;
-    st.feed = [];
-    st.lock = null;
-    st.killCam = false;
-    st.crashed = false;
-    st.phase = 'flying';
-
-    this.pov.reset();
-    this.resetPhase();
-    this.hoverTraffic = null;
-    const ecef = geodeticToEcef(spawn.lat, spawn.lon, 1600);
-    this.origin.rebase(ecef);
-    this.applySunlight();
-    this.globe?.prefetchAlong(spawn.lat, spawn.lon, heading, aircraft.flight.cruiseKt * KNOTS_TO_MPS, 40, 12);
-    this.query = { lat: spawn.lat, lon: spawn.lon, radiusNm: 60 };
-    if (app.sound) void this.audio.enable();
-
-    app.view = 'pov';
-    this.pov.state.mode = 'chase';
-    app.cameraMode = 'chase';
-    this.userCameraMode = 'chase';
-  }
-
-  exitSandbox(): void {
-    const sb = this.sandbox;
-    if (!sb) return;
-    const at = sb ? app.sandbox.spawn : null;
-    sb.dispose();
-    this.sandbox = null;
-    this.killCamWas = false;
-    app.sandbox.phase = 'off';
-    app.sandbox.spawn = null;
-    app.sandbox.banner = null;
-    app.sandbox.killCam = false;
-    app.selected = null;
-    app.view = 'map';
-    this.pov?.reset();
-    this.overlay?.clear();
-    this.hoverTraffic = null;
-    this.audio.disable();
-    if (at) this.map?.flyTo(at.lat, at.lon);
-    this.map?.resize();
-  }
-
-  /** A key for the sandbox. Returns true when it was one, so the caller stops it there. */
-  sandboxKey(code: string, down: boolean): boolean {
-    return this.sandbox?.key(code, down) ?? false;
-  }
-
-  sandboxReleaseKeys(): void {
-    this.sandbox?.releaseAll();
   }
 
   /**
@@ -1406,7 +1092,6 @@ export class Orchestrator {
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
     this.pins3d?.dispose();
-    this.sandbox?.dispose();
     this.overlay?.dispose();
     this.audio.dispose();
     this.map?.dispose();

@@ -52,9 +52,6 @@
  * labelled everything within 60 km, three times the range anything is drawn
  * at, so the designator regularly framed an empty patch of sky. A label that
  * points at nothing is worse than no label.
- *
- * The same list is what the sandbox's missiles lock on to (`targets`,
- * `positionOf`), so "I can see it" and "I can shoot it" are one rule.
  */
 
 import {
@@ -189,12 +186,8 @@ interface Designator {
 export interface DesignatorOptions {
   /** The aircraft under the pointer. */
   hoverHex?: string | null;
-  /** The sandbox's missile lock. */
-  lockHex?: string | null;
   /** Altitude of the aircraft being flown, feet, for the relative height. */
   ownAltFt?: number | null;
-  /** Wording for the action on hover. */
-  action?: string;
 }
 
 /** One aircraft drawn with its own model. */
@@ -346,7 +339,6 @@ export class Traffic3D {
     cameraEcef: Vector3,
     excludeHex: string | null,
     terrainHeightAt?: (lat: number, lon: number) => number,
-    hidden?: ReadonlySet<string>,
   ): void {
     this.cameraRender.copy(cameraEcef);
     this.lights.begin();
@@ -364,7 +356,7 @@ export class Traffic3D {
     const gateSq = gate * gate;
 
     for (const sample of samples) {
-      if (sample.hex === excludeHex || hidden?.has(sample.hex)) continue;
+      if (sample.hex === excludeHex) continue;
       // Ground vehicles and fixed obstacles share the feed with the traffic.
       // They are not aircraft and drawing them put a 40 m airliner on every
       // taxiway of every field the camera passed.
@@ -570,26 +562,9 @@ export class Traffic3D {
     for (const hex of this.occlusion.keys()) if (!live.has(hex)) this.occlusion.delete(hex);
   }
 
-  /** Everything drawn this frame, nearest first. For weapons and the like. */
+  /** Everything drawn this frame, nearest first. For the cockpit's radar. */
   get inRange(): readonly { hex: string; position: Vector3; distanceM: number; sample: SampledAircraft }[] {
     return this.candidates;
-  }
-
-  /** Aircraft designated on the last drawn frame, nearest first. */
-  get targets(): readonly TrafficTarget[] {
-    return this.visible;
-  }
-
-  /** Where an aircraft in range is drawn, render space; null when it is not. */
-  positionOf(hex: string): Vector3 | null {
-    for (const c of this.candidates) if (c.hex === hex) return c.position;
-    return null;
-  }
-
-  /** The drawn airframe length of an aircraft in range, metres. */
-  sizeOf(hex: string): number {
-    for (const c of this.candidates) if (c.hex === hex) return c.size;
-    return 40;
   }
 
   /**
@@ -622,8 +597,7 @@ export class Traffic3D {
    * the callsign, type, distance and relative height. Each one locks on when
    * it appears — the brackets close in from wide and turn square — and fades
    * out rather than vanishing. Hovered, it turns amber (the colour of
-   * anything actionable) and says what a click will do; locked by the
-   * sandbox, it turns red.
+   * anything actionable) and says what a click will do.
    */
   drawLabels(frame: OverlayFrame, camera: PerspectiveCamera, options: DesignatorOptions = {}): void {
     const { ctx, width, height, palette, time } = frame;
@@ -634,10 +608,9 @@ export class Traffic3D {
 
     for (const c of this.candidates) {
       if (visible.length >= TARGET_COUNT) break;
-      const locked = c.hex === options.lockHex;
-      if (!locked && this.occlusion.get(c.hex)?.hidden) continue;
+      if (this.occlusion.get(c.hex)?.hidden) continue;
       const lengthPx = c.size / Math.max(1, c.distanceM * radPerPx);
-      if (!locked && lengthPx < TARGET_MIN_PX) continue;
+      if (lengthPx < TARGET_MIN_PX) continue;
       const p = this.project(c.position, camera, width, height);
       if (!p) continue;
 
@@ -668,7 +641,7 @@ export class Traffic3D {
         continue;
       }
       frame.drew = true;
-      this.drawDesignator(ctx, palette, d, time, hex === options.lockHex, options.action ?? 'click to fly');
+      this.drawDesignator(ctx, palette, d, time);
     }
     ctx.globalAlpha = 1;
   }
@@ -690,8 +663,6 @@ export class Traffic3D {
     palette: OverlayPalette,
     d: Designator,
     time: number,
-    locked: boolean,
-    action: string,
   ): void {
     const age = time - d.born;
     // Lock-on: close in from twice the size and a quarter turn, with a
@@ -702,7 +673,7 @@ export class Traffic3D {
     const scale = 1 + (1 - back) * 1.3;
     const spin = (1 - settle) * (Math.PI / 4);
     const hover = d.hover;
-    const color = locked ? palette.danger : hover > 0.5 ? palette.warm : palette.accent;
+    const color = hover > 0.5 ? palette.warm : palette.accent;
     const r = d.r * scale * (1 + hover * 0.18);
     const k = Math.max(4, r * 0.42);
 
@@ -730,9 +701,9 @@ export class Traffic3D {
     }
     ctx.rotate(-spin);
 
-    // Hover and lock: a turning dashed ring and a centre mark.
-    if (hover > 0.05 || locked) {
-      ctx.globalAlpha = d.alpha * Math.max(hover, locked ? 1 : 0);
+    // Hover: a turning dashed ring.
+    if (hover > 0.05) {
+      ctx.globalAlpha = d.alpha * hover;
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.2;
       ctx.setLineDash([4, 5]);
@@ -741,13 +712,6 @@ export class Traffic3D {
       ctx.arc(0, 0, r * 1.45, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (locked) {
-        const q = 5 + Math.sin(time * 8) * 1.5;
-        ctx.save();
-        ctx.rotate(time * 1.5);
-        ctx.strokeRect(-q, -q, q * 2, q * 2);
-        ctx.restore();
-      }
       ctx.globalAlpha = d.alpha;
     }
 
@@ -771,8 +735,8 @@ export class Traffic3D {
     const titleW = ctx.measureText(d.callsign).width;
     ctx.font = `500 10px ui-monospace, "SF Mono", Menlo, monospace`;
     const detailW = ctx.measureText(d.detail).width;
-    const actionText = locked ? 'LOCKED · SPACE TO FIRE' : `${action.toUpperCase()} ›`;
-    const showAction = locked || hover > 0.05;
+    const actionText = 'CLICK TO FLY ›';
+    const showAction = hover > 0.05;
     const actionW = showAction ? ctx.measureText(actionText).width : 0;
     const w = Math.max(titleW, detailW, actionW) + 16;
     const h = showAction ? 50 : 34;
@@ -792,13 +756,13 @@ export class Traffic3D {
     ctx.fillRect(cardX, cardY - 5, 2, h);
 
     ctx.font = `700 12px ui-monospace, "SF Mono", Menlo, monospace`;
-    ctx.fillStyle = hover > 0.5 || locked ? color : palette.text;
+    ctx.fillStyle = hover > 0.5 ? color : palette.text;
     ctx.fillText(d.callsign, cardX + 9, cardY + 5);
     ctx.font = `500 10px ui-monospace, "SF Mono", Menlo, monospace`;
     ctx.fillStyle = palette.dim;
     ctx.fillText(d.detail, cardX + 9, cardY + 20);
     if (showAction) {
-      ctx.globalAlpha = d.alpha * (locked ? 0.75 + 0.25 * Math.sin(time * 6) : hover);
+      ctx.globalAlpha = d.alpha * hover;
       ctx.fillStyle = color;
       ctx.fillText(actionText, cardX + 9, cardY + 36);
     }

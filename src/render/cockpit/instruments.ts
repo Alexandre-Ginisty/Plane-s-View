@@ -10,7 +10,7 @@
  *
  * Its symbols are drawn where the things they stand for are: the horizon line
  * lies on the horizon, the flight path marker on the point the aircraft is
- * actually going to, the target box on the target. The combiner is a plane a
+ * actually going to. The combiner is a plane a
  * known distance in front of the eye, so a direction at angle a off the
  * boresight lands `distance · tan(a)` from its centre — which is what
  * `HudGeometry.pxPerTan` converts to pixels. Looking around does not break
@@ -166,9 +166,6 @@ export function drawHud(ctx: Ctx, w: number, h: number, r: CockpitReadings, g: H
     ctx.fillText(`α ${r.aoaDeg.toFixed(1)}`, lx, ly);
     ly += fs * 1.2;
   }
-  if (r.weapon) {
-    ctx.fillText(r.weapon.ready >= 1 ? `${r.weapon.name} RDY` : `${r.weapon.name} ---`, lx, ly);
-  }
   ctx.textAlign = 'right';
   const rx = w * 0.91;
   let ry = cy + h * 0.2;
@@ -180,58 +177,6 @@ export function drawHud(ctx: Ctx, w: number, h: number, r: CockpitReadings, g: H
   }
   if (r.throttle !== null) {
     ctx.fillText(r.afterburner > 0.02 ? `AB ${Math.round(r.afterburner * 100)}%` : `THR ${Math.round(r.throttle * 100)}%`, rx, h * 0.17);
-  }
-
-  // --- Weapon: lock, target box or locator line, shoot cue.
-  const wpn = r.weapon;
-  if (wpn) {
-    ctx.textAlign = 'center';
-    if (wpn.lock === null) {
-      ctx.fillText('RDR OFF', cx, h * 0.17);
-    } else if (wpn.lock < 1) {
-      ctx.fillText('LOCKING', cx, h * 0.17);
-    } else {
-      ctx.fillText(wpn.targetRangeM !== null ? `LOCK ${(wpn.targetRangeM / 1852).toFixed(1)} NM` : 'LOCK', cx, h * 0.17);
-    }
-  }
-  const t = r.target;
-  if (t && wpn && wpn.lock !== null) {
-    const inFront = t.z > 0.05;
-    const tx = inFront ? cx + (t.x / t.z) * k : Number.NaN;
-    const ty = inFront ? cy - (t.y / t.z) * k : Number.NaN;
-    const onGlass = inFront && tx > w * 0.06 && tx < w * 0.94 && ty > h * 0.06 && ty < h * 0.94;
-    if (onGlass) {
-      // A box on the target; a diamond closing on it while the seeker tones up.
-      const b = w * 0.035;
-      ctx.lineWidth = Math.max(2, w / 260);
-      ctx.strokeRect(tx - b, ty - b, b * 2, b * 2);
-      if (wpn.lock < 1) {
-        const d = b * (1 + 2.5 * (1 - wpn.lock));
-        ctx.beginPath();
-        ctx.moveTo(tx, ty - d);
-        ctx.lineTo(tx + d, ty);
-        ctx.lineTo(tx, ty + d);
-        ctx.lineTo(tx - d, ty);
-        ctx.closePath();
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.arc(tx, ty, b * 1.8, 0, Math.PI * 2);
-        ctx.stroke();
-        if (wpn.ready >= 1) {
-          ctx.textAlign = 'center';
-          ctx.fillText('SHOOT', cx, cy - h * 0.14);
-        }
-      }
-    } else {
-      // Off the glass: a line from the boresight pointing the way to turn.
-      const ang = Math.atan2(t.x, t.y);
-      const len = h * 0.14;
-      hudLine(ctx, cx, cy, cx + Math.sin(ang) * len, cy - Math.cos(ang) * len);
-      const off = Math.acos(clamp(t.z, -1, 1)) / DEG;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.round(off)}°`, cx + Math.sin(ang) * len * 1.25, cy - Math.cos(ang) * len * 1.25);
-    }
   }
 
   // --- Warnings.
@@ -279,7 +224,7 @@ function screenFrame(ctx: Ctx, w: number, h: number, title: string, labels: read
   ctx.fillText(title, w / 2, h * 0.985);
 }
 
-/** Air-to-air radar, B-scope: azimuth across, range up, the locked contact boxed. */
+/** Air-to-air radar, B-scope: azimuth across, range up, every contact a return. */
 export function drawRadar(ctx: Ctx, w: number, h: number, r: CockpitReadings): void {
   screenFrame(ctx, w, h, 'FCR', ['CRM', 'RWS', '40', 'A4', 'CNTL']);
   const x0 = w * 0.1;
@@ -287,7 +232,6 @@ export function drawRadar(ctx: Ctx, w: number, h: number, r: CockpitReadings): v
   const y0 = h * 0.12;
   const y1 = h * 0.88;
   const rangeM = 40 * 1852;
-  const on = r.weapon?.lock !== null && r.weapon !== null;
   ctx.strokeStyle = 'rgba(93,255,138,0.35)';
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
@@ -319,7 +263,7 @@ export function drawRadar(ctx: Ctx, w: number, h: number, r: CockpitReadings): v
   ctx.stroke();
   ctx.restore();
   // The antenna sweep.
-  if (on) {
+  {
     const sweep = Math.sin(performance.now() / 700);
     const sx = w / 2 + sweep * (x1 - x0) * 0.42;
     ctx.strokeStyle = 'rgba(93,255,138,0.8)';
@@ -336,28 +280,11 @@ export function drawRadar(ctx: Ctx, w: number, h: number, r: CockpitReadings): v
     const x = x0 + ((c.az / DEG + 60) / 120) * (x1 - x0);
     const y = y1 - (c.rangeM / rangeM) * (y1 - y0);
     const b = w * 0.018;
-    if (c.locked && on) {
-      ctx.fillStyle = r.weapon && r.weapon.lock !== null && r.weapon.lock >= 1 ? MFD_AMBER : MFD_GREEN;
-      ctx.fillRect(x - b, y - b, b * 2, b * 2);
-      ctx.strokeStyle = ctx.fillStyle;
-      ctx.strokeRect(x - b * 2, y - b * 2, b * 4, b * 4);
-      ctx.fillText(`${Math.round(c.relAltFt / 1000 + (r.altFt / 1000))}`, x + b * 2.6, y);
-      ctx.fillStyle = MFD_GREEN;
-    } else if (on) {
-      ctx.fillRect(x - b * 0.8, y - b * 0.8, b * 1.6, b * 1.6);
-    }
+    ctx.fillRect(x - b * 0.8, y - b * 0.8, b * 1.6, b * 1.6);
   }
   ctx.textAlign = 'right';
   ctx.fillText('40', x0 - w * 0.01, y0 + h * 0.02);
   ctx.fillText('20', x0 - w * 0.01, (y0 + y1) / 2);
-  if (!on) {
-    ctx.textAlign = 'center';
-    ctx.fillStyle = MFD_AMBER;
-    ctx.fillText('STBY', w / 2, (y0 + y1) / 2 - h * 0.1);
-  } else if (r.weapon && r.weapon.targetName) {
-    ctx.textAlign = 'left';
-    ctx.fillText(r.weapon.targetName, x0 + w * 0.02, y0 + h * 0.04);
-  }
 }
 
 /** Engine and systems page: core speed dial, nozzle, fuel flow, configuration. */

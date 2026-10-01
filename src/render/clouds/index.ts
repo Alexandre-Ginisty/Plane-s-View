@@ -115,7 +115,7 @@ export const cloudNoise = makeNoise();
 export const cloudShadowData = new Float32Array(16);
 
 /** Cloud density at a pattern coordinate, metres. `threshold` sets the cover. */
-export const CLOUD_GLSL = /* glsl */ `
+const CLOUD_GLSL = /* glsl */ `
 float cloudNoise4(sampler2D tex, vec2 c) {
   float n = texture2D(tex, c / ${PERIOD_M.toFixed(1)}).r * 0.5;
   n += texture2D(tex, c / ${(PERIOD_M / 4).toFixed(1)} + vec2(0.37, 0.11)).g * 0.28;

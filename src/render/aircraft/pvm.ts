@@ -67,7 +67,7 @@ interface PartHeader {
 }
 
 /** A cockpit display's face, about the eye: +X right, +Y up, −Z forward, metres, radians. */
-export interface DisplayFace {
+interface DisplayFace {
   id: 'pfd' | 'nd' | 'eicas' | 'radar' | 'systems' | 'sixpack';
   x: number;
   y: number;

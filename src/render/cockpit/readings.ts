@@ -1,20 +1,19 @@
 /**
  * What the cockpit's instruments show, as plain data.
  *
- * Filled once a frame by the orchestrator — from the flight model when the
- * sandbox is flying, from the feed otherwise — and read by every display.
+ * Filled once a frame by the orchestrator from the feed, and read by every
+ * display.
  * Anything the source does not know is null, and the instrument that shows it
  * goes dark or dashes out rather than inventing a value.
  */
 
-export interface CockpitContact {
+interface CockpitContact {
   /** Bearing off the nose, radians, + right. */
   az: number;
   /** Slant range, metres. */
   rangeM: number;
   /** Height relative to ours, feet. */
   relAltFt: number;
-  locked: boolean;
 }
 
 export interface CockpitReadings {
@@ -49,18 +48,6 @@ export interface CockpitReadings {
   overspeed: boolean;
   windFromDeg: number | null;
   windKt: number | null;
-  /** The weapon, for the combat displays; null when unarmed. */
-  weapon: {
-    name: string;
-    /** 0 reloading … 1 ready. */
-    ready: number;
-    /** null = radar off, else 0..1 locking … locked. */
-    lock: number | null;
-    targetRangeM: number | null;
-    targetName: string | null;
-  } | null;
-  /** Unit direction to the locked target in the body frame (x right, y up, z forward). */
-  target: { x: number; y: number; z: number } | null;
   /** Aircraft around, for the radar and the navigation display. */
   contacts: CockpitContact[];
   /** Stick and pedal positions, −1..1, to move the controls in the cockpit. */
@@ -96,8 +83,6 @@ export function emptyReadings(): CockpitReadings {
     overspeed: false,
     windFromDeg: null,
     windKt: null,
-    weapon: null,
-    target: null,
     contacts: [],
     stickX: 0,
     stickY: 0,

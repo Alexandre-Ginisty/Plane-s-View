@@ -56,7 +56,7 @@ import type { CockpitReadings } from './readings';
 import { loadModelledCockpit, type Modelled, type Seat } from './modelled';
 import { buildShell, type Shell } from './shell';
 
-export type { CockpitReadings, CockpitContact } from './readings';
+export type { CockpitReadings } from './readings';
 export type { Seat } from './modelled';
 export { emptyReadings } from './readings';
 
