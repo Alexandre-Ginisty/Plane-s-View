@@ -217,7 +217,7 @@ export class SelectionMap {
     map.scrollZoom.setWheelZoomRate(1 / 800);
 
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
-    map.addControl(new ScaleControl({ unit: 'nautical' }), 'bottom-left');
+    map.addControl(new ScaleControl({ unit: 'nautical' }), 'bottom-right');
 
     // Surface style/tile problems instead of letting MapLibre swallow them.
     map.on('error', (e) => {
