@@ -266,7 +266,7 @@
             </button>
             <button class="secondary" onclick={() => goTo(1)}>What is this?</button>
           </div>
-          <p class="hint">Scroll to read, or press <span class="kbd">↵</span> to skip straight in.</p>
+          <p class="hint" data-keyboard-only>Scroll to read, or press <span class="kbd">↵</span> to skip straight in.</p>
         {/if}
 
         {#if index === SECTIONS.length - 1}
@@ -579,6 +579,16 @@
        aeroplane would sit on top of it wherever the section put it. */
     .hero { top: 22% !important; left: 50% !important; }
     .chapter { padding-top: 46svh; }
+  }
+
+  /*
+   * A phone on its side: the copy fills the height, so the aeroplane keeps to
+   * the right-hand third, smaller and behind the text rather than across it.
+   */
+  @media (max-height: 520px) and (min-width: 600px) {
+    nav { display: none; }
+    .hero { width: min(40vw, 44vh * 2); top: 50% !important; left: 78% !important; }
+    .content { max-width: 56vw; }
   }
 
   @media (prefers-reduced-motion: reduce) {

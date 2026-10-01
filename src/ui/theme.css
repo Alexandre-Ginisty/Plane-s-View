@@ -209,6 +209,12 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  /* Touch: no double-tap zoom delay on buttons, no grey flash on every tap,
+     and no text-size boost when a phone turns on its side. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 button {
@@ -447,5 +453,14 @@ button {
 /* No hover on touch screens: keep the delete button reachable there. */
 @media (hover: none) {
   .pv-pin-remove { opacity: 0.8; }
+}
+
+/*
+ * A phone or a tablet: no keyboard, so no keyboard hints. Every key the app
+ * answers to has a button, and a "press Esc" chip on a touch screen is
+ * an instruction nobody can follow.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .kbd, [data-keyboard-only] { display: none !important; }
 }
 

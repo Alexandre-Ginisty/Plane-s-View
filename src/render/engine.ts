@@ -144,7 +144,11 @@ export class Engine {
     const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
     this.timer = timerExt ? { ext: timerExt, query: null, running: false } : null;
 
-    this.maxPixelRatio = options.maxPixelRatio ?? Math.min(window.devicePixelRatio, 2);
+    // A phone starts at 1.5 rather than its 3: a 390 px screen at 1.5 is
+    // already sharper than the imagery, and the other half of the fill rate is
+    // battery and heat. The adaptive loop below lowers it further if needed.
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    this.maxPixelRatio = options.maxPixelRatio ?? Math.min(window.devicePixelRatio, coarse ? 1.5 : 2);
     this.minPixelRatio = options.minPixelRatio ?? 0.65;
     this.pixelRatio = this.maxPixelRatio;
     this.targetFrameMs = 1000 / (options.targetFps ?? 60);

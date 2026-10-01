@@ -115,10 +115,21 @@
     padding: 0 3px;
   }
 
+  /*
+   * A phone: slimmer tapes hugging the edges, and the environment block — the
+   * least urgent figures here, all of them in the details card too — left
+   * out, because on a 390 px screen it sat on the panel and under the dock.
+   */
   @media (max-width: 720px) {
-    .tape.left { left: 12px; }
-    .tape.right { right: 12px; }
-    .tape .value { font-size: 21px; }
-    .environment { left: 14px; bottom: 82px; }
+    .tape { padding: 6px 9px; }
+    .tape.left { left: calc(8px + env(safe-area-inset-left)); }
+    .tape.right { right: calc(8px + env(safe-area-inset-right)); }
+    .tape .value { font-size: 19px; }
+    .tape .sub { font-size: 10px; }
+    .environment { display: none; }
+  }
+  @media (max-height: 480px) {
+    .environment { display: none; }
+    .tape { top: 46%; }
   }
 </style>

@@ -537,11 +537,44 @@
   .exit:hover { color: var(--hud-accent); border-color: var(--hud-accent); }
   .exit:hover :global(.icon) { transform: translateX(-3px); }
 
+  /*
+   * A phone. One row along the top — the way out, the phase, the details
+   * toggle (in FlightCard) — the identity under it, and the dock along the
+   * bottom clear of the home indicator. Every target at least 40 px.
+   */
   @media (max-width: 720px) {
-    .modes { --w: 62px; }
+    .exit {
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      padding: 10px 11px;
+    }
+    .exit span { display: none; }
+    .ident { top: calc(62px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); padding: 5px 9px; }
+    .callsign { font-size: 15px; }
+    .sub { font-size: 10px; }
+    .phase {
+      top: calc(18px + env(safe-area-inset-top));
+      max-width: calc(100vw - 200px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 9.5px;
+      padding: 4px 8px;
+    }
+    .eta { display: none; }
+    .banner { top: calc(112px + env(safe-area-inset-top)); font-size: 10px; }
+    .modes { --w: 52px; }
     .group { padding: 0 8px; font-size: 9px; }
+    .mode { padding: 9px 4px; }
     .mode span { display: none; }
-    .bottom { gap: 8px; bottom: 16px; }
-    .round { width: 36px; height: 36px; }
+    .bottom { gap: 6px; bottom: calc(12px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); }
+    .round { width: 40px; height: 40px; }
+  }
+  @media (max-width: 380px) {
+    .utility .round:nth-child(2) { display: none; }
+  }
+  /* A phone on its side: no room for anything stacked. */
+  @media (max-height: 480px) {
+    .ident { display: none; }
+    .bottom { bottom: calc(8px + env(safe-area-inset-bottom)); }
   }
 </style>

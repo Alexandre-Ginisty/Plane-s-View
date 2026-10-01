@@ -217,8 +217,30 @@
     }
   }
 
+  /*
+   * Fingers on the view. One finger looks around and a tap steps across, like
+   * the mouse; two pinch the field of view, the way every phone zooms. While
+   * two are down neither is a drag, or the view would lurch as the second
+   * finger lands.
+   */
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinchDistance = 0;
+  const spread = (): number => {
+    const [a, b] = [...touches.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+
   function onPointerDown(event: PointerEvent): void {
     if (app.view !== 'pov') return;
+    if (event.pointerType === 'touch') {
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touches.size >= 2) {
+        dragging = false;
+        app.lookingAround = false;
+        pinchDistance = spread();
+        return;
+      }
+    }
     dragging = true;
     lastX = downX = event.clientX;
     lastY = downY = event.clientY;
@@ -228,6 +250,18 @@
 
   function onPointerMove(event: PointerEvent): void {
     if (app.view !== 'pov') return;
+    const touch = touches.get(event.pointerId);
+    if (touch) {
+      touch.x = event.clientX;
+      touch.y = event.clientY;
+      if (touches.size >= 2) {
+        const d = spread();
+        // Spreading the fingers zooms in, as the wheel's negative delta does.
+        if (pinchDistance > 0 && d > 0) orchestrator?.handleZoom((pinchDistance - d) * 4);
+        pinchDistance = d;
+        return;
+      }
+    }
     if (!dragging) {
       // Mouse only: a finger has no hover, and a tap is handled on release.
       if (event.pointerType === 'mouse') overTraffic = orchestrator?.hoverAt(event.clientX, event.clientY) ?? false;
@@ -244,6 +278,14 @@
   }
 
   function onPointerUp(event: PointerEvent): void {
+    const pinching = touches.size >= 2;
+    touches.delete(event.pointerId);
+    if (pinching) {
+      // The finger left behind starts no drag and no tap.
+      dragging = false;
+      pinchDistance = 0;
+      return;
+    }
     const wasDragging = dragging;
     dragging = false;
     app.lookingAround = false;

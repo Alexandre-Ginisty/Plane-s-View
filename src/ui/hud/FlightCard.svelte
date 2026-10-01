@@ -123,4 +123,35 @@
   @media (max-width: 900px) {
     .flight-card { top: 54px; right: 12px; width: 250px; max-height: calc(100% - 160px); }
   }
+  /*
+   * A phone: the toggle top right, and the card a sheet along the bottom over
+   * the dock — open, it is what the user is reading, and closing it gives the
+   * whole view back.
+   */
+  @media (max-width: 720px) {
+    .flight-card {
+      position: static;
+      width: auto;
+      max-width: none;
+    }
+    .flight-card > .chip {
+      position: absolute;
+      top: calc(10px + env(safe-area-inset-top));
+      right: calc(10px + env(safe-area-inset-right));
+      padding: 10px 12px;
+    }
+    .card-body {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: calc(8px + env(safe-area-inset-bottom));
+      width: auto;
+      max-height: 58%;
+      z-index: 2;
+      animation: sheet-up 0.3s var(--ease) both;
+    }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(24px); opacity: 0; }
+  }
 </style>

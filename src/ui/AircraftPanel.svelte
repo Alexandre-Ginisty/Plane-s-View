@@ -98,4 +98,26 @@
   .enter:hover { filter: brightness(1.15); }
 
   .enter .kbd { font-size: 11px; padding: 1px 6px; color: inherit; border-color: currentColor; }
+
+  /*
+   * A phone: a sheet along the bottom, so the aircraft stays visible on the
+   * map above it instead of disappearing under a panel the height of the
+   * screen. Wide enough for the figures, short enough to see where it is.
+   */
+  @media (max-width: 640px) {
+    .dossier {
+      top: auto;
+      left: 8px;
+      right: 8px;
+      bottom: calc(8px + env(safe-area-inset-bottom));
+      width: auto;
+      max-height: 56%;
+      padding: 14px 14px 12px;
+      animation: sheet-up 0.32s var(--ease) both;
+    }
+    .enter { margin-top: 10px; padding: 13px; }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(24px); opacity: 0; }
+  }
 </style>

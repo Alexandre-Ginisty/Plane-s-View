@@ -200,6 +200,20 @@ const _horizontal = new Vector3();
 const _radial = new Vector3();
 const _startQuat = new Quaternion();
 const _swing = new Vector3();
+/**
+ * The vertical field of view for a screen taller than it is wide.
+ *
+ * The lens is set vertically, so a phone held upright saw a slot of the world
+ * a third as wide as a laptop did — one wing, or half a windscreen. Widened
+ * here by the square root of the aspect, half way to matching the landscape
+ * width in angle, and capped short of fisheye.
+ */
+function portraitFov(fovDeg: number, aspect: number): number {
+  if (!(aspect > 0) || aspect >= 1) return fovDeg;
+  const half = Math.atan(Math.tan((fovDeg * Math.PI) / 360) / Math.sqrt(aspect));
+  return Math.min(85, (half * 360) / Math.PI);
+}
+
 const _shake = new Quaternion();
 const _shakeEuler = new Euler();
 const _swingAxis = new Vector3();
@@ -769,7 +783,10 @@ export class PovController {
   /** Ease the cockpit lens towards the wheel's target. */
   private easeFov(camera: PerspectiveCamera, k: number): void {
     this.baseFov ??= camera.fov;
-    const target = (isInterior(this.state.mode) ? (this.fovTarget ?? this.baseFov) : this.baseFov) + this.speedFovDeg;
+    const target = portraitFov(
+      (isInterior(this.state.mode) ? (this.fovTarget ?? this.baseFov) : this.baseFov) + this.speedFovDeg,
+      camera.aspect,
+    );
     if (Math.abs(camera.fov - target) < 0.01) return;
     camera.fov += (target - camera.fov) * k;
     if (Math.abs(camera.fov - target) < 0.02) camera.fov = target;

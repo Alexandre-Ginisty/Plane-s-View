@@ -258,8 +258,11 @@ class AppStore {
   showDiagnostics = $state(false);
   /** The key-and-controls panel. Opened once on a first visit; see `App`. */
   showLegend = $state(false);
-  /** Flight details panel in the cockpit view. */
-  showFlightCard = $state(true);
+  /**
+   * Flight details panel in the cockpit view. Closed to begin with on a
+   * phone, where open it covers most of the view the user came for.
+   */
+  showFlightCard = $state(typeof matchMedia !== 'function' || !matchMedia('(max-width: 720px)').matches);
   /**
    * True while the user is dragging the 3D view round. The details card steps
    * aside for the drag and comes back when the button is released, so looking
