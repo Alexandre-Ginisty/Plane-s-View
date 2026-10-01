@@ -142,6 +142,7 @@
           <p class="note credits">
             {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a><br />{/if}
             <a href={TERRARIUM.attributionUrl} target="_blank" rel="noopener noreferrer">{TERRARIUM.attribution}</a><br />
+            Buildings © OpenStreetMap contributors (ODbL), OpenMapTiles, OpenFreeMap<br />
             Places © Natural Earth, GeoNames (CC BY 4.0) · Aircraft data adsbdb · Photos Planespotters · Weather Open-Meteo
           </p>
         </section>
@@ -169,7 +170,7 @@
     {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a> · {/if}<a
       href={TERRARIUM.attributionUrl}
       target="_blank"
-      rel="noopener noreferrer">{TERRARIUM.attribution}</a>
+      rel="noopener noreferrer">{TERRARIUM.attribution}</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">Buildings © OpenStreetMap</a>
   </p>
 {/if}
 

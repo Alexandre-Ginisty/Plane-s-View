@@ -252,6 +252,9 @@ export class Atmosphere {
     // imagery turning blue.
     const skyLuma = 0.299 * l.skyColor[0] + 0.587 * l.skyColor[1] + 0.114 * l.skyColor[2];
     for (let ch = 0; ch < 3; ch++) atmoData[20 + ch] = 0.5 + (0.5 * l.skyColor[ch]!) / skyLuma;
+    // Night, 0 by day to 1 once the sun is well down: what windows and city
+    // lights switch on with. From civil dusk, so streets light before dark.
+    atmoData[23] = Math.min(1, Math.max(0, (2 - c.sunElevationDeg) / 9));
   }
 
   private packExtinction(): void {

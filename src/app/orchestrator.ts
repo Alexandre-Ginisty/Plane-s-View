@@ -16,6 +16,7 @@ import {
 import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
+import type { Buildings } from '@/render/buildings';
 import type { OwnAircraft } from '@/render/ownAircraft';
 import { isInterior, type PovController, type CameraGroup, type CameraMode } from '@/render/pov';
 import { isFreighter } from '@/data/freighters';
@@ -125,6 +126,7 @@ export class Orchestrator {
 
   private engine: Engine | null = null;
   private globe: Globe | null = null;
+  private buildings: Buildings | null = null;
   private traffic3d: Traffic3D | null = null;
   private ownAircraft: OwnAircraft | null = null;
   private pins3d: Pins3D | null = null;
@@ -279,6 +281,7 @@ export class Orchestrator {
     this.engine.overlay = this.cockpit;
     this.cockpit.renderer = this.engine.renderer;
     this.globe = surfaces.globe;
+    this.buildings = surfaces.buildings;
     this.traffic3d = surfaces.traffic3d;
     this.ownAircraft = surfaces.ownAircraft;
     this.pov = surfaces.pov;
@@ -395,6 +398,7 @@ export class Orchestrator {
       this.maybeFollow(dt, flying.hex);
 
       globe.update(engine.camera, dt, engine.viewportHeight);
+      this.buildings?.update(engine.camera, dt, globe);
 
       this.cameraEcefVec.copy(engine.camera.position);
       traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
@@ -1099,6 +1103,7 @@ export class Orchestrator {
     this.client.stop();
     this.engine?.dispose();
     this.globe?.dispose();
+    this.buildings?.dispose();
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
     this.pins3d?.dispose();

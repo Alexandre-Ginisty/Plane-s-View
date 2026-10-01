@@ -8,6 +8,7 @@
  * to the reasoning rather than found halfway down a boot sequence.
  */
 
+import { Buildings } from '@/render/buildings';
 import type { FloatingOrigin } from '@/core/frame';
 import { networkMonitor } from '@/net/quality';
 import { Engine } from '@/render/engine';
@@ -21,6 +22,7 @@ import { Traffic3D } from '@/render/traffic3d';
 export interface Surfaces {
   engine: Engine;
   globe: Globe;
+  buildings: Buildings;
   traffic3d: Traffic3D;
   ownAircraft: OwnAircraft;
   pov: PovController;
@@ -83,6 +85,7 @@ export function createSurfaces(
   globe.applyProfile(networkMonitor.profile);
 
   const traffic3d = new Traffic3D(origin);
+  const buildings = new Buildings(origin);
   const ownAircraft = new OwnAircraft(origin);
   ownAircraft.lights = traffic3d.lights;
   ownAircraft.warm = { renderer: engine.renderer, scene: engine.scene };
@@ -92,9 +95,10 @@ export function createSurfaces(
   const overlay = new ViewOverlay(pinOverlay);
 
   engine.scene.add(globe.scene);
+  engine.scene.add(buildings.scene);
   engine.scene.add(traffic3d.scene);
   engine.scene.add(ownAircraft.scene);
   engine.scene.add(pins3d.scene);
 
-  return { engine, globe, traffic3d, ownAircraft, pov, pins3d, overlay };
+  return { engine, globe, buildings, traffic3d, ownAircraft, pov, pins3d, overlay };
 }

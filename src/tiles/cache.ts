@@ -53,6 +53,28 @@ function txDone(tx: IDBTransaction): Promise<void> {
   });
 }
 
+/** How long opening the database may take before the cache is skipped. */
+const OPEN_TIMEOUT_MS = 2500;
+/** How long one read may take before the tile is fetched instead. */
+const READ_TIMEOUT_MS = 600;
+
+/** The promise's value, or undefined once `ms` have passed. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => resolve(undefined), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 export class TileDiskCache {
   private db: IDBDatabase | null = null;
   private opening: Promise<IDBDatabase | null> | null = null;
@@ -82,6 +104,11 @@ export class TileDiskCache {
 
       try {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
+        // Blocked by another tab holding an older version open, an open never
+        // settles — and every tile read waited on it, so the ground never
+        // loaded at all. Past this long the cache is off for the session and
+        // tiles come from the network, which is what it is a shortcut for.
+        req.onblocked = () => undefined;
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(BLOB_STORE)) {
@@ -93,7 +120,13 @@ export class TileDiskCache {
           }
         };
 
-        const db = await promisify(req);
+        const db = await withTimeout(promisify(req), OPEN_TIMEOUT_MS);
+        if (!db) {
+          // If it does open after all, let it go.
+          req.onsuccess = () => req.result.close();
+          this.available = false;
+          return null;
+        }
         db.onversionchange = () => {
           // Another tab is upgrading; let go rather than block it.
           db.close();
@@ -101,8 +134,9 @@ export class TileDiskCache {
         };
         this.db = db;
 
-        await this.computeBudget();
-        await this.recomputeTotal();
+        // Sized in the background: reading every index record of a full cache
+        // is not something the first tile should wait for.
+        void this.computeBudget().then(() => this.recomputeTotal());
         return db;
       } catch {
         this.available = false;
@@ -157,8 +191,10 @@ export class TileDiskCache {
 
     try {
       const tx = db.transaction(BLOB_STORE, 'readonly');
-      const value = await promisify(
-        tx.objectStore(BLOB_STORE).get(key) as IDBRequest<ArrayBuffer | undefined>,
+      // A read slower than the network is not a cache: give up and fetch.
+      const value = await withTimeout(
+        promisify(tx.objectStore(BLOB_STORE).get(key) as IDBRequest<ArrayBuffer | undefined>),
+        READ_TIMEOUT_MS,
       );
       if (!value) return null;
       this.touch(key);

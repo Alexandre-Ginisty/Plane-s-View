@@ -52,7 +52,7 @@ const ATMO_VEC4S = 6;
  * [2] Mie extinction, Mie scale height, horizon dip (rad), enabled flag
  * [3] sun direction (unit), sky exposure of the disc
  * [4] sunlight on surfaces rgb (tint x strength), skylight on surfaces
- * [5] skylight tint rgb (luminance about 1: the colour shadows take), unused
+ * [5] skylight tint rgb (luminance about 1: the colour shadows take), night 0..1
  */
 export const atmoData = new Float32Array(ATMO_VEC4S * 4);
 

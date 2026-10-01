@@ -34,6 +34,25 @@ import type { TileStreamer } from './streaming';
 import type { TileNode } from './tileNode';
 
 /**
+ * Zoom of the deepest resident tile with heights at a position, or -1.
+ *
+ * What a caller placing things on the ground (buildings) watches to know the
+ * ground under them has been refined, and that they should be placed again.
+ */
+export function terrainZoomAt(nodes: TileMap, maxZoom: number, latDeg: number, lonDeg: number): number {
+  const mx = lonToMercatorX(lonDeg);
+  const my = latToMercatorY(latDeg);
+  let found = -1;
+  for (let z = ROOT_ZOOM; z <= maxZoom; z++) {
+    const n = 1 << z;
+    const node = nodes.get(tileKey(z, clamp(Math.floor(mx * n), 0, n - 1), clamp(Math.floor(my * n), 0, n - 1)));
+    if (!node?.heights) break;
+    found = z;
+  }
+  return found;
+}
+
+/**
  * Terrain height at a geodetic position, from the deepest resident tile.
  *
  * Used to keep the camera above the ground and to place the horizon. Returns

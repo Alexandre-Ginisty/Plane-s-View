@@ -73,7 +73,7 @@ import { evictDistantTiles, type TileMap } from './eviction';
 import { SceneSynchroniser } from './sceneSync';
 import { selectTiles, type SelectionContext } from './selection';
 import { TileStreamer, type LoadFrontier } from './streaming';
-import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight } from './terrainQuery';
+import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight, terrainZoomAt } from './terrainQuery';
 import { TileNode } from './tileNode';
 
 export type { GlobeOptions } from './constants';
@@ -443,6 +443,11 @@ export class Globe {
   /** Terrain height at a position, from the deepest resident tile. */
   sampleHeight(latDeg: number, lonDeg: number): number {
     return sampleTerrainHeight(this.nodes, this.options.maxZoom, latDeg, lonDeg);
+  }
+
+  /** How refined the ground is at a position. See `terrainZoomAt`. */
+  terrainZoom(latDeg: number, lonDeg: number): number {
+    return terrainZoomAt(this.nodes, this.options.maxZoom, latDeg, lonDeg);
   }
 
   /** Warm the cache along a predicted path. See `prefetchAlongPath`. */
