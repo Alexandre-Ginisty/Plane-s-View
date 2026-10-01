@@ -116,6 +116,8 @@ export class TileNode {
 
   /** Fade-in progress once selected for rendering. */
   opacity = 0;
+  /** Geomorph progress, 0 (the parent's shape) to 1 (its own), once drawn. */
+  morph = 0;
   /** Set each frame the node is selected; drives eviction. */
   lastUsedFrame = -1;
   /**

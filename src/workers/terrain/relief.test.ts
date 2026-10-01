@@ -38,6 +38,7 @@ function request(resolution: number, exaggeration: number): BuildTileRequest {
     tile: { z: 12, x: 2130, y: 1440 },
     bytes: null,
     resolution,
+    parentResolution: 0,
     sampleRect: { x0: 0, y0: 0, x1: 1, y1: 1 },
     exaggeration,
     skirtDepth: 40,
@@ -103,5 +104,40 @@ describe('the terrain mesh', () => {
     const ratio = built.positions.length / coarse.positions.length;
     expect(ratio).toBeGreaterThan(3.5);
     expect(ratio).toBeLessThan(4.3);
+  });
+});
+
+describe('the geomorph targets', () => {
+  const map = alps();
+  const n = 32;
+  const req = { ...request(n, 1), parentResolution: n };
+  const built = buildTileMesh(req, map);
+  const w = n + 1;
+  const vertex = (i: number) => [built.positions[i * 3]!, built.positions[i * 3 + 1]!, built.positions[i * 3 + 2]!];
+  const morphed = (i: number) => vertex(i).map((c, a) => c + built.morphs[i * 3 + a]!);
+  const radius = (p: number[], centre: readonly number[]) => Math.hypot(p[0]! + centre[0]!, p[1]! + centre[1]!, p[2]! + centre[2]!);
+
+  it('leaves the vertices the parent shares where they are', () => {
+    for (const [row, col] of [[0, 0], [2, 4], [16, 16], [32, 30]] as const) {
+      const i = row * w + col;
+      expect(Math.hypot(built.morphs[i * 3]!, built.morphs[i * 3 + 1]!, built.morphs[i * 3 + 2]!)).toBe(0);
+    }
+  });
+
+  it('starts the others on the parent’s coarser surface', () => {
+    // Mid-edge of a parent quad: halfway between its two ends, in height.
+    const row = 10;
+    const col = 11;
+    const h = built.heights[row * w + col]!;
+    const coarse = (built.heights[row * w + col - 1]! + built.heights[row * w + col + 1]!) / 2;
+    const i = row * w + col;
+    const moved = radius(morphed(i), built.centerEcef) - radius(vertex(i), built.centerEcef);
+    expect(moved).toBeCloseTo(coarse - h, 1);
+    expect(Math.abs(coarse - h)).toBeGreaterThan(0.01);
+  });
+
+  it('has nothing to morph towards at the root', () => {
+    const root = buildTileMesh({ ...request(n, 1), parentResolution: 0 }, map);
+    expect(root.morphs.every((v) => v === 0)).toBe(true);
   });
 });

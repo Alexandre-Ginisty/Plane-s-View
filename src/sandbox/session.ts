@@ -30,7 +30,7 @@ import { ArcadeFlight, NO_INPUT, type FlightInput } from './flight';
 import { FLIGHT_KEY_CODES } from '@/flight/controls';
 import type { TouchdownRecord } from '@/flight/types';
 import { GlobeFlight, type FlightReadout } from './realFlight';
-import { WindField, type WindReporter } from './wind';
+import { WindField, type WindReporter } from '@/data/weather/wind';
 import { Effects } from './particles';
 import { Score, type KillAward } from './score';
 import { SALVO, Weapons } from './weapons';
@@ -85,7 +85,7 @@ const _m = new Matrix4();
 const _look = new Vector3();
 const _wind = { east: 0, north: 0 };
 /** Radar on / off: lock the best target ahead, or drop the lock. */
-export const LOCK_KEY = 'KeyR';
+const LOCK_KEY = 'KeyR';
 
 export class SandboxSession {
   readonly scene = new Scene();

@@ -187,8 +187,24 @@ export interface CurrentWeather {
   windDirectionDeg: number | null;
   /** Total cloud cover, percent. */
   cloudCoverPct: number | null;
+  /** Cover by layer, percent: low (to ~2 km), mid (~2–6 km), high (above). */
+  cloudLowPct: number | null;
+  cloudMidPct: number | null;
+  cloudHighPct: number | null;
+  /** Dew point two metres up, °C: with the temperature, where the cloud base is. */
+  dewPointC: number | null;
   pressureMslHpa: number | null;
   visibilityM: number | null;
   isDay: boolean | null;
+  /** The air aloft, highest pressure (lowest level) first; null when not reported. */
+  aloft: AloftLevel[] | null;
   observedAt: number;
+}
+
+/** One pressure level of the weather model. */
+export interface AloftLevel {
+  hPa: number;
+  tempC: number;
+  /** Relative humidity over water, percent — what the models report. */
+  rhPct: number;
 }

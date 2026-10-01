@@ -6,21 +6,30 @@
  * The camera must see a runway 10 m below it and the horizon 400 km away in
  * the same frame. A conventional depth buffer cannot do that: with near = 0.5
  * and far = 500 000 the precision ratio is a million to one and everything
- * beyond a few kilometres z-fights into noise. `logarithmicDepthBuffer`
- * redistributes precision logarithmically and makes the range usable, at the
- * cost of writing `gl_FragDepth` — which is why the terrain shader includes
- * Three's `logdepthbuf` chunks rather than rolling its own.
+ * beyond a few kilometres z-fights into noise.
+ *
+ * Where the browser allows it, the scene is drawn into a float depth buffer
+ * with the depth range reversed (see `@/render/post`), which keeps precision
+ * proportional to distance at no cost per pixel. Elsewhere
+ * `logarithmicDepthBuffer` makes the range usable, at the cost of writing
+ * `gl_FragDepth` and so of the GPU's early depth test — which is why every
+ * custom shader includes three's `logdepthbuf` chunks: they compile to
+ * nothing in the first mode.
  *
  * ## Adaptive resolution
  *
  * Frame time is measured continuously and the device pixel ratio is scaled to
  * hold the target. A steady 60 fps at 80% resolution reads as smooth; a
  * stuttering 35 fps at native resolution does not, and in a first-person view
- * the difference is the whole experience.
+ * the difference is the whole experience. Both halves of the frame count:
+ * the CPU's time in the draw, and — where the browser can time it — the
+ * GPU's, so a scene that is cheap to submit and expensive to shade still
+ * brings the resolution down.
  */
 
 import {
   ACESFilmicToneMapping,
+  Vector2,
   Color,
   FogExp2,
   PCFSoftShadowMap,
@@ -31,6 +40,8 @@ import {
 } from 'three';
 import type { FloatingOrigin } from '@/core/frame';
 import { Atmosphere } from './sky';
+import { PostPipeline, probePost } from './post';
+import { CloudLayers } from './clouds';
 
 export interface EngineOptions {
   /** Vertical field of view, degrees. */
@@ -55,6 +66,8 @@ export class Engine {
 
   /** Sky, haze and sunlight, from one model. See `@/render/sky`. */
   readonly atmosphere = new Atmosphere();
+  /** The real cloud layers, from the weather. See `@/render/clouds`. */
+  readonly clouds = new CloudLayers();
   private readonly planetCentre = new Vector3(0, 0, -6_371_000);
   private readonly sunDirection = new Vector3(1, 0, 0);
 
@@ -77,6 +90,17 @@ export class Engine {
   /** Wall-clock interval between presented frames, ms. Drives `fps`. */
   private frameIntervalAverage = 16.7;
 
+  /** GPU time per frame, ms, where the browser can measure it; else 0. */
+  private gpuMsAverage = 0;
+  private readonly timer: {
+    ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
+    query: WebGLQuery | null;
+    running: boolean;
+  } | null;
+  /** Bloom, flare and the float depth buffer; null where the device cannot. */
+  readonly post: PostPipeline | null;
+  private readonly drawingSize = new Vector2();
+
   private onFrame: ((ctx: FrameContext) => void) | null = null;
   private readonly resizeObserver: ResizeObserver;
 
@@ -94,10 +118,13 @@ export class Engine {
     private readonly canvas: HTMLCanvasElement,
     options: EngineOptions = {},
   ) {
+    const caps = probePost();
     const contextAttributes: WebGLContextAttributes = {
       alpha: false,
-      antialias: true,
-      depth: true,
+      // With the post pipeline the scene is multisampled offscreen and the
+      // canvas only receives the finished picture: no samples, no depth.
+      antialias: !caps.post,
+      depth: !caps.post,
       stencil: false,
       powerPreference: 'high-performance',
       // The globe always covers the frame, so there is nothing to preserve and
@@ -108,8 +135,14 @@ export class Engine {
     this.renderer = new WebGLRenderer({
       canvas,
       ...contextAttributes,
-      logarithmicDepthBuffer: true,
+      logarithmicDepthBuffer: !caps.reversedDepth,
+      reversedDepthBuffer: caps.reversedDepth,
     });
+    this.post = caps.post ? new PostPipeline(this.renderer) : null;
+
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
+    this.timer = timerExt ? { ext: timerExt, query: null, running: false } : null;
 
     this.maxPixelRatio = options.maxPixelRatio ?? Math.min(window.devicePixelRatio, 2);
     this.minPixelRatio = options.minPixelRatio ?? 0.65;
@@ -139,6 +172,7 @@ export class Engine {
     // The sky is a shell that rides with the camera. Radius is arbitrary since
     // its depth is forced to the far plane; it only has to stay inside `far`.
     this.scene.add(this.atmosphere.dome);
+    this.scene.add(this.clouds.group);
     // Only switches three's fog code on for every material; what it computes
     // is the atmosphere's (see `installAtmosphere`), so colour and density
     // here are never read.
@@ -192,6 +226,10 @@ export class Engine {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    if (this.post) {
+      this.renderer.getDrawingBufferSize(this.drawingSize);
+      this.post.setSize(this.drawingSize.x, this.drawingSize.y);
+    }
   }
 
   get viewportHeight(): number {
@@ -220,7 +258,12 @@ export class Engine {
 
   /** Fraction of the frame budget consumed by our own work, 0-1. */
   get budgetUsed(): number {
-    return this.renderMsAverage / this.targetFrameMs;
+    return Math.max(this.renderMsAverage, this.gpuMsAverage) / this.targetFrameMs;
+  }
+
+  /** GPU time per frame, ms; 0 where the browser cannot measure it. */
+  get gpuMs(): number {
+    return this.gpuMsAverage;
   }
 
   get renderMs(): number {
@@ -274,6 +317,12 @@ export class Engine {
         this.planetCentre.set(-o[0], -o[1], -o[2]);
       }
       this.atmosphere.update(this.camera, this.planetCentre, this.sunDirection, dt);
+      if (this.origin) {
+        this.clouds.setLight(this.atmosphere.light);
+        this.clouds.update(this.camera, this.origin.current, this.sunDirection, dt);
+      }
+      const timing = this.beginGpuTimer();
+      if (this.post) this.renderer.setRenderTarget(this.post.scene);
       this.renderer.render(this.scene, this.camera);
       // The cockpit, over the world, into a cleared depth buffer (see `@/render/cockpit`).
       const overlay = this.overlay;
@@ -283,6 +332,11 @@ export class Engine {
         this.renderer.render(overlay.scene, overlay.camera);
         this.renderer.autoClear = true;
       }
+      if (this.post) {
+        const light = this.atmosphere.light;
+        this.post.finish(this.camera, this.sunDirection, light.sunColor, light.sunStrength);
+      }
+      if (timing) this.endGpuTimer();
     }
 
     this.adaptQuality(performance.now() - frameStart, dt);
@@ -300,8 +354,39 @@ export class Engine {
    * pins the interval at the refresh rate regardless of how much headroom is
    * left — so the interval can never reveal spare capacity to spend.
    */
-  private adaptQuality(renderMs: number, dt: number): void {
+  /** Start timing the frame on the GPU, unless the last measurement is still out. */
+  private beginGpuTimer(): boolean {
+    const t = this.timer;
+    if (!t) return false;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    if (t.query) {
+      if (!gl.getQueryParameter(t.query, gl.QUERY_RESULT_AVAILABLE)) return false;
+      const disjoint = gl.getParameter(t.ext.GPU_DISJOINT_EXT) as boolean;
+      if (!disjoint) {
+        const ms = (gl.getQueryParameter(t.query, gl.QUERY_RESULT) as number) / 1e6;
+        this.gpuMsAverage = this.gpuMsAverage === 0 ? ms : this.gpuMsAverage + (ms - this.gpuMsAverage) * 0.15;
+      }
+      gl.deleteQuery(t.query);
+      t.query = null;
+    }
+    t.query = gl.createQuery();
+    if (!t.query) return false;
+    gl.beginQuery(t.ext.TIME_ELAPSED_EXT, t.query);
+    t.running = true;
+    return true;
+  }
+
+  private endGpuTimer(): void {
+    const t = this.timer;
+    if (!t?.running) return;
+    (this.renderer.getContext() as WebGL2RenderingContext).endQuery(t.ext.TIME_ELAPSED_EXT);
+    t.running = false;
+  }
+
+  private adaptQuality(cpuMs: number, dt: number): void {
     const k = 1 - Math.exp(-dt / 0.5);
+    // Whichever half of the frame is the bottleneck sets the resolution.
+    const renderMs = Math.max(cpuMs, this.gpuMsAverage);
     this.renderMsAverage += (renderMs - this.renderMsAverage) * k;
     this.frameIntervalAverage += (dt * 1000 - this.frameIntervalAverage) * k;
     this.fps = 1000 / Math.max(1, this.frameIntervalAverage);
@@ -327,6 +412,8 @@ export class Engine {
     this.stop();
     this.resizeObserver.disconnect();
     this.atmosphere.dispose();
+    this.post?.dispose();
+    this.clouds.dispose();
     this.renderer.dispose();
   }
 }

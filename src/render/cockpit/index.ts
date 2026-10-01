@@ -72,7 +72,7 @@ const FIGHTERS = new Set(['F16', 'F15', 'F14', 'F18', 'F18H', 'F18S', 'MIR2', 'G
 const WARBIRDS = new Set(['F4U', 'P51', 'SPIT', 'CORS']);
 
 /** The cockpit a type gets. */
-export function cockpitKindFor(typeCode: string | null, shape: AirframeShape): CockpitKind {
+function cockpitKindFor(typeCode: string | null, shape: AirframeShape): CockpitKind {
   const code = (typeCode ?? '').toUpperCase();
   if (FIGHTERS.has(code)) return 'fighter';
   if (WARBIRDS.has(code)) return 'warbird';

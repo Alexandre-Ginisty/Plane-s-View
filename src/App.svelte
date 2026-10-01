@@ -22,9 +22,7 @@
   import Notices from '@/ui/Notices.svelte';
   import StatusBar from '@/ui/StatusBar.svelte';
   import Icon from '@/ui/Icon.svelte';
-  import SandboxHangar from '@/ui/sandbox/SandboxHangar.svelte';
   import { SANDBOX_ENABLED } from '@/sandbox/enabled';
-  import SandboxHud from '@/ui/sandbox/SandboxHud.svelte';
 
   let mapContainer: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -414,12 +412,15 @@
           <button class="chip" onclick={() => orchestrator?.cancelSandbox()}>Cancel <span class="kbd">Esc</span></button>
         </div>
       {:else if app.sandbox.phase === 'hangar'}
-        <SandboxHangar {orchestrator} />
+        <!-- Loaded on demand: the sandbox is off by default and is most of the flight code. -->
+        {#await import('@/ui/sandbox/SandboxHangar.svelte') then { default: SandboxHangar }}<SandboxHangar {orchestrator} />{/await}
       {/if}
       {#if !app.cinema}<AircraftPanel {orchestrator} />{/if}
     {:else if !app.cinema}
       <Hud {orchestrator} />
-      {#if app.sandbox.phase === 'flying'}<SandboxHud />{/if}
+      {#if app.sandbox.phase === 'flying'}
+        {#await import('@/ui/sandbox/SandboxHud.svelte') then { default: SandboxHud }}<SandboxHud />{/await}
+      {/if}
     {/if}
 
     {#if !app.cinema}

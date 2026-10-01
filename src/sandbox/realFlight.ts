@@ -34,7 +34,7 @@ import { bodyToWorld } from '@/flight/frames';
 import type { TrimRequest } from '@/flight/trim';
 import type { AircraftState, Environment, TouchdownRecord, Vec3 } from '@/flight/types';
 import type { SampledAircraft } from '@/state/traffic';
-import type { WindField } from './wind';
+import type { WindField } from '@/data/weather/wind';
 
 const M_PER_DEG = 111_320;
 /** Re-anchor the local world once the aircraft is this far from its origin, metres. */

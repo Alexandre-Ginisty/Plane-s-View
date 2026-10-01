@@ -11,6 +11,7 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import './ui/theme.css';
 import { applyTheme, resolveTheme } from './ui/theme';
+import { preloadHero } from './ui/intro/heroScene';
 
 /*
  * Before anything renders.
@@ -21,6 +22,10 @@ import { applyTheme, resolveTheme } from './ui/theme';
  * enough for there to be nothing to flash.
  */
 applyTheme(resolveTheme());
+
+// The front page's aeroplane, downloading before anything is mounted, so it
+// is ready — whole — by the time the page is (see `heroScene`).
+preloadHero();
 
 function webgl2Available(): boolean {
   try {

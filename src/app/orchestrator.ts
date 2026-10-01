@@ -54,13 +54,17 @@ import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
 import { hazeForVisibility } from '@/render/sky/model';
-import { SandboxSession } from '@/sandbox/session';
-import { sandboxAircraft } from '@/sandbox/catalog';
+// The sandbox is loaded on demand (see `launchSandbox`): off by default, and
+// with the flight model and the effects it is the bulk of the code.
+import type { SandboxSession } from '@/sandbox/session';
 import { publishTelemetry } from './telemetry';
 import { Cockpit, emptyReadings } from '@/render/cockpit';
 import { shapeFor } from '@/render/aircraft';
 import { loadModelFor, operatorOf } from '@/render/aircraft/library';
 import { fillContacts, readingsFromFlight, readingsFromSample } from './cockpitReadings';
+import { WindField } from '@/data/weather/wind';
+import { fetchCurrentWeather } from '@/data/weather/openmeteo';
+import type { ContrailInputs } from '@/render/contrails';
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
@@ -112,6 +116,15 @@ function describeFeedError(message: string): string {
 export class Orchestrator {
   private readonly origin = new FloatingOrigin(50_000);
   private readonly traffic = new TrafficStore();
+  /** The wind the contrails drift in: the traffic's own reports, layer by layer. */
+  private readonly wind = new WindField();
+  private readonly contrailInputs: ContrailInputs = {
+    trailOf: (hex) => this.traffic.get(hex)?.trailPoints,
+    shapeOf: (sample) => this.traffic3d!.shapeOf(sample),
+    wind: this.wind,
+    aloft: null,
+    nowMs: 0,
+  };
   private readonly client: TrafficClient;
 
   private engine: Engine | null = null;
@@ -398,6 +411,9 @@ export class Orchestrator {
       traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
         globe.sampleHeight(lat, lon),
       );
+      this.contrailInputs.aloft = app.weather?.aloft ?? null;
+      this.contrailInputs.nowMs = now;
+      traffic3d.contrails.update(samples, this.cameraEcefVec, this.contrailInputs);
 
       // The followed aircraft is drawn by its own renderer, at true scale and
       // with the silhouette of its actual type — but not from inside it.
@@ -650,6 +666,7 @@ export class Orchestrator {
     updateSunlight(engine, globe, this.sunVec);
     this.ownAircraft?.setLight(engine.atmosphere.light);
     this.traffic3d?.lights.setLight(engine.atmosphere.light);
+    this.traffic3d?.contrails.setLight(engine.atmosphere.light);
     this.cockpit.setLight(engine.atmosphere.light);
     engine.atmosphere.setHaze(hazeForVisibility(app.weather?.visibilityM ?? null));
   }
@@ -676,7 +693,52 @@ export class Orchestrator {
     // arriving once the map is no longer driving it.
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
 
+    // The air the contrails form in: the wind the traffic reports about the
+    // aircraft, and the weather model's aloft (cached by cell, so this is a
+    // request every ten minutes at most).
+    this.wind.observe(this.lastSamples, sample.lat, sample.lon);
+    this.updateClouds(sample);
+    void fetchCurrentWeather(sample.lat, sample.lon).then((weather) => {
+      if (weather && app.selectedHex === sample.hex) app.weather = weather;
+    });
+
     this.prepareNextShuffle();
+  }
+
+  /**
+   * The cloud layers from the weather about the aircraft: cover by layer, the
+   * low base from the dew-point spread (about 125 m a degree), and the wind
+   * the traffic reports at each layer's height. Unknown weather draws no
+   * cloud rather than invented cloud.
+   */
+  private updateClouds(sample: SampledAircraft): void {
+    const clouds = this.engine?.clouds;
+    if (!clouds) return;
+    const w = app.weather;
+    const pct = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.min(1, Math.max(0, v / 100)));
+    let low = pct(w?.cloudLowPct);
+    const mid = pct(w?.cloudMidPct);
+    const high = pct(w?.cloudHighPct);
+    // A source with only the total: put it where most cloud is.
+    if (low === null && mid === null && high === null) low = pct(w?.cloudCoverPct);
+    if (!w || (low === null && mid === null && high === null)) {
+      clouds.setWeather(null);
+      return;
+    }
+    const ground = this.globe?.sampleHeight(sample.lat, sample.lon);
+    const spread = w.temperatureC !== null && w.dewPointC !== null ? w.temperatureC - w.dewPointC : 8;
+    const baseAgl = Math.min(2500, Math.max(300, 125 * spread));
+    clouds.setWeather({
+      low: low ?? 0,
+      mid: mid ?? 0,
+      high: high ?? 0,
+      lowBaseM: (Number.isFinite(ground) ? (ground as number) : 0) + baseAgl,
+    });
+    const at = { east: 0, north: 0 };
+    clouds.heights.forEach((h, i) => {
+      this.wind.at(h, Number.POSITIVE_INFINITY, at);
+      clouds.setWind(i as 0 | 1 | 2, at.east, at.north);
+    });
   }
 
   /**
@@ -1160,7 +1222,8 @@ export class Orchestrator {
   }
 
   /** Take off from the chosen place in the chosen aircraft. */
-  launchSandbox(aircraftId: string): void {
+  async launchSandbox(aircraftId: string): Promise<void> {
+    const [{ SandboxSession }, { sandboxAircraft }] = await Promise.all([import('@/sandbox/session'), import('@/sandbox/catalog')]);
     const spawn = app.sandbox.spawn;
     const engine = this.engine;
     if (!spawn || !engine || !this.pov) return;

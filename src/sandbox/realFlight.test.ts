@@ -13,7 +13,7 @@ import { clearanceFor } from '@/render/ground';
 import { airframeFor } from './airframes';
 import { SANDBOX_AIRCRAFT, sandboxAircraft } from './catalog';
 import { GlobeFlight, type FlightStart, type GroundAt } from './realFlight';
-import { WindField } from './wind';
+import { WindField } from '@/data/weather/wind';
 
 const NONE = new Set<string>();
 const START: FlightStart = { lat: 48.85, lon: 2.35, altM: 1600, headingDeg: 90 };

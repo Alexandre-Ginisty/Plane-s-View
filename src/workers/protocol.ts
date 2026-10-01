@@ -24,6 +24,11 @@ export interface BuildTileRequest {
   /** Quads per side. 32 is plenty far away; 64 near the camera. */
   resolution: number;
   /**
+   * Quads per side of the parent tile's mesh, 0 at the root: what the
+   * geomorph target is shaped on (see `morphs` in `BuiltTile`).
+   */
+  parentResolution: number;
+  /**
    * Sub-rectangle of the heightmap to sample, in normalised [0,1] tile space.
    * Used past zoom 15, where a tile inherits elevation from its z15 ancestor.
    */
@@ -45,6 +50,13 @@ export interface BuiltTile {
   /** Vertex positions in metres, relative to `centerEcef`. */
   positions: Float32Array;
   normals: Float32Array;
+  /**
+   * Per vertex, metres: from its own position to where the parent tile's
+   * coarser surface lies at that point. The shader starts the tile there and
+   * slides it onto its own relief, so a level of detail arriving reshapes the
+   * ground smoothly instead of popping.
+   */
+  morphs: Float32Array;
   uvs: Float32Array;
   indices: Uint32Array;
   /** Per-grid-vertex heights, for terrain queries on the main thread. */
@@ -72,6 +84,7 @@ export function builtTileTransferables(t: BuiltTile): Transferable[] {
   return [
     t.positions.buffer,
     t.normals.buffer,
+    t.morphs.buffer,
     t.uvs.buffer,
     t.indices.buffer,
     t.heights.buffer,

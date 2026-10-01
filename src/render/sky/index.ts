@@ -157,6 +157,7 @@ export class Atmosphere {
     atmoData[11] = 0; // disabled until the first update places the planet
     // Midday light until the first table says otherwise, never black.
     atmoData[16] = atmoData[17] = atmoData[18] = atmoData[19] = 1;
+    atmoData[20] = atmoData[21] = atmoData[22] = 1;
     this.packExtinction();
   }
 
@@ -246,6 +247,11 @@ export class Atmosphere {
     // The terrain keeps some legibility at night: satellite imagery with no
     // lights of its own would otherwise go black.
     atmoData[19] = 0.4 + 0.6 * l.skyStrength;
+    // The colour of that skylight, for what the sun does not reach: half-way
+    // from neutral to the sky's own hue, so shadows lean blue without the
+    // imagery turning blue.
+    const skyLuma = 0.299 * l.skyColor[0] + 0.587 * l.skyColor[1] + 0.114 * l.skyColor[2];
+    for (let ch = 0; ch < 3; ch++) atmoData[20 + ch] = 0.5 + (0.5 * l.skyColor[ch]!) / skyLuma;
   }
 
   private packExtinction(): void {

@@ -24,7 +24,7 @@
   );
 
   function launch(): void {
-    orchestrator.launchSandbox(app.sandbox.aircraftId);
+    void orchestrator.launchSandbox(app.sandbox.aircraftId);
   }
 
   function onKeydown(event: KeyboardEvent): void {

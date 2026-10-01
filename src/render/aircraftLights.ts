@@ -7,10 +7,12 @@
  * visible from tens of kilometres, long after the airframe itself is lost in
  * the dark. By day the strobes still catch the eye; the rest wash out.
  *
- * Placed from the airframe's shape (span, sweep, dihedral, fuselage radius) in
- * its own frame, so the same code lights the aircraft being ridden, the
- * detailed and the stand-in traffic, and — at night only — traffic far beyond
- * the range any airframe is drawn at, as nothing but its lights.
+ * Fitted to the model actually drawn (`lightAnchorsFor`): the wingtips, the
+ * tail cone, the crown and the belly of that airframe, so a light sits on the
+ * skin rather than a metre or two off it. Without a model — traffic far
+ * beyond the drawing range, seen at night as nothing but its lights — they
+ * are placed from the type's nominal shape, where an error that size is far
+ * below a pixel.
  *
  * One `Points` object for all of it: a vertex per light, rewritten each frame
  * in render space. The flashing is done in the shader from a per-light phase,
@@ -30,6 +32,7 @@ import {
 } from 'three';
 
 import type { AirframeShape } from './aircraft';
+import type { LightAnchors } from './aircraft/lightAnchors';
 import type { SceneLight } from './sky/model';
 
 /** Steady, beacon (a red pulse a second), strobe (a white double flash), landing light. */
@@ -69,28 +72,29 @@ const vertexShader = /* glsl */ `
     if (kind < 0.5) {
       // Nav lights: washed out by day.
       gain = mix(0.18, 1.0, night);
-      glowM = 1.4;
+      glowM = 0.6;
     } else if (kind < 1.5) {
       // Beacon: a pulse a second.
       gain = pulse(fract(t * 1.0), 0.08, 0.09) * mix(0.35, 1.2, night);
-      glowM = 2.2;
+      glowM = 1.0;
     } else if (kind < 2.5) {
       // Strobes: two flashes in quick succession, every 1.2 s.
       float f = fract(t / 1.2);
       gain = max(pulse(f, 0.03, 0.025), pulse(f, 0.16, 0.025)) * 1.6;
-      glowM = 3.2;
+      glowM = 2.0;
     } else {
       // Landing lights: bright, and brighter by night.
       gain = mix(0.45, 1.3, night);
-      glowM = 4.5;
+      glowM = 2.4;
     }
     vTint = tint;
     vGain = gain;
 
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float d = max(length(mv.xyz), 1.0);
-    // Nudged towards the eye, so the fuselage the light sits on does not eat it.
-    mv.xyz *= (d - min(1.5, d * 0.5)) / d;
+    // Nudged towards the eye, a fitting's depth, so the skin it sits on does
+    // not eat it. Along the line of sight: it does not move on screen.
+    mv.xyz *= (d - min(0.5, d * 0.5)) / d;
     gl_Position = projectionMatrix * mv;
     // Physical size, but never smaller than a point the eye still picks out —
     // a light in the dark is visible long after its source has no size at all.
@@ -179,10 +183,14 @@ export class AircraftLights {
    * space, scale included (length along +Y, span along X, up +Z); `seed`
    * keeps its flashing out of step with everyone else's.
    */
-  add(matrix: Matrix4, shape: AirframeShape, seed: number, landing: boolean): void {
+  add(matrix: Matrix4, shape: AirframeShape, seed: number, landing: boolean, anchors: LightAnchors | null = null): void {
     if (this.count + 9 > CAPACITY) return;
-    const r = shape.radiusRatio;
     const phase = (seed % 997) / 997;
+    if (anchors) {
+      this.fitted(matrix, shape, anchors, phase, landing);
+      return;
+    }
+    const r = shape.radiusRatio;
     if (shape.kind === 'rotorcraft') {
       this.put(matrix, -r * 1.1, 0.05, 0, RED, STEADY, 0);
       this.put(matrix, r * 1.1, 0.05, 0, GREEN, STEADY, 0);
@@ -213,6 +221,35 @@ export class AircraftLights {
     if (landing) {
       this.put(matrix, -r * 1.9, 0.1, -r * 0.55, LANDING_WHITE, LANDING, 0);
       this.put(matrix, r * 1.9, 0.1, -r * 0.55, LANDING_WHITE, LANDING, 0);
+    }
+  }
+
+  /** The same lights, on the model's own skin (see `lightAnchorsFor`). */
+  private fitted(m: Matrix4, shape: AirframeShape, a: LightAnchors, phase: number, landing: boolean): void {
+    const [tx, ty, tz] = a.tip;
+    if (shape.kind === 'rotorcraft') {
+      // Nav lights on the widest point of the cabin, at mid-height.
+      const z = (a.top[2] + a.belly[2]) / 2;
+      this.put(m, -tx, ty, z, RED, STEADY, 0);
+      this.put(m, tx, ty, z, GREEN, STEADY, 0);
+    } else {
+      this.put(m, -tx, ty, tz, RED, STEADY, 0);
+      this.put(m, tx, ty, tz, GREEN, STEADY, 0);
+      // Strobes share the tip fitting, just aft of the nav light.
+      this.put(m, -tx, ty - 0.006, tz, WHITE, STROBE, phase);
+      this.put(m, tx, ty - 0.006, tz, WHITE, STROBE, phase);
+    }
+    this.put(m, a.tail[0], a.tail[1], a.tail[2], WHITE, STEADY, 0);
+    if (shape.kind === 'jet' && shape.length > 25) this.put(m, a.tail[0], a.tail[1] + 0.003, a.tail[2], WHITE, STROBE, phase + 0.02);
+    this.put(m, a.top[0], a.top[1], a.top[2], RED, BEACON, phase);
+    this.put(m, a.belly[0], a.belly[1], a.belly[2], RED, BEACON, phase + 0.5);
+    if (landing) {
+      const [lx, ly, lz] = a.landing;
+      if (shape.kind === 'rotorcraft') this.put(m, 0, ly, a.belly[2], LANDING_WHITE, LANDING, 0);
+      else {
+        this.put(m, -lx, ly, lz, LANDING_WHITE, LANDING, 0);
+        this.put(m, lx, ly, lz, LANDING_WHITE, LANDING, 0);
+      }
     }
   }
 

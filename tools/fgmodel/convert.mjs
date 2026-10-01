@@ -30,6 +30,8 @@
 
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
+import { packPvm } from './pvmpack.mjs';
+import { decodeSgi, isSgi } from './sgi.mjs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -125,8 +127,16 @@ const DISCARD =
  * `mglhlowerstrut`, `lhngdoor` — or write in French (`roueG`, `axeGB`); a leg
  * the pattern misses is classed as airframe and flown down at cruise, which
  * from behind turns an airliner into something standing on skids.
+ *
+ * Also `mgouterstrut`, `ngrimlh` and `collar` (the 737's main-gear legs, rims
+ * and nose-gear collar), `central.scissor.down` (the MD-11's torque links),
+ * `Lbrake1a` and `LBdamper` (the 777's wheel brakes and bogie damper),
+ * `bouterstrut` (the A380's body gear), `UC-NoseStrutTop`, `right_main_strut`,
+ * `LHstrut` — legs left hanging under the fuselage in the cruise until named
+ * here.
  */
-const GEAR = /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo|mlg|nlg|(^|[^a-z])[mn]lg|drag.?strut|side.?strut|lower.?strut|shock.?strut|torque.?link|axle|mgl[hr]|ng.?door|^roue|^train|^axe[adg][bh]?$)/i;
+export const GEAR =
+  /(gear(?!ed|box|ing)|wheel|bogie|tyre|tire|oleo|mlg|nlg|(^|[^a-z])[mn]lg|(drag|side|lower|upper|shock|outer|inner|main|arm|nose|aft)[ _.-]?strut|^[lr]h[ _.-]?strut|torque.?link|scissor|damper|axle|mgl[hr]|^mg[a-z]|^ng(?!ww)[a-z]|(^|[^t])rim(lh|rh)?$|^collar$|^uc[-_].*(strut|whell|nfd)|^[lr]brake\d|barng$|(^|[^i])ng.?door|^roue|^train|^axe[adg][bh]?$)/i;
 
 /** Sprite sheets that only ever paint a special effect. See `DISCARD`. */
 const EFFECT_TEXTURE = /(halo|flare|glow|corona|lightbeam|light_beam)/i;
@@ -594,7 +604,11 @@ export const AIRCRAFT = [
  */
 export async function shrink(data, base) {
   try {
-    const encoded = await sharp(data)
+    // SGI images (older models) are read by neither the encoder nor a browser.
+    const input = isSgi(data)
+      ? await (({ width, height, rgba }) => sharp(rgba, { raw: { width, height, channels: 4 } }).png().toBuffer())(decodeSgi(data))
+      : data;
+    const encoded = await sharp(input)
       .resize({
         width: MAX_TEXTURE_PX,
         height: MAX_TEXTURE_PX,
@@ -1426,7 +1440,7 @@ export async function convert(entry, { quiet = false } = {}) {
   head.write('PVM1', 0, 'ascii');
   head.writeUInt32LE(json.length + pad, 4);
 
-  const blob = Buffer.concat([head, json, Buffer.alloc(pad), ...chunks]);
+  const blob = packPvm(Buffer.concat([head, json, Buffer.alloc(pad), ...chunks]));
   await writeFile(join(OUT, `${entry.id}.pvm`), blob);
 
   const triangles = parts.reduce((s, p) => s + p.index.count / 3, 0);

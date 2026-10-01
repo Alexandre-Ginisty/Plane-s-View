@@ -9,10 +9,22 @@
   import type { AircraftPhoto } from '@/data/types';
 
   let { photo, alt }: { photo: AircraftPhoto; alt: string } = $props();
+
+  // A dead link is shown as what it is — no photo — not as a broken image.
+  let failed = $state(false);
+  $effect(() => {
+    void photo.largeUrl;
+    failed = false;
+  });
 </script>
 
+{#if failed}
+  <div class="no-photo" role="img" aria-label="No photo available">
+    <span>No photo available for this aircraft</span>
+  </div>
+{:else}
 <figure>
-  <img src={photo.largeUrl} {alt} loading="lazy" />
+  <img src={photo.largeUrl} {alt} loading="lazy" onerror={() => (failed = true)} />
   <figcaption>
     {#if photo.link}
       <a href={photo.link} target="_blank" rel="noopener noreferrer">
@@ -23,6 +35,7 @@
     {/if}
   </figcaption>
 </figure>
+{/if}
 
 <style>
   figure { margin: 14px 0 0; }
@@ -42,4 +55,16 @@
     text-align: right;
   }
   figcaption a { color: inherit; }
+  .no-photo {
+    margin: 14px 0 0;
+    aspect-ratio: 3 / 2;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--border);
+    background: var(--bg-panel-solid);
+    color: var(--text-faint);
+    font-size: 11.5px;
+    text-align: center;
+    padding: 0 16px;
+  }
 </style>

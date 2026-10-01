@@ -18,6 +18,12 @@ export const ROOT_ZOOM = 2;
 export const TEXTURE_FADE_SEC = 0.9;
 /** Fade-in for a tile entering the render set, seconds. */
 export const TILE_FADE_SEC = 0.3;
+/**
+ * Seconds a new tile takes to slide from its parent's shape onto its own
+ * relief. Longer than the texture fade: the eye forgives a picture
+ * sharpening, it notices a hillside moving.
+ */
+export const MORPH_SEC = 1.6;
 
 /**
  * How much relief the terrain is built with — one setting, for everyone.

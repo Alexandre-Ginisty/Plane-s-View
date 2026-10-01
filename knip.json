@@ -3,7 +3,7 @@
   "entry": [
     "src/workers/**/*.worker.ts",
     "functions/**/*.ts",
-    "tools/**/convert.mjs",
+    "tools/fgmodel/{convert,cockpit,combat,tidy,pvmpack}.mjs",
     "tools/map/build-places.mjs"
   ],
   "project": [

@@ -92,7 +92,7 @@ export function isHouseScheme(stem) {
  *   `AFR`, `AFR-New-livery`, `733AFR`, `DAL2`, `BAW-old`, `Lufthansa`,
  *   `aeroflot_new`, `733LH`
  */
-export function operatorOf(stem) {
+function operatorOf(stem) {
   if (NEUTRAL.test(stem)) return { code: 'NEUTRAL', rank: 0 };
 
   // `733AFR` — the type prefix the 737-300's author put on every file.

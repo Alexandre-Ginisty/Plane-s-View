@@ -53,6 +53,7 @@ export function buildTileMesh(req: BuildTileRequest, map: Heightmap | null): Bui
 
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
+  const morphs = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const heights = new Float32Array(gridCount);
 
@@ -160,6 +161,45 @@ export function buildTileMesh(req: BuildTileRequest, map: Heightmap | null): Bui
     }
   }
 
+  // --- geomorph targets ------------------------------------------------------
+  //
+  // The parent covers twice the span with `parentResolution` quads, so its
+  // vertices fall on every `stride`-th of ours — aligned at our edges whichever
+  // quadrant we are, since the parent's midlines are its grid lines. Between
+  // them the parent draws flat triangles, split north-west to south-east as
+  // `quad` below does. Our own heights stand in for its samples at the shared
+  // vertices, which is exact where both read the same elevation tile and a
+  // near miss where the parent read the coarser one.
+  const stride = req.parentResolution > 0 ? Math.round((2 * n) / req.parentResolution) : 1;
+  if (stride >= 2 && n % stride === 0) {
+    for (let row = 0; row < w; row++) {
+      const r0 = Math.min(row - (row % stride), n - stride);
+      const fr = (row - r0) / stride;
+      for (let col = 0; col < w; col++) {
+        const c0 = Math.min(col - (col % stride), n - stride);
+        const fc = (col - c0) / stride;
+        if (fr === 0 && fc === 0) continue;
+        const a = heights[r0 * w + c0]!;
+        const b = heights[r0 * w + c0 + stride]!;
+        const c = heights[(r0 + stride) * w + c0]!;
+        const d = heights[(r0 + stride) * w + c0 + stride]!;
+        const coarse = fr >= fc ? a * (1 - fr) + c * (fr - fc) + d * fc : a * (1 - fc) + b * (fc - fr) + d * fr;
+        const gi = row * w + col;
+        const dh = coarse - heights[gi]!;
+        if (dh === 0) continue;
+        // Along the ellipsoid normal, which is how the height was applied.
+        const gx = positions[gi * 3]! + center[0];
+        const gy = positions[gi * 3 + 1]! + center[1];
+        const gz = positions[gi * 3 + 2]! + center[2];
+        const lat = Math.atan2(gz, Math.hypot(gx, gy) * (1 - WGS84_E2));
+        const lon = Math.atan2(gy, gx);
+        morphs[gi * 3] = dh * Math.cos(lat) * Math.cos(lon);
+        morphs[gi * 3 + 1] = dh * Math.cos(lat) * Math.sin(lon);
+        morphs[gi * 3 + 2] = dh * Math.sin(lat);
+      }
+    }
+  }
+
   // --- skirts --------------------------------------------------------------
   //
   // Depth is derived from the tile's own relief, not from its width.
@@ -216,6 +256,10 @@ export function buildTileMesh(req: BuildTileRequest, map: Heightmap | null): Bui
       normals[dst * 3] = normals[src * 3]!;
       normals[dst * 3 + 1] = normals[src * 3 + 1]!;
       normals[dst * 3 + 2] = normals[src * 3 + 2]!;
+      // And its morph, so skirt and edge move together.
+      morphs[dst * 3] = morphs[src * 3]!;
+      morphs[dst * 3 + 1] = morphs[src * 3 + 1]!;
+      morphs[dst * 3 + 2] = morphs[src * 3 + 2]!;
 
       uvs[dst * 2] = uvs[src * 2]!;
       uvs[dst * 2 + 1] = uvs[src * 2 + 1]!;
@@ -277,6 +321,7 @@ export function buildTileMesh(req: BuildTileRequest, map: Heightmap | null): Bui
     tile,
     positions,
     normals,
+    morphs,
     uvs,
     indices,
     heights,

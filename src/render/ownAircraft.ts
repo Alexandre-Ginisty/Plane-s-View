@@ -52,6 +52,7 @@ import {
 import { lightSeed, type AircraftLights } from './aircraftLights';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
+import { lightAnchorsFor, type LightAnchors } from './aircraft/lightAnchors';
 import { GROUND_CHECK_CEILING_M, GroundMemory, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 import { sunTransmittance, type SceneLight } from './sky/model';
@@ -162,6 +163,8 @@ export class OwnAircraft {
 
   /** Where its navigation lights, beacons and strobes are drawn, with the traffic's. */
   lights: AircraftLights | null = null;
+  /** Where the loaded model's lights are fitted; null until it has loaded. */
+  private anchors: LightAnchors | null = null;
   /** To put a downloaded airframe on the GPU before it replaces the stand-in (see `prewarm`). */
   warm: { renderer: WebGLRenderer; scene: Scene } | null = null;
 
@@ -291,6 +294,7 @@ export class OwnAircraft {
    */
   private applyLoaded(loaded: LoadedModel): void {
     this.clearMeshes();
+    this.anchors = lightAnchorsFor(loaded);
 
     const discs = new Map<string, Mesh>();
     const pending: { part: (typeof loaded.parts)[number]; mesh: Mesh }[] = [];
@@ -304,7 +308,8 @@ export class OwnAircraft {
         mesh.updateMatrix();
       }
 
-      if (part.role === 'gear') this.gearMeshes.push(mesh);
+      // A fixed undercarriage is part of the airframe: never retracted.
+      if (part.role === 'gear' && !loaded.fixedGear) this.gearMeshes.push(mesh);
       else if (part.role === 'disc') {
         mesh.renderOrder = 2;
         // `propdiscL` belongs to `propL`. Matching by name is what the source
@@ -379,7 +384,7 @@ export class OwnAircraft {
         _lightMatrix.makeBasis(frame.right, frame.forward, frame.up);
         _lightMatrix.setPosition(ecef[0] - this.origin.current[0], ecef[1] - this.origin.current[1], ecef[2] - this.origin.current[2]);
         _lightMatrix.scale(_scale.setScalar(shape.length));
-        this.lights.add(_lightMatrix, shape, lightSeed(sample.hex), sample.altFt < 10_000);
+        this.lights.add(_lightMatrix, shape, lightSeed(sample.hex), sample.altFt < 10_000, this.anchors);
       }
       return;
     }
@@ -413,7 +418,7 @@ export class OwnAircraft {
     this.group.matrixWorldNeedsUpdate = true;
     if (this.lights && this.shape) {
       _lightMatrix.copy(this.group.matrix).scale(_scale.setScalar(this.shape.length));
-      this.lights.add(_lightMatrix, this.shape, lightSeed(sample.hex), sample.altFt < 10_000);
+      this.lights.add(_lightMatrix, this.shape, lightSeed(sample.hex), sample.altFt < 10_000, this.anchors);
     }
 
     const regime = flightRegime(sample);
@@ -507,6 +512,7 @@ export class OwnAircraft {
    */
   private clearMeshes(): void {
     this.model.clear();
+    this.anchors = null;
     this.gearMeshes = [];
     this.spinners = [];
     for (const material of this.owned) material.dispose();

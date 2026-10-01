@@ -45,6 +45,7 @@ import { applyTransform, flatten, parseAc3d } from './ac3d.mjs';
 import { FGADDON, computeNormals, fetchCached, index, shrink } from './convert.mjs';
 import { bakeOcclusion } from './occlusion.mjs';
 import { decodeSgi, isSgi } from './sgi.mjs';
+import { packPvm } from './pvmpack.mjs';
 import { resolveModelTree } from './xmltree.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -867,7 +868,7 @@ async function convertCockpit(spec) {
   const head = Buffer.alloc(8);
   head.write('PVM1', 0, 'ascii');
   head.writeUInt32LE(json.length + pad, 4);
-  const blob = Buffer.concat([head, json, Buffer.alloc(pad), ...chunks]);
+  const blob = packPvm(Buffer.concat([head, json, Buffer.alloc(pad), ...chunks]));
   await writeFile(join(OUT, `${id}.pvm`), blob);
 
   /*

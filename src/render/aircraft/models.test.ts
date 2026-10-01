@@ -16,6 +16,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { parsePvm } from './pvm';
+
 const DIR = 'public/models';
 
 interface Part {
@@ -42,18 +44,17 @@ interface Header {
   parts: Part[];
 }
 
-/** Header JSON plus the byte offset its payload starts at. */
-function readModel(file: string): { header: Header; buffer: Buffer; payload: number } {
+/** Header JSON, and the positions of each part as the loader decodes them. */
+function readModel(file: string): { header: Header; positions: ArrayLike<number>[] } {
   const buffer = readFileSync(`${DIR}/${file}`);
   const headerLength = buffer.readUint32LE(4);
-  const headerStart = 8;
   const json = buffer
-    .subarray(headerStart, headerStart + headerLength)
+    .subarray(8, 8 + headerLength)
     .toString('utf8')
     .replace(/\0+$/, '');
-  // The header is padded to a four-byte boundary; the payload follows it.
-  const payload = headerStart + headerLength;
-  return { header: JSON.parse(json) as Header, buffer, payload };
+  const bytes = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  const positions = parsePvm(bytes, []).parts.map((p) => p.geometry.getAttribute('position').array);
+  return { header: JSON.parse(json) as Header, positions };
 }
 
 /** Extent of a set of parts along each axis, in normalised model units. */
@@ -64,17 +65,17 @@ function extentOf(
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
 
-  for (const part of model.header.parts) {
-    if (!keep(part)) continue;
-    const start = model.payload + part.position.offset;
-    for (let i = 0; i < part.position.count; i += 3) {
+  model.header.parts.forEach((part, p) => {
+    if (!keep(part)) return;
+    const pos = model.positions[p]!;
+    for (let i = 0; i < pos.length; i += 3) {
       for (let a = 0; a < 3; a++) {
-        const v = model.buffer.readFloatLE(start + (i + a) * 4) + (part.origin[a] ?? 0);
+        const v = pos[i + a]! + (part.origin[a] ?? 0);
         min[a] = Math.min(min[a]!, v);
         max[a] = Math.max(max[a]!, v);
       }
     }
-  }
+  });
 
   if (!Number.isFinite(min[0]!)) return null;
   return { x: max[0]! - min[0]!, y: max[1]! - min[1]!, z: max[2]! - min[2]! };

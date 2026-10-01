@@ -30,9 +30,6 @@
 
   let { onEnter, ready = false }: { onEnter: () => void; ready?: boolean } = $props();
 
-  /** The airframe on the front page. A widebody reads best at this size. */
-  const HERO_TYPE = 'B78X';
-
   /** Turns of heading across the whole page. Slightly over one, so it comes round. */
   const TOTAL_TURNS = 1.15;
 
@@ -87,7 +84,7 @@
   }
 
   onMount(() => {
-    hero = mountHeroScene(heroCanvas, HERO_TYPE, app.theme);
+    hero = mountHeroScene(heroCanvas, app.theme);
     webglFailed = hero === null;
 
     let queued = false;

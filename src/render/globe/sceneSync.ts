@@ -20,8 +20,13 @@
 import { Mesh, Scene, Vector3, Vector4 } from 'three';
 
 import type { FloatingOrigin } from '@/core/frame';
-import { TerrainMaterial } from '../terrainMaterial';
-import { RELIEF, TEXTURE_FADE_SEC, TILE_FADE_SEC } from './constants';
+import { GRAIN_PERIOD_M, TerrainMaterial } from '../terrainMaterial';
+import { MORPH_SEC, RELIEF, TEXTURE_FADE_SEC, TILE_FADE_SEC } from './constants';
+
+/** Web Mercator's world width, metres: what the grain is laid out in. */
+const MERCATOR_WORLD_M = 2 * Math.PI * 6_378_137;
+/** Pixels along an imagery tile's side. */
+const IMAGERY_PX = 256;
 import type { TileMap } from './eviction';
 import type { TileNode } from './tileNode';
 
@@ -86,6 +91,21 @@ export class SceneSynchroniser {
 
       material.setFade(node.opacity);
       material.setSun(this.sunDirection);
+
+      // Geomorph: eased, so the ground starts and stops moving gently. Like
+      // the fade, not reset when the tile leaves the set and comes back.
+      node.morph = Math.min(1, node.morph + dt / MORPH_SEC);
+      material.morph = node.morph * node.morph * (3 - 2 * node.morph);
+
+      // Grain: where the tile is, and how coarse the imagery on it is.
+      const tiles = 2 ** node.z;
+      const side = MERCATOR_WORLD_M / tiles;
+      const x = ((node.x % tiles) + tiles) % tiles;
+      const own = side / IMAGERY_PX;
+      // tmpUvA holds the scale into whichever texture is blended from.
+      const inheritedTexel = node.texture || ancestor ? side / (IMAGERY_PX * this.tmpUvA.z) : own;
+      const texel = node.texture ? inheritedTexel + (own - inheritedTexel) * node.textureBlend : inheritedTexel;
+      material.setDetail((x * side) % GRAIN_PERIOD_M, (node.y * side) % GRAIN_PERIOD_M, side, texel);
 
       // Deeper tiles draw after shallower ones, so a fading child always
       // composites over the parent it is replacing.

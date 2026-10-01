@@ -8,7 +8,7 @@
  * buffers and a material per part. The format is a JSON header naming byte
  * ranges, followed by those ranges.
  *
- *   'PVM1'            4 bytes
+ *   'PVM1' | 'PVM2'   4 bytes
  *   headerLength      uint32, little-endian, already padded to a multiple of 4
  *   header            UTF-8 JSON, then the padding
  *   payload           the buffers the header points into
@@ -16,6 +16,12 @@
  * Offsets in the header are relative to the start of the payload, and every
  * one is a multiple of four so the typed-array views can be taken over the
  * original buffer with no copying.
+ *
+ * `PVM2` (see `tools/fgmodel/pvmpack.mjs`) stores the same model compactly:
+ * positions as 16-bit integers over the part's box (`quant`), normals as
+ * 8-bit, indices as 16-bit where they fit. Vertex data is widened back to
+ * floats here, so nothing downstream sees the difference; only the download
+ * shrinks.
  */
 
 import {
@@ -33,6 +39,8 @@ type PartRole = 'hull' | 'gear' | 'prop' | 'mainRotor' | 'tailRotor' | 'disc';
 interface Range {
   offset: number;
   count: number;
+  /** Stored type, when not the float (or, for indices, uint32) default. */
+  type?: 'i16' | 'i8' | 'u16';
 }
 
 interface PartHeader {
@@ -54,6 +62,8 @@ interface PartHeader {
   repeat?: boolean;
   /** A cockpit only: baked openness per vertex, one byte each (255 = open). */
   ao?: Range;
+  /** `PVM2` positions: the box centre and half-extent they are quantised over. */
+  quant?: [number, number, number, number, number, number];
 }
 
 /** A cockpit display's face, about the eye: +X right, +Y up, −Z forward, metres, radians. */
@@ -84,6 +94,8 @@ interface ModelHeader {
   look?: { yaw: number; pitch: number } | null;
   /** A cabin drawn in other airframes too: its eye in each, by model id. */
   shellEyes?: Record<string, [number, number, number] | null>;
+  /** The undercarriage never retracts (a Cessna 172's): drawn down at every height. */
+  fixedGear?: boolean;
   parts: PartHeader[];
 }
 
@@ -111,10 +123,35 @@ export interface LoadedModel {
   displays: readonly DisplayFace[];
   look: { yaw: number; pitch: number } | null;
   shellEyes: Readonly<Record<string, readonly [number, number, number] | null>>;
+  /** The undercarriage never retracts: `gear` parts are drawn at every height. */
+  fixedGear: boolean;
   parts: ModelPart[];
 }
 
-const MAGIC = 'PVM1';
+const MAGICS = ['PVM1', 'PVM2'];
+
+/** Vertex data widened to floats, whatever it was stored as. */
+function floatsOf(buffer: ArrayBuffer, at: number, range: Range, quant?: readonly number[]): Float32Array {
+  if (range.type === 'i16') {
+    const q = new Int16Array(buffer, at, range.count);
+    const out = new Float32Array(range.count);
+    const k = quant ?? [0, 0, 0, 1, 1, 1];
+    const s0 = k[3]! / 32767, s1 = k[4]! / 32767, s2 = k[5]! / 32767;
+    for (let i = 0; i < out.length; i += 3) {
+      out[i] = k[0]! + q[i]! * s0;
+      out[i + 1] = k[1]! + q[i + 1]! * s1;
+      out[i + 2] = k[2]! + q[i + 2]! * s2;
+    }
+    return out;
+  }
+  if (range.type === 'i8') {
+    const q = new Int8Array(buffer, at, range.count);
+    const out = new Float32Array(range.count);
+    for (let i = 0; i < out.length; i++) out[i] = q[i]! / 127;
+    return out;
+  }
+  return new Float32Array(buffer, at, range.count);
+}
 
 /** Parse a `.pvm` payload into geometries and materials. */
 export function parsePvm(
@@ -123,7 +160,7 @@ export function parsePvm(
 ): LoadedModel {
   const bytes = new Uint8Array(buffer);
   const magic = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
-  if (magic !== MAGIC) throw new Error(`not a PlanesView model (magic ${JSON.stringify(magic)})`);
+  if (!MAGICS.includes(magic)) throw new Error(`not a PlanesView model (magic ${JSON.stringify(magic)})`);
 
   const view = new DataView(buffer);
   const headerLength = view.getUint32(4, true);
@@ -140,13 +177,17 @@ export function parsePvm(
   for (const part of header.parts) {
     const geometry = new BufferGeometry();
     const floats = (range: Range, itemSize: number): BufferAttribute =>
-      new BufferAttribute(new Float32Array(buffer, payload + range.offset, range.count), itemSize);
+      new BufferAttribute(floatsOf(buffer, payload + range.offset, range, part.quant), itemSize);
 
     geometry.setAttribute('position', floats(part.position, 3));
     geometry.setAttribute('normal', floats(part.normal, 3));
     geometry.setAttribute('uv', floats(part.uv, 2));
+    const at = payload + part.index.offset;
     geometry.setIndex(
-      new BufferAttribute(new Uint32Array(buffer, payload + part.index.offset, part.index.count), 1),
+      new BufferAttribute(
+        part.index.type === 'u16' ? new Uint16Array(buffer, at, part.index.count) : new Uint32Array(buffer, at, part.index.count),
+        1,
+      ),
     );
     geometry.computeBoundingSphere();
     if (part.ao) {
@@ -219,6 +260,7 @@ export function parsePvm(
     displays: header.displays ?? [],
     look: header.look ?? null,
     shellEyes: header.shellEyes ?? {},
+    fixedGear: header.fixedGear === true,
     parts,
   };
 }

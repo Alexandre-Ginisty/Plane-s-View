@@ -111,20 +111,35 @@ const VAPOUR_STYLE = {
  * right height and the right distance aft as well.
  */
 export function wingtipsOf(geometries: readonly BufferGeometry[]): [Vector3, Vector3] | null {
-  const left = new Vector3(Infinity, 0, 0);
-  const right = new Vector3(-Infinity, 0, 0);
-
+  let minX = Infinity;
+  let maxX = -Infinity;
   for (const geometry of geometries) {
     const position = geometry.getAttribute('position');
     if (!position) continue;
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i);
-      if (x < left.x) left.set(x, position.getY(i), position.getZ(i));
-      if (x > right.x) right.set(x, position.getY(i), position.getZ(i));
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
     }
   }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
 
-  return Number.isFinite(left.x) && Number.isFinite(right.x) ? [left, right] : null;
+  // Of the outermost skin, the trailing edge: the vortex leaves the tip from
+  // there, not from wherever the widest single vertex happens to sit.
+  const band = 0.01;
+  const left = new Vector3(minX, Infinity, 0);
+  const right = new Vector3(maxX, Infinity, 0);
+  for (const geometry of geometries) {
+    const position = geometry.getAttribute('position');
+    if (!position) continue;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const y = position.getY(i);
+      if (x <= minX + band && y < left.y) left.set(x, y, position.getZ(i));
+      if (x >= maxX - band && y < right.y) right.set(x, y, position.getZ(i));
+    }
+  }
+  return [left, right];
 }
 
 export interface Vapour {
@@ -136,11 +151,17 @@ export interface Vapour {
   dispose(): void;
 }
 
-/** Build the trails and add them to `parent`, which carries the aircraft. */
+/**
+ * Build the trails and add them to `parent`, which carries the aircraft.
+ * `follow` is the frame inside it that the model itself shakes in (the
+ * turbulence): the trail leaves the tip wherever the tip is, and lags further
+ * behind it the further back it is, as a wake does.
+ */
 export function createVapour(
   camera: Camera,
   parent: Object3D,
   theme: 'dark' | 'light',
+  follow: Object3D | null = null,
 ): Vapour {
   /*
    * The vapour trails.
@@ -198,8 +219,14 @@ export function createVapour(
   vapour.visible = false;
   parent.add(vapour);
 
+  /** The tips at rest, in the parent's frame, and where they are this frame. */
+  const restTips: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+  const tipShift: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+
   /** Lay the centreline out from a measured pair of wingtips. */
   function layOutVapour([left, right]: [Vector3, Vector3]): void {
+    restTips[0].copy(left);
+    restTips[1].copy(right);
     let cursor = 0;
     for (const tip of [left, right]) {
       // Inboard is towards the centreline, whichever side this tip is on.
@@ -240,11 +267,23 @@ export function createVapour(
     _eye.setFromMatrixPosition(camera.matrixWorld);
     vapour.worldToLocal(_eye);
 
+    // Where the shaking model has carried each tip this frame.
+    if (follow) {
+      follow.updateMatrix();
+      for (let side = 0; side < VAPOUR_SIDES; side++) {
+        tipShift[side]!.copy(restTips[side]!).applyMatrix4(follow.matrix).sub(restTips[side]!);
+      }
+    }
+
     let vertex = 0;
     for (let side = 0; side < VAPOUR_SIDES; side++) {
       for (let i = 0; i < VAPOUR.stations; i++) {
         const spine = (side * VAPOUR.stations + i) * 3;
         _point.set(vapourSpine[spine]!, vapourSpine[spine + 1]!, vapourSpine[spine + 2]!);
+        // Attached at the tip, lagging behind it with distance.
+        const lag = 1 - i / (VAPOUR.stations - 1);
+        const shift = tipShift[side]!;
+        const k = lag * lag;
 
         // Tangent from the neighbouring station; the last one reuses the
         // previous segment rather than reading past the end of the trail.
@@ -255,6 +294,9 @@ export function createVapour(
           vapourSpine[nextSpine + 1]!,
           vapourSpine[nextSpine + 2]!,
         );
+        const lagNext = 1 - nextIndex / (VAPOUR.stations - 1);
+        _next.addScaledVector(shift, lagNext * lagNext);
+        _point.addScaledVector(shift, k);
         _tangent.subVectors(_next, _point);
         if (i === VAPOUR.stations - 1) _tangent.negate();
 
@@ -268,7 +310,8 @@ export function createVapour(
 
         // The core takes a moment to condense, then dissolves. The travelling
         // ripple is what sells it as something being left behind.
-        const onset = Math.min(1, u / 0.02);
+        // A few metres behind the tip, not a fifth of the aircraft's length.
+        const onset = Math.min(1, u / 0.004);
         const decay = Math.pow(1 - u, 1.5);
         const ripple = 0.74 + 0.26 * Math.sin(u * 26 - t * 2.2 + side * 1.7);
         const core = onset * decay * ripple;

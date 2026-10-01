@@ -29,6 +29,8 @@
     verticalRate,
     wind,
   } from '../format';
+  import { registry } from '@/data/meta/registry';
+  import { typeName } from '@/data/meta/typeNames';
   import AircraftPhoto from './AircraftPhoto.svelte';
   import RouteStrip from './RouteStrip.svelte';
 
@@ -41,10 +43,20 @@
   const latest = $derived(sample.latest);
 
   const title = $derived(latest.callsign ?? meta?.registration ?? sample.hex.toUpperCase());
-  const subtitle = $derived(
-    [meta?.manufacturer, meta?.typeName ?? meta?.typeCode].filter(Boolean).join(' ') ||
-      (meta?.icaoTypeCode ?? ''),
-  );
+  // The designator: the registry's, else the one the feed sent with the
+  // position — there from the first frame, lookup or no lookup.
+  const typeCode = $derived(meta?.icaoTypeCode ?? registry.knownTypeCode(sample.hex));
+  // The model's name: the registry's own words where it has a record, else
+  // the local table, else the bare designator. Never nothing.
+  const subtitle = $derived(registryName(meta?.manufacturer, meta?.typeName) || typeName(typeCode) || typeCode || '');
+
+  /** "Boeing" + "BOEING 737-8200" is "Boeing 737-8200": the registry often repeats the maker in the type. */
+  function registryName(maker: string | null | undefined, type: string | null | undefined): string {
+    if (!type) return maker ?? '';
+    if (!maker) return type;
+    const t = type.trim();
+    return t.toLowerCase().startsWith(maker.toLowerCase()) ? `${maker}${t.slice(maker.length)}` : `${maker} ${t}`;
+  }
   const emergencyNote = $derived(latest.emergency ?? squawkMeaning(latest.squawk ?? null));
 
   /** Present, not merely defined — the feeds send explicit nulls. */
@@ -64,6 +76,11 @@
 
   {#if photo}
     <AircraftPhoto {photo} alt="{title} — {subtitle || 'aircraft'}" />
+  {:else}
+    <!-- The same frame either way, so the panel does not jump when the answer lands. -->
+    <div class="no-photo" role="img" aria-label={app.dossierLoading ? 'Looking up a photo' : 'No photo available'}>
+      <span>{app.dossierLoading ? 'Looking up a photo…' : 'No photo available for this aircraft'}</span>
+    </div>
   {/if}
 
   {#if route && (route.origin || route.destination)}
@@ -118,7 +135,7 @@
     {/if}
 
     <div><dt>Registration</dt><dd class="tabular">{meta?.registration ?? '—'}</dd></div>
-    <div><dt>Type</dt><dd class="tabular">{meta?.icaoTypeCode ?? latest.category ?? '—'}</dd></div>
+    <div><dt>Type</dt><dd class="tabular">{typeCode ?? latest.category ?? '—'}</dd></div>
     <div><dt>Squawk</dt><dd class="tabular">{latest.squawk ?? '—'}</dd></div>
     <div><dt>ICAO hex</dt><dd class="tabular">{sample.hex.toUpperCase()}</dd></div>
 
@@ -180,6 +197,20 @@
     font-size: 12px;
     font-weight: 600;
   }
+
+  .no-photo {
+    margin: 14px 0 0;
+    aspect-ratio: 3 / 2;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--border);
+    background: var(--bg-panel-solid);
+    color: var(--text-faint);
+    font-size: 11.5px;
+    text-align: center;
+    padding: 0 16px;
+  }
+  .dense .no-photo { aspect-ratio: 16 / 7; font-size: 10.5px; }
 
   .route-pending {
     margin: 14px 0 0;

@@ -214,7 +214,7 @@
     "b788": {
       "BOE": "b788-livery-BOE.webp",
       "COA": "b788-livery-COA.webp",
-      "NEUTRAL": "b788-livery-NEUTRAL.webp"
+      "NEUTRAL": "b788-livery-BOE.webp"
     },
     "b77w": {
       "AAL": "b77w-livery-AAL.webp",
@@ -284,7 +284,7 @@
       "LTU": "b752-livery-LTU.webp",
       "TWA": "b752-livery-TWA.webp",
       "UAL": "b752-livery-UAL.webp",
-      "NEUTRAL": "b752-livery-NEUTRAL.webp"
+      "NEUTRAL": "b752-livery-BOE.webp"
     },
     "e145": {
       "DAL": "e145-livery-DAL.webp",
@@ -329,7 +329,7 @@
     },
     "mrj9": {
       "ANA": "mrj9-livery-ANA.webp",
-      "NEUTRAL": "mrj9-livery-NEUTRAL.webp"
+      "NEUTRAL": "mrj9-4fb493af-MRJ.webp"
     },
     "a320": {
       "AAL": "a320-livery-AAL.webp",
@@ -398,7 +398,7 @@
       "DLH": "dc10-livery-DLH.webp",
       "JAS": "dc10-livery-JAS.webp",
       "NWA": "dc10-livery-NWA.webp",
-      "NEUTRAL": "dc10-livery-NEUTRAL.webp",
+      "NEUTRAL": "dc10-c036ee8b-White.webp",
       "FDX": "dc10-livery-FDX.webp"
     },
     "b463": {

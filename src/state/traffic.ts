@@ -16,7 +16,6 @@ import type { AircraftState, TrafficSnapshot } from '@/data/types';
 import { AircraftTrack, DROP_AFTER_SEC, type SampledAircraft } from './track';
 
 export type { SampledAircraft } from './track';
-export { AircraftTrack } from './track';
 
 export class TrafficStore {
   private readonly tracks = new Map<string, AircraftTrack>();

@@ -43,7 +43,7 @@ import {
 import { LUT_HALF, LUT_HEIGHT, LUT_WIDTH } from './model';
 
 /** vec4 slots in the shared uniform array. */
-const ATMO_VEC4S = 5;
+const ATMO_VEC4S = 6;
 
 /**
  * Layout (see `packAtmosphere` in `./index.ts`):
@@ -52,6 +52,7 @@ const ATMO_VEC4S = 5;
  * [2] Mie extinction, Mie scale height, horizon dip (rad), enabled flag
  * [3] sun direction (unit), sky exposure of the disc
  * [4] sunlight on surfaces rgb (tint x strength), skylight on surfaces
+ * [5] skylight tint rgb (luminance about 1: the colour shadows take), unused
  */
 export const atmoData = new Float32Array(ATMO_VEC4S * 4);
 

@@ -77,8 +77,10 @@ import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
 import { isSurfaceVehicle, shapeFor, type AirframeShape } from './aircraft';
 import { AircraftLights, lightSeed } from './aircraftLights';
+import { Contrails } from './contrails';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
+import { lightAnchorsFor, type LightAnchors } from './aircraft/lightAnchors';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 import type { OverlayFrame, OverlayPalette } from './overlay';
@@ -199,6 +201,8 @@ export interface DesignatorOptions {
 interface Detailed {
   group: Group;
   gear: Mesh[];
+  /** Where its lights are fitted, once loaded. */
+  anchors: LightAnchors | null;
   /** Type and operator it was built for; a change rebuilds it. */
   key: string;
   loaded: boolean;
@@ -230,13 +234,16 @@ class InstancedModel {
   readonly group = new Group();
   private readonly meshes: InstancedMesh[] = [];
   count = 0;
+  /** Where the stand-in's lights are fitted: they must sit on the airframe drawn. */
+  readonly anchors: LightAnchors | null;
 
   constructor(model: LoadedModel, capacity: number) {
+    this.anchors = lightAnchorsFor(model);
     for (const part of model.parts) {
       // The undercarriage is omitted rather than animated. Nothing within
       // twelve kilometres is on the ground unless you are too, and a shared
       // instance buffer cannot retract one aircraft's gear and not another's.
-      if (part.role === 'gear') continue;
+      if (part.role === 'gear' && !model.fixedGear) continue;
 
       const mesh = new InstancedMesh(part.geometry, part.material, capacity);
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -270,6 +277,8 @@ export class Traffic3D {
   readonly scene = new Scene();
   /** Every aircraft's lights, the one being ridden included (see `OwnAircraft`). */
   readonly lights = new AircraftLights();
+  /** The trails behind the cruising traffic, the one being ridden included. */
+  readonly contrails: Contrails;
   /** To put a detailed airframe on the GPU before it replaces the stand-in (see `prewarm`). */
   warm: { renderer: WebGLRenderer; scene: Scene } | null = null;
 
@@ -298,6 +307,8 @@ export class Traffic3D {
   constructor(private readonly origin: FloatingOrigin) {
     this.scene.matrixAutoUpdate = false;
     this.scene.add(this.lights.points);
+    this.contrails = new Contrails(origin);
+    this.scene.add(this.contrails.mesh);
 
     /*
      * Nothing is drawn until the airframes arrive, and that is deliberate.
@@ -428,7 +439,8 @@ export class Traffic3D {
       // else — no floor, no ramp, no chart symbol.
       this.dummy.scale.setScalar(airframe.size);
       this.dummy.updateMatrix();
-      this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT);
+      const landing = sample.altFt < LANDING_LIGHTS_FT;
+      const layer = airframe.rotor ? this.rotorcraft : this.fixedWing;
 
       const type = registry.knownTypeCode(sample.hex);
       if (type && detailRank < DETAIL_KEEP) {
@@ -437,6 +449,7 @@ export class Traffic3D {
         if (d) {
           wanted.add(sample.hex);
           if (d.loaded) {
+            this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), landing, d.anchors);
             d.group.visible = true;
             d.group.matrix.copy(this.dummy.matrix);
             d.group.matrixWorldNeedsUpdate = true;
@@ -447,8 +460,8 @@ export class Traffic3D {
         }
       }
 
-      const layer = airframe.rotor ? this.rotorcraft : this.fixedWing;
       if (!layer || layer.count >= MAX_INSTANCES) continue;
+      this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), landing, layer.anchors);
       layer.setMatrixAt(layer.count, this.dummy.matrix);
       layer.count++;
     }
@@ -491,13 +504,14 @@ export class Traffic3D {
     const group = new Group();
     group.matrixAutoUpdate = false;
     group.visible = false;
-    const entry: Detailed = { group, gear: [], key, loaded: false };
+    const entry: Detailed = { group, gear: [], anchors: null, key, loaded: false };
     this.detailed.set(sample.hex, entry);
     this.scene.add(group);
 
     void loadModelFor(type, operator, sample.latest.category).then(async (model) => {
       // Superseded, dropped, or disposed while downloading.
       if (!model || this.disposed || this.detailed.get(sample.hex) !== entry) return;
+      entry.anchors = lightAnchorsFor(model);
       for (const part of model.parts) {
         const mesh = new Mesh(part.geometry, part.material);
         mesh.matrixAutoUpdate = false;
@@ -509,7 +523,7 @@ export class Traffic3D {
         // Blur discs belong to a spinning propeller; these propellers do not
         // spin, and a translucent disc on a still blade reads as a smudge.
         if (part.role === 'disc') continue;
-        if (part.role === 'gear') entry.gear.push(mesh);
+        if (part.role === 'gear' && !model.fixedGear) entry.gear.push(mesh);
         group.add(mesh);
       }
       // The stand-in keeps the aircraft on screen until its own airframe is
@@ -837,7 +851,13 @@ export class Traffic3D {
     this.dummy.quaternion.setFromRotationMatrix(this.basis);
     this.dummy.scale.setScalar(airframe.size);
     this.dummy.updateMatrix();
-    this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT);
+    const layer = airframe.rotor ? this.rotorcraft : this.fixedWing;
+    this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT, layer?.anchors ?? null);
+  }
+
+  /** An aircraft's airframe, from its type where known. */
+  shapeOf(sample: SampledAircraft): AirframeShape {
+    return this.classify(sample).shape;
   }
 
   private classify(sample: SampledAircraft): Airframe {
@@ -873,5 +893,6 @@ export class Traffic3D {
     this.fixedWing?.dispose();
     this.rotorcraft?.dispose();
     this.lights.dispose();
+    this.contrails.dispose();
   }
 }

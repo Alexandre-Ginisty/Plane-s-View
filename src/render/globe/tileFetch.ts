@@ -122,6 +122,7 @@ export async function loadGeometry(node: TileNode, ctx: LoadContext): Promise<vo
         tile: { z: node.z, x: node.x, y: node.y },
         bytes,
         resolution,
+        parentResolution: node.z > 0 ? meshResolutionFor(node.z - 1) : 0,
         sampleRect: req.rect,
         exaggeration: ctx.options.exaggeration,
         skirtDepth: skirtFloorFor(node.spanMetres),
@@ -138,6 +139,7 @@ export async function loadGeometry(node: TileNode, ctx: LoadContext): Promise<vo
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(built.positions, 3));
     geometry.setAttribute('normal', new BufferAttribute(built.normals, 3));
+    geometry.setAttribute('morph', new BufferAttribute(built.morphs, 3));
     geometry.setAttribute('uv', new BufferAttribute(built.uvs, 2));
     geometry.setIndex(new BufferAttribute(built.indices, 1));
     geometry.boundingSphere = new Sphere(new Vector3(0, 0, 0), built.boundingRadius);

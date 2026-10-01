@@ -7,14 +7,19 @@
  * and a floating origin, and none of that has any business being alive to spin
  * a model on a front page.
  *
- * ## The model is the real one
+ * ## The model is the real one, and it arrives whole
  *
- * It starts as the procedural airframe, because that is synchronous and the
- * page must not open with a hole in it, and upgrades to the converted
- * FlightGear 787 the moment its megabyte lands — the same asset the app swaps
- * in when you step inside one. A separate hero model would be a promise the
- * product then has to keep, and the first time the two drifted apart the front
- * page would be advertising an aeroplane the app does not draw.
+ * One of the app's best airliners in an airline's colours, drawn at random
+ * each visit (`HERO_POOL`) — the same assets the app draws when you step
+ * inside one. A separate hero model would be a promise the product then has
+ * to keep. The wingtip vapour is measured off whichever airframe it is.
+ *
+ * It must not assemble itself in front of the visitor. Its download starts
+ * before the page is even mounted (`preloadHero`, called from `main.ts`, with
+ * the catalogue and the airframe preloaded from `index.html`), and the canvas
+ * stays transparent until the airframe, every texture and every shader are
+ * on the GPU; then the aeroplane fades in once, complete. A procedural
+ * stand-in is shown only if the download fails outright.
  *
  * ## Rotation is driven, not merely animated
  *
@@ -38,8 +43,44 @@ import {
 
 import { buildAircraftModel, disposeAircraftModel, type AircraftModel } from '@/render/aircraft';
 import { createVapour, wingtipsOf } from './vapour';
-import { loadModelFor } from '@/render/aircraft/library';
+import { loadModelById, loadModelFor } from '@/render/aircraft/library';
+import { prewarm } from '@/render/prewarm';
 import { HERO } from '@/ui/palette';
+
+/**
+ * The aeroplanes the front page may show, one drawn at random per visit.
+ *
+ * Only airframes and liveries that were looked at and hold up at this size:
+ * clean geometry with the undercarriage fully retracted, sharp paint. The 777
+ * is not here — its nose leg is welded into the same mesh as its engines and
+ * cannot be put away — nor the A340 and 757, whose gear and paint show seams.
+ */
+const HERO_POOL: readonly { type: string; model: string; operators: readonly string[] }[] = [
+  { type: 'A320', model: 'a320', operators: ['DLH', 'BAW', 'SWR', 'AUA', 'QTR', 'SAS'] },
+  { type: 'B788', model: 'b788', operators: ['BOE', 'COA'] },
+  { type: 'B763', model: 'b763', operators: ['KLM', 'AFR', 'DAL', 'JAL', 'ACA'] },
+];
+
+const drawn = HERO_POOL[Math.floor(Math.random() * HERO_POOL.length)]!;
+/** This visit's aeroplane: a type first, so no one type dominates, then a livery. */
+export const HERO_AIRCRAFT = {
+  type: drawn.type,
+  model: drawn.model,
+  operator: drawn.operators[Math.floor(Math.random() * drawn.operators.length)]!,
+};
+
+/**
+ * Start downloading the hero before anything is mounted. The airframe is
+ * asked for by file at once, alongside the catalogue rather than after it;
+ * the library shares both requests with the scene when it mounts.
+ */
+export function preloadHero(): void {
+  void loadModelById(HERO_AIRCRAFT.model);
+  void loadModelFor(HERO_AIRCRAFT.type, HERO_AIRCRAFT.operator);
+}
+
+/** How long the finished aeroplane takes to fade in, ms. */
+const REVEAL_MS = 700;
 
 /**
  * Light turbulence, instead of an idle spin.
@@ -138,11 +179,8 @@ export interface HeroScene {
  * the product: telling someone the app needs WebGL2 is useful, and a blank
  * rectangle where the aeroplane should be is not.
  */
-export function mountHeroScene(
-  canvas: HTMLCanvasElement,
-  typeCode: string,
-  theme: 'dark' | 'light',
-): HeroScene | null {
+export function mountHeroScene(canvas: HTMLCanvasElement, theme: 'dark' | 'light'): HeroScene | null {
+  const typeCode = HERO_AIRCRAFT.type;
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -186,31 +224,30 @@ export function mountHeroScene(
     return model;
   }
 
-  procedural = showProcedural();
+  // Hidden until the aeroplane is complete on the GPU (see the header).
+  canvas.style.opacity = '0';
+  canvas.style.transition = `opacity ${REVEAL_MS}ms ease-out`;
+  const reveal = (): void => {
+    canvas.style.opacity = '1';
+  };
 
-  /*
-   * The real airframe, when it arrives.
-   *
-   * Not awaited and not required. If the catalogue has no entry, the download
-   * fails, or the visitor leaves first, the procedural model is already on
-   * screen and simply stays — which is the same arrangement `OwnAircraft` uses,
-   * for the same reason.
-   */
   let disposed = false;
-  void loadModelFor(typeCode, null).then((loaded) => {
-    if (disposed || loaded === null) return;
-    clearYaw();
-    if (procedural) {
-      disposeAircraftModel(procedural);
-      procedural = null;
+  void loadModelFor(typeCode, HERO_AIRCRAFT.operator).then(async (loaded) => {
+    if (disposed) return;
+    if (loaded === null) {
+      // The download failed: a drawn airframe beats an empty page.
+      procedural = showProcedural();
+      reveal();
+      return;
     }
+    clearYaw();
     for (const part of loaded.parts) {
       // Gear up. The converted models carry the undercarriage in its extended
       // position, because that is how the source model is authored, and an
       // airliner at cruise with its wheels down is the first thing anyone who
       // likes aeroplanes notices. Nothing else here moves, so every remaining
       // part is drawn as one rigid body.
-      if (part.role === 'gear') continue;
+      if (part.role === 'gear' && !loaded.fixedGear) continue;
       const mesh = new Mesh(part.geometry, part.material);
       mesh.position.set(part.origin[0], part.origin[1], part.origin[2]);
       air.add(mesh);
@@ -222,6 +259,10 @@ export function mountHeroScene(
       loaded.parts.filter((part) => part.role !== 'gear').map((part) => part.geometry),
     );
     if (tips) vapour.attachTo(tips);
+
+    // Shaders compiled and textures uploaded before the first visible frame.
+    await prewarm(renderer, scene, scene);
+    if (!disposed) reveal();
   });
 
   /*
@@ -243,7 +284,7 @@ export function mountHeroScene(
   rim.position.set(1.8, -1.0, -1.3);
   scene.add(rim);
 
-  const vapour = createVapour(camera, attitude, theme);
+  const vapour = createVapour(camera, attitude, theme, air);
 
   const elevation = (CAMERA_ELEVATION_DEG * Math.PI) / 180;
   const azimuth = (CAMERA_AZIMUTH_DEG * Math.PI) / 180;
