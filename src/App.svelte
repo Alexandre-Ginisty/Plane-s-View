@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { ScreenAwake, titleFor, watchTab } from '@/app/tabs';
   import { Orchestrator } from '@/app/orchestrator';
   import { app } from '@/state/appStore.svelte';
   import { resolveTheme, watchSystemTheme } from '@/ui/theme';
@@ -111,6 +112,8 @@
    * a first-time user never discovering that the keyboard does anything.
    */
   function openLegendOnFirstVisit(): void {
+    // A touch screen has no keyboard to discover.
+    if (matchMedia('(hover: none) and (pointer: coarse)').matches) return;
     try {
       if (localStorage.getItem('planesview.seen') === '1') return;
       localStorage.setItem('planesview.seen', '1');
@@ -128,6 +131,22 @@
   app.theme = resolveTheme();
 
   onMount(() => watchSystemTheme((theme) => app.setTheme(theme, true)));
+
+  // The tab: its title, and staying quiet in the background. See `@/app/tabs`.
+  onMount(() => watchTab((hidden) => orchestrator?.setBackground(hidden)));
+  $effect(() => {
+    document.title = titleFor();
+  });
+  onMount(() => {
+    const awake = new ScreenAwake();
+    const stop = $effect.root(() => {
+      $effect(() => awake.set(app.view === 'pov'));
+    });
+    return () => {
+      stop();
+      awake.dispose();
+    };
+  });
 
   onMount(() => {
     const instance = new Orchestrator();

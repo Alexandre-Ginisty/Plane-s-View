@@ -1,7 +1,27 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath, URL } from 'node:url';
+import { readFileSync } from 'node:fs';
 import relayTargets from './relay-targets.json' with { type: 'json' };
+
+/**
+ * The site-wide headers from `public/_headers` (the `/*` block), so the
+ * preview server answers with the very policy Cloudflare will apply.
+ */
+function siteHeaders(drop: readonly string[] = []): Record<string, string> {
+  const lines = readFileSync(new URL('./public/_headers', import.meta.url), 'utf8').split('\n');
+  const headers: Record<string, string> = {};
+  let inBlock = false;
+  for (const line of lines) {
+    if (/^\S/.test(line)) inBlock = line.trim() === '/*';
+    else if (inBlock && line.trim()) {
+      const at = line.indexOf(':');
+      const name = line.slice(0, at).trim();
+      if (!drop.includes(name)) headers[name] = line.slice(at + 1).trim();
+    }
+  }
+  return headers;
+}
 
 /**
  * Dev-server relay.
@@ -101,5 +121,6 @@ export default defineConfig(({ mode }) => ({
   preview: {
     port: 4173,
     proxy: feedProxy,
+    headers: process.env['PREVIEW_BARE'] ? {} : siteHeaders(process.env['PREVIEW_DROP']?.split(',') ?? []),
   },
 }));

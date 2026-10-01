@@ -1,0 +1,16 @@
+{
+  "name": "PlanesView — live aircraft, from the cockpit",
+  "short_name": "PlanesView",
+  "description": "Live air traffic on a photoreal globe. Step inside any aircraft for the view from the flight deck.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#03060c",
+  "theme_color": "#03060c",
+  "categories": ["travel", "navigation", "entertainment"],
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

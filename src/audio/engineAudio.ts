@@ -137,6 +137,18 @@ export class EngineAudio {
     }, FADE * 4000);
   }
 
+  /**
+   * Silence for a tab in the background, without forgetting the setting: an
+   * engine droning from a tab the user cannot see is the first thing they
+   * close. Back in front, it picks up where it was.
+   */
+  setBackground(hidden: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    if (hidden) void ctx.suspend().catch(() => undefined);
+    else void ctx.resume().catch(() => undefined);
+  }
+
   setVolume(value: number): void {
     this.volume = Math.min(1, Math.max(0, value));
     if (this.enabled && this.ctx && this.master) {

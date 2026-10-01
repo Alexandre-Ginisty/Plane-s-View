@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="robots" content="noindex" />
+    <title>Lost contact — PlanesView</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!--
+      Served by the host for any path that does not exist, with a 404 status.
+      Self-contained on purpose — no script, no bundle, nothing fetched but the
+      favicon — so it shows even when the reason for the miss is a broken
+      deploy. Styles are inline, which the site's CSP allows; scripts are not,
+      and this page needs none: the radar is CSS.
+    -->
+    <style>
+      :root {
+        --bg: #03060c;
+        --panel: #07101c;
+        --text: #e6edf6;
+        --dim: #8ea0b7;
+        --faint: #4a5b72;
+        --accent: #7fd6ff;
+        --warm: #ffb02e;
+        --grid: rgba(127, 214, 255, 0.14);
+        --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2f7;
+          --panel: #ffffff;
+          --text: #0b1726;
+          --dim: #4c5d73;
+          --faint: #9aa8ba;
+          --accent: #0a7fb5;
+          --warm: #c26a00;
+          --grid: rgba(10, 127, 181, 0.16);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100svh;
+        padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+        background:
+          radial-gradient(ellipse at 50% 35%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+          var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 28px;
+        width: min(560px, 100%);
+        text-align: center;
+      }
+
+      /* The scope: range rings, a sweep, and one return that keeps fading. */
+      .scope {
+        position: relative;
+        width: min(300px, 72vw, 42svh);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        background:
+          radial-gradient(circle, transparent 0 24.5%, var(--grid) 25% 25.4%, transparent 25.8% 49.5%, var(--grid) 50% 50.4%, transparent 50.8% 74.5%, var(--grid) 75% 75.4%, transparent 75.8%),
+          linear-gradient(var(--grid), var(--grid)) center / 1px 100% no-repeat,
+          linear-gradient(var(--grid), var(--grid)) center / 100% 1px no-repeat,
+          var(--panel);
+        box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 14%, transparent), inset 0 0 40px rgba(0, 0, 0, 0.35);
+        overflow: hidden;
+      }
+      .sweep {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        /* Bright on the leading edge, fading behind it as it turns clockwise. */
+        background: conic-gradient(from 0deg, transparent 0 82%, color-mix(in srgb, var(--accent) 55%, transparent) 100%);
+        animation: sweep 4s linear infinite;
+      }
+      .blip {
+        position: absolute;
+        top: 30%;
+        left: 64%;
+        width: 9px;
+        height: 9px;
+        margin: -4.5px;
+        border-radius: 50%;
+        background: var(--warm);
+        box-shadow: 0 0 12px var(--warm);
+        /* Lit as the sweep passes (it starts pointing up, so about 1/8 turn in). */
+        animation: blip 4s linear infinite;
+      }
+      .tag {
+        position: absolute;
+        top: calc(30% - 26px);
+        left: calc(64% + 10px);
+        font: 600 10px/1.3 var(--mono);
+        letter-spacing: 0.08em;
+        color: var(--warm);
+        text-align: left;
+        animation: blip 4s linear infinite;
+      }
+      .centre {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 6px;
+        height: 6px;
+        margin: -3px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      @keyframes sweep { to { transform: rotate(360deg); } }
+      @keyframes blip {
+        0%, 9% { opacity: 0.08; }
+        12% { opacity: 1; }
+        60% { opacity: 0.35; }
+        100% { opacity: 0.08; }
+      }
+
+      .code {
+        margin: 0;
+        font: 700 12px/1 var(--mono);
+        letter-spacing: 0.34em;
+        color: var(--warm);
+      }
+      h1 {
+        margin: 10px 0 0;
+        font-size: clamp(30px, 7vw, 46px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.05;
+      }
+      p.lead {
+        margin: 12px auto 0;
+        max-width: 42ch;
+        color: var(--dim);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 18px;
+        font: 600 12px/1 var(--mono);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: var(--bg);
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        transition: filter 0.2s, transform 0.2s;
+      }
+      a.button:hover { filter: brightness(1.12); transform: translateY(-1px); }
+      a.button:focus-visible { outline: 2px solid var(--warm); outline-offset: 3px; }
+      .readout {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
+        gap: 4px 22px;
+        margin: 0;
+        font: 500 11px/1.4 var(--mono);
+        letter-spacing: 0.08em;
+        color: var(--faint);
+        text-transform: uppercase;
+      }
+      .readout dd { margin: 0; color: var(--dim); }
+      @media (prefers-reduced-motion: reduce) {
+        .sweep, .blip, .tag { animation: none; }
+        .blip, .tag { opacity: 0.9; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="scope" aria-hidden="true">
+        <div class="sweep"></div>
+        <div class="centre"></div>
+        <div class="blip"></div>
+        <div class="tag">SQK 7600<br />NORDO</div>
+      </div>
+
+      <div>
+        <p class="code">ERROR 404</p>
+        <h1>Lost contact</h1>
+        <p class="lead">
+          This page is squawking 7600: no radio, no flight plan, and nothing
+          on our scope at this address. The live traffic is still flying,
+          back on the map.
+        </p>
+      </div>
+
+      <div class="actions">
+        <a class="button" href="/">← Back to the map</a>
+      </div>
+
+      <dl class="readout" aria-label="Status">
+        <dt>Status</dt><dt>Squawk</dt><dt>Last seen</dt>
+        <dd>Not found</dd><dd>7600</dd><dd>Never</dd>
+      </dl>
+    </main>
+  </body>
+</html>

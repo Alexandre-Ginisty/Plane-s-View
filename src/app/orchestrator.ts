@@ -1041,6 +1041,11 @@ export class Orchestrator {
    * simply refuse — not an error worth a toast. A notice explaining autoplay
    * policy would be the app blaming the browser at the user.
    */
+  /** The tab went to the background or came back. See `./tabs`. */
+  setBackground(hidden: boolean): void {
+    this.audio.setBackground(hidden);
+  }
+
   async setSound(on: boolean): Promise<void> {
     if (on) {
       app.sound = await this.audio.enable();

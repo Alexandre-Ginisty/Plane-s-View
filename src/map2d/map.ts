@@ -21,10 +21,24 @@ import {
   type LngLatBoundsLike,
   type MapLayerMouseEvent,
   type MapMouseEvent,
+  setWorkerUrl,
 } from 'maplibre-gl';
 // MapLibre ships its own stylesheet; without it the controls and the
 // attribution box are unstyled and overlap the map.
 import 'maplibre-gl/dist/maplibre-gl.css';
+/*
+ * MapLibre's worker, bundled by Vite with the chunk it imports.
+ *
+ * Left to itself MapLibre looks for `maplibre-gl-worker.mjs` beside its own
+ * module — which in a production build is `assets/`, where no such file is
+ * ever emitted. The request fell through to the SPA's index page, the worker
+ * died on HTML, and every GeoJSON layer stayed empty: in production the map
+ * showed imagery and place names and not a single aircraft, while the dev
+ * server, which serves `node_modules` as is, was fine.
+ */
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+
+setWorkerUrl(maplibreWorkerUrl);
 import type { FeatureCollection, LineString, Point } from 'geojson';
 
 import { DEFAULT_IMAGERY, type ImagerySource } from '@/tiles/sources';
@@ -233,11 +247,41 @@ export class SelectionMap {
   private attachInteractions(map: MapLibreMap): void {
     map.on('moveend', () => this.emitMove());
     map.on('click', (e: MapMouseEvent) => this.handleClick(e));
-    // Right-click drops a pin whatever mode the map is in.
+    // Right-click drops a pin whatever mode the map is in. Android turns a
+    // long press into this event; iOS does not, hence the timer below.
+    let lastPinAt = 0;
     map.on('contextmenu', (e: MapMouseEvent) => {
       e.preventDefault();
+      if (performance.now() - lastPinAt < 800) return;
+      lastPinAt = performance.now();
       this.placePin(e.lngLat.lat, e.lngLat.lng);
     });
+
+    // A long press with one still finger is the touch screen's right-click.
+    let press: ReturnType<typeof setTimeout> | undefined;
+    let pressAt: { x: number; y: number } | null = null;
+    const cancel = (): void => {
+      clearTimeout(press);
+      pressAt = null;
+    };
+    map.on('touchstart', (e) => {
+      cancel();
+      if (e.originalEvent.touches.length !== 1) return;
+      pressAt = { x: e.point.x, y: e.point.y };
+      const { lat, lng } = e.lngLat;
+      press = setTimeout(() => {
+        if (!pressAt || performance.now() - lastPinAt < 800) return;
+        lastPinAt = performance.now();
+        this.placePin(lat, lng);
+        navigator.vibrate?.(12);
+      }, 600);
+    });
+    map.on('touchmove', (e) => {
+      if (pressAt && Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 8) cancel();
+    });
+    map.on('touchend', cancel);
+    map.on('touchcancel', cancel);
+    map.on('movestart', cancel);
 
     map.on('mousemove', 'aircraft-layer', (e: MapLayerMouseEvent) => {
       if (this.pinMode) return;

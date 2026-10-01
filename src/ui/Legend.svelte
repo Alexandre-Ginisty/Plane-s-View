@@ -47,6 +47,18 @@
     { key: 'D', does: 'Show the performance and connection counters' },
     { key: 'H', does: 'Show or hide this panel' },
   ];
+
+  /* The same controls for a finger: every key above has a button somewhere. */
+  const TOUCH: readonly { key: string; does: string }[] = [
+    { key: 'Tap', does: 'Select an aircraft on the map, then “Step inside”' },
+    { key: 'Drag', does: 'Look around from inside or outside the aircraft' },
+    { key: 'Pinch', does: 'Zoom — nearer or further outside, a longer lens in the cockpit' },
+    { key: 'Tap', does: 'A framed aircraft in 3D: fly across to it' },
+    { key: 'Long press', does: 'Drop a pin on the map' },
+    { key: '←', does: 'Back to the map' },
+  ];
+  const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const controls = touch ? TOUCH : KEYS;
 </script>
 
 {#if app.showLegend}
@@ -75,7 +87,7 @@
     <section>
       <p class="label">Controls</p>
       <dl class="keys">
-        {#each KEYS as entry, i (i)}
+        {#each controls as entry, i (i)}
           <div><dt>{entry.key}</dt><dd>{entry.does}</dd></div>
         {/each}
       </dl>

@@ -7,21 +7,33 @@
 # injected scripts, clickjacking frames, content sniffed into the wrong type,
 # and the referrer leaking where people came from.
 #
-# The Content-Security-Policy is an allowlist of every origin this app is
-# supposed to talk to. Anything else — an injected analytics tag, a script
+# The Content-Security-Policy starts from nothing (`default-src 'none'`) and
+# allows, per kind of request, every origin this app is supposed to talk to. Anything else — an injected analytics tag, a script
 # smuggled through a dependency, an exfiltration beacon — is refused by the
 # browser rather than merely discouraged. Keeping it tight is only possible
-# because the app has no third-party scripts at all.
+# because the app has no third-party scripts at all — and no inline ones, no
+# eval and no WebAssembly, so `script-src` is `'self'` and nothing else.
+#
+# No Cross-Origin-Embedder-Policy. `credentialless` was tried and measured:
+# the map still worked, but the 3D terrain stopped streaming entirely. What it
+# buys — `crossOriginIsolated`, for SharedArrayBuffer and precise timers — is
+# nothing this app uses, while the opener policy above already denies other
+# windows a handle on this one, and browsers isolate sites by process anyway.
+#
+# The same headers are applied by `vite preview` (see `vite.config.ts`), so
+# a policy that would break the deployed site breaks the local preview first.
 
 /*
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://t.plnspttrs.net https://api.planespotters.net; connect-src 'self' https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://api.adsbdb.com https://api.open-meteo.com; font-src 'self'; manifest-src 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://t.plnspttrs.net https://cdn.planespotters.net https://api.planespotters.net https://airport-data.com https://*.airport-data.com https://gibs.earthdata.nasa.gov; connect-src 'self' https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://api.adsbdb.com https://api.open-meteo.com https://gibs.earthdata.nasa.gov; font-src 'self'; manifest-src 'self'; media-src 'none'; frame-src 'none'; child-src 'none'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
-  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  Permissions-Policy: geolocation=(self), fullscreen=(self), camera=(), microphone=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), xr-spatial-tracking=(), accelerometer=(), gyroscope=(), magnetometer=(), ambient-light-sensor=(), encrypted-media=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(self), idle-detection=(), browsing-topics=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Origin-Agent-Cluster: ?1
+  X-Permitted-Cross-Domain-Policies: none
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
 
 # Hashed filenames, so these can never go stale.
 /assets/*
@@ -30,6 +42,11 @@
 # Natural Earth borders and place names: static, replaced only by a deploy.
 /map/*
   Cache-Control: public, max-age=604800
+
+# The manifest, so a home-screen install picks up a new icon within a day.
+/site.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=86400
 
 # Converted airframes: large, and replaced only by a new deploy.
 /models/*
