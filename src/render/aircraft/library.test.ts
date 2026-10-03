@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { operatorOf } from './library';
+import { operatorOf, resolveModelId, type Catalogue } from './library';
 
 describe('operatorOf', () => {
   it('reads the airline off a commercial callsign', () => {
@@ -126,5 +126,27 @@ describe('the catalogue the converter writes', () => {
         expect(code).toMatch(/^([A-Z]{3}|NEUTRAL)$/);
       }
     }
+  });
+});
+
+describe('the stand-in for a type with no model', () => {
+  const index = JSON.parse(require('node:fs').readFileSync('public/models/index.json', 'utf8')) as Catalogue;
+
+  it('keeps an exact model when there is one', () => {
+    expect(resolveModelId(index, 'A320', null)).toBe('a320');
+  });
+
+  it('draws a widebody as a widebody, not as the shared narrowbody', () => {
+    const wide = resolveModelId(index, 'A332', null)!;
+    expect(['b763', 'a306', 'a346', 'b77w', 'b788', 'dc10', 'md11']).toContain(wide);
+  });
+
+  it('never hands an airliner a fighter, nor a helicopter an aeroplane', () => {
+    for (const code of ['A332', 'E190', 'SB20', 'PA28', 'AS50', 'GLF5']) {
+      const id = resolveModelId(index, code, null);
+      expect(id).not.toBeNull();
+      expect(['a10', 'f16', 'f4u', 'mig29', 'su25']).not.toContain(id);
+    }
+    expect(['ec35', 'bo05', 's76c', 'as32']).toContain(resolveModelId(index, 'AS50', null));
   });
 });

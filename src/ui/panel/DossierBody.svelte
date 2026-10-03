@@ -31,6 +31,7 @@
   } from '../format';
   import { registry } from '@/data/meta/registry';
   import { typeName } from '@/data/meta/typeNames';
+  import { routelessReason } from '@/data/meta/callsign';
   import AircraftPhoto from './AircraftPhoto.svelte';
   import RouteStrip from './RouteStrip.svelte';
 
@@ -99,7 +100,14 @@
       {#if app.dossierLoading}
         Looking up the route…
       {:else if latest.callsign}
-        No filed route for {latest.callsign}
+        No published route for {latest.callsign}
+        <span class="why">
+          {#if routelessReason(latest.callsign, meta?.registration ?? null) === 'registration'}
+            A private flight under its registration: there is no timetable to look up.
+          {:else}
+            Military, charter and business flights file their routes with air traffic control, not publicly.
+          {/if}
+        </span>
       {:else}
         No callsign broadcast — nothing to look up
       {/if}
@@ -212,6 +220,12 @@
   }
   .dense .no-photo { aspect-ratio: 16 / 7; font-size: 10.5px; }
 
+  .route-pending .why {
+    display: block;
+    margin-top: 4px;
+    font-size: 10.5px;
+    line-height: 1.4;
+  }
   .route-pending {
     margin: 14px 0 0;
     padding-top: 14px;

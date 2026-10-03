@@ -18,7 +18,7 @@
  *    tile is replaced by its four z14 children, with every building, pitched
  *    roofs and facades.
  *  - **Far** — out to fifteen kilometres and more — the z13 tile itself,
- *    keeping only what stands above 10 m: the skyline, which is what the
+ *    keeping only what stands above 7 m: the skyline, which is what the
  *    eye finds on the horizon. A bungalow at twelve kilometres is a pixel.
  *
  * A z13 tile stays drawn until all four of its children are ready, so the
@@ -49,16 +49,14 @@ import { haversineMetres } from '@/core/math/geo/sphere';
 import type { Vec3 } from '@/core/math/geo';
 import type { BuildingRequest, BuildingResponse } from '@/workers/buildings.worker';
 import type { BuiltBuildings } from '@/workers/buildings/extrude';
-import { BuildingMaterial, setBuildingSun } from './material';
-
-export { setBuildingSun };
+import { BuildingMaterial } from './material';
 
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
 const TILE_HOST = 'tiles.openfreemap.org';
 
 const WALK_ZOOM = 13;
 /** Far-ring buildings lower than this are left out. */
-const FAR_MIN_HEIGHT_M = 10;
+const FAR_MIN_HEIGHT_M = 7;
 /** Above this, no new tiles are asked for: from cruise a city is its imagery. */
 const MAX_AGL_M = 9000;
 /** Above this, what is loaded is not drawn either. */
@@ -160,7 +158,7 @@ export class Buildings {
     }
 
     const scale = this.coarse ? 0.6 : 1;
-    const near = Math.min(5000, Math.max(1800, 1800 + agl * 0.8)) * scale;
+    const near = Math.min(6000, Math.max(2600, 2600 + agl * 0.8)) * scale;
     const far = Math.min(18_000, Math.max(7000, 5000 + agl * 2.5)) * (this.coarse ? 0.5 : 1);
 
     // Walk the z13 tiles within the far radius.

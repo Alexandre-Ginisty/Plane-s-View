@@ -193,14 +193,6 @@ class AppStore {
   cameraMode = $state<CameraMode>('cockpit');
   /** The 3D cockpit (with its own instruments) is on screen. */
   cockpit3d = $state(false);
-  /**
-   * Compass bearing the camera is looking along, degrees.
-   *
-   * The view's, not the aircraft's: free look turns the head without turning
-   * the aeroplane, so a strip fed the heading describes a window the user is
-   * not looking through.
-   */
-  viewHeadingDeg = $state(0);
   imageryId = $state('esri');
   /** Borders and place names drawn over the selection map. */
   showLabels = $state(true);

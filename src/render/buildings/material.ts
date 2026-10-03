@@ -104,12 +104,42 @@ const fragmentShader = /* glsl */ `
       vec2 open = smoothstep(lo - aa, lo + aa, f) * (1.0 - smoothstep(hi - aa, hi + aa, f));
       float win = open.x * open.y;
       // No windows in the foundation, nor on the lowest metre and a half.
-      win *= step(1.5, v) * step(v, height - 0.6);
+      float live = step(1.5, v) * step(v, height - 0.6);
+      win *= live;
       // Far off a window is a pixel: fade to its average coverage.
       float coverage = (hi.x - lo.x) * (hi.y - lo.y);
       float far = smoothstep(0.35, 0.9, max(aa.x, aa.y));
       win = mix(win, coverage * step(1.5, v), far);
       glass = win;
+
+      // Frame: the pane is inset, the rim between pane and wall is the frame.
+      vec2 inset = tower ? vec2(0.02, 0.03) : vec2(0.06, 0.07);
+      vec2 paneOpen = smoothstep(lo + inset - aa, lo + inset + aa, f) * (1.0 - smoothstep(hi - inset - aa, hi - inset + aa, f));
+      float pane = paneOpen.x * paneOpen.y * live;
+      glass = mix(pane, glass, far);
+      float rim = max(win - glass, 0.0);
+      albedo = mix(albedo, tower ? vec3(0.2, 0.22, 0.25) : vec3(0.86, 0.85, 0.82) * 0.8, rim * 0.9);
+      // Sill under each window, slab line at each floor.
+      float sill = smoothstep(lo.y - 0.1 - aa.y, lo.y - 0.1, f.y) * (1.0 - smoothstep(lo.y - 0.02, lo.y, f.y)) * (1.0 - far) * live;
+      albedo *= 1.0 + 0.16 * sill * (tower ? 0.0 : 1.0);
+      albedo *= 1.0 - 0.14 * (1.0 - smoothstep(0.0, 0.05 + aa.y, f.y)) * (1.0 - far) * step(1.5, v);
+
+      // Material of the wall itself: grain; courses of brick where it is brick.
+      vec2 gcell = floor(vec2(u, v) * vec2(3.0, 3.0));
+      float grain = bHash(gcell + seed * 91.0);
+      float grainFade = 1.0 - smoothstep(0.3, 0.9, max(fwidth(u), fwidth(v)) * 3.0);
+      albedo *= 1.0 + (grain - 0.5) * 0.14 * grainFade;
+      bool brick = vColor.r > vColor.g * 1.14 && vColor.r > vColor.b * 1.3;
+      if (brick) {
+        float row = v / 0.14;
+        float col = u / 0.42 + 0.5 * mod(floor(row), 2.0);
+        vec2 bf = fract(vec2(col, row));
+        float bw = max(fwidth(row), fwidth(col)) * 1.5;
+        float mortar = 1.0 - smoothstep(0.0, 0.08 + bw, bf.y) * smoothstep(0.0, 0.03 + bw, bf.x);
+        float brickFade = 1.0 - smoothstep(0.25, 0.8, bw);
+        albedo = mix(albedo, albedo * 0.55 + 0.18, mortar * brickFade * 0.7);
+        albedo *= 1.0 + (bHash(floor(vec2(col, row)) + seed * 33.0) - 0.5) * 0.18 * brickFade;
+      }
 
       // Lit windows at night: a share per building, warm, a few changing.
       float night = atmo[5].w;
@@ -125,6 +155,25 @@ const fragmentShader = /* glsl */ `
       // Darker towards the street.
       albedo *= mix(0.62, 1.0, smoothstep(-1.0, 7.0, v));
       if (tower) albedo = mix(albedo, vec3(0.55, 0.62, 0.68), 0.5);
+    } else if (upness > 0.985) {
+      // Flat roof: gravel and membrane, blotched; a darker rim at the parapet is
+      // left to the ambient term. u, v are its ground position.
+      vec2 g = vec2(vFacade.x, vFacade.y);
+      float fine = bHash(floor(g * 2.5));
+      float blotch = bHash(floor(g * 0.35) + vFacade.w * 71.0);
+      float fade = 1.0 - smoothstep(0.3, 0.9, max(fwidth(g.x), fwidth(g.y)) * 2.5);
+      albedo *= 1.0 + ((fine - 0.5) * 0.2 + (blotch - 0.5) * 0.18) * fade + (blotch - 0.5) * 0.1 * (1.0 - fade);
+    } else {
+      // Pitched roof: courses of tiles, each its own tone, offset row to row.
+      float row = vFacade.y / 0.3;
+      float col = vFacade.x / 0.26 + 0.5 * mod(floor(row), 2.0);
+      vec2 tf = fract(vec2(col, row));
+      float tw = max(fwidth(row), fwidth(col)) * 1.5;
+      float tfade = 1.0 - smoothstep(0.25, 0.8, tw);
+      float shadow = 1.0 - smoothstep(0.0, 0.14 + tw, tf.y);
+      float seam = 1.0 - smoothstep(0.0, 0.05 + tw, tf.x);
+      float tone = bHash(floor(vec2(col, row)) + vFacade.w * 29.0);
+      albedo *= (1.0 - 0.3 * shadow - 0.1 * seam + (tone - 0.5) * 0.16) * tfade + (1.0 - tfade) * 0.92;
     }
 
     vec3 sun = normalize(sunDirection);

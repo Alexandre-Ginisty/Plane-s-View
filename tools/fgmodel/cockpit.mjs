@@ -880,7 +880,13 @@ async function convertCockpit(spec) {
     const row =
       `| \`${id}\` | ${spec.types.join(', ')} (${spec.label ?? 'cockpit view'}) | [Aircraft/${posix.dirname(spec.root)}](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/${posix.dirname(spec.root)}/)` +
       ` and FGData \`Aircraft/Instruments-3d\` | GPL-2.0 | ${notices.map((n) => `\`${n}\``).join(', ')} |`;
-    const lines = (await readFile(creditsPath, 'utf8')).split('\n').filter((l) => !l.startsWith(`| \`${id}\``));
+    // This row replaced, and rows for files no longer shipped (an interior
+    // dropped or renamed) dropped: a credit for nothing is noise.
+    const shipped = (l) => {
+      const m = /^\| `([^`]+)`/.exec(l);
+      return !m || existsSync(join(OUT, `${m[1]}.pvm`));
+    };
+    const lines = (await readFile(creditsPath, 'utf8')).split('\n').filter((l) => !l.startsWith(`| \`${id}\``) && shipped(l));
     const lastRow = lines.findLastIndex((l) => l.startsWith('| `'));
     lines.splice(lastRow + 1, 0, row);
     await writeFile(creditsPath, lines.join('\n'));

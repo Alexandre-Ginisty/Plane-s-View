@@ -26,7 +26,6 @@ import { Quaternion, Vector3 } from 'three';
 import {
   DEG2RAD,
   FEET_TO_METRES,
-  RAD2DEG,
   enuBasis,
   geodeticToEcef,
   type Vec3,
@@ -116,20 +115,4 @@ export function aircraftFrame(sample: SampledAircraft, altOverrideM?: number): A
   const right = _right.clone().applyQuaternion(_quat).normalize();
 
   return { position, forward, right, up, localUp, east: _east.clone(), north: _north.clone() };
-}
-
-/**
- * The compass bearing a direction is pointing, degrees clockwise from north.
- *
- * Measured against the local horizontal plane, which is the only place a
- * bearing means anything: a view angled at the ground still points somewhere
- * on the compass, and that somewhere is its horizontal component. A view
- * looking straight down has none, and the caller's previous answer is the only
- * honest thing to show — hence `fallbackDeg`.
- */
-export function bearingOf(direction: Vector3, frame: AircraftFrame, fallbackDeg: number): number {
-  const north = direction.dot(frame.north);
-  const east = direction.dot(frame.east);
-  if (Math.hypot(north, east) < 1e-4) return fallbackDeg;
-  return ((Math.atan2(east, north) * RAD2DEG) % 360 + 360) % 360;
 }

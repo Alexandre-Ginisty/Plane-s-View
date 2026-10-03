@@ -143,6 +143,7 @@
             {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a><br />{/if}
             <a href={TERRARIUM.attributionUrl} target="_blank" rel="noopener noreferrer">{TERRARIUM.attribution}</a><br />
             Buildings © OpenStreetMap contributors (ODbL), OpenMapTiles, OpenFreeMap<br />
+            Night lights NASA Black Marble (public domain)<br />
             Places © Natural Earth, GeoNames (CC BY 4.0) · Aircraft data adsbdb · Photos Planespotters · Weather Open-Meteo
           </p>
         </section>

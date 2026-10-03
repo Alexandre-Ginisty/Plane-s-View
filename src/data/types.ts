@@ -196,15 +196,6 @@ export interface CurrentWeather {
   pressureMslHpa: number | null;
   visibilityM: number | null;
   isDay: boolean | null;
-  /** The air aloft, highest pressure (lowest level) first; null when not reported. */
-  aloft: AloftLevel[] | null;
   observedAt: number;
 }
 
-/** One pressure level of the weather model. */
-export interface AloftLevel {
-  hPa: number;
-  tempC: number;
-  /** Relative humidity over water, percent — what the models report. */
-  rhPct: number;
-}

@@ -53,6 +53,7 @@
 import { FrontSide, ShaderMaterial, Texture, Vector3, Vector4 } from 'three';
 import { ATMO_GLSL, ATMO_UNIFORMS } from './sky/shader';
 import { CLOUD_SHADOW_GLSL, cloudNoise, cloudShadowData } from './clouds';
+import { NIGHT_GLSL, attachNightLights } from './nightLights';
 
 /** The grain repeats every this many Web Mercator metres: a multiple of every octave (2, 8 and 32 m). */
 export const GRAIN_PERIOD_M = 4096;
@@ -98,6 +99,7 @@ const fragmentShader = /* glsl */ `
 
   uniform vec3 sunDirection;
   ${ATMO_GLSL}
+  ${NIGHT_GLSL}
   ${CLOUD_SHADOW_GLSL}
   uniform float ambient;
   // xy: the tile's north-west corner in Web Mercator metres, wrapped to the
@@ -195,6 +197,9 @@ const fragmentShader = /* glsl */ `
       lit += atmo[4].rgb * glint * water * cloudSunlight(vWorldPosition, normalize(sunDirection));
     }
 
+    // City lights at night: see @/render/nightLights.
+    lit += cityLights(vWorldPosition, q, footprint, albedo);
+
     vec3 finalColor = atmoApply(lit, vWorldPosition);
 
     gl_FragColor = vec4(finalColor, tileOpacity);
@@ -238,6 +243,7 @@ export class TerrainMaterial extends ShaderMaterial {
     });
     // After construction: a texture in the constructor's uniforms is cloned.
     this.uniforms['cloudTex']!.value = cloudNoise;
+    attachNightLights(this.uniforms);
   }
 
   setTextures(a: Texture | null, uvA: Vector4, b: Texture | null, uvB: Vector4): void {

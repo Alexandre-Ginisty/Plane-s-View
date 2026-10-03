@@ -42,7 +42,7 @@ const BASE = 'models';
  * id to the operator paint schemes that exist for it, by ICAO airline
  * designator, plus a `NEUTRAL` entry.
  */
-interface Catalogue {
+export interface Catalogue {
   types: Record<string, string>;
   liveries: Record<string, Record<string, string>>;
   /** Model to use when the exact type has no entry, by airframe kind. */
@@ -50,6 +50,63 @@ interface Catalogue {
 }
 
 let catalogue: Promise<Catalogue | null> | null = null;
+
+
+/** Models that are combat aircraft: never the stand-in for an airliner or a Cessna. */
+const MILITARY = new Set(['a10', 'ah64', 'f14', 'f15', 'f16', 'f18', 'f4u', 'jas39', 'm2k', 'mig21', 'mig29', 'p51', 'su25']);
+
+interface Profile {
+  id: string;
+  shape: AirframeShape;
+}
+
+const profiles = new WeakMap<Catalogue, Profile[]>();
+
+/** Each civil model with the shape of the middle one of the types it stands for. */
+function profilesOf(index: Catalogue): Profile[] {
+  let list = profiles.get(index);
+  if (list) return list;
+  const byModel = new Map<string, AirframeShape[]>();
+  for (const [code, id] of Object.entries(index.types)) {
+    // The lower-case keys are the model ids themselves, not designators.
+    if (code !== code.toUpperCase() || MILITARY.has(id)) continue;
+    const shapes = byModel.get(id) ?? [];
+    shapes.push(shapeFor(code, null));
+    byModel.set(id, shapes);
+  }
+  list = [...byModel].map(([id, shapes]) => ({ id, shape: shapes.sort((a, b) => a.length - b.length)[Math.floor(shapes.length / 2)]! }));
+  profiles.set(index, list);
+  return list;
+}
+
+/**
+ * The converted airframe closest to a type that has none: the same kind, then
+ * the nearest in length, engine count and layout — an A330 is drawn as a 777
+ * or an A340 rather than as the one narrowbody every other type shared.
+ */
+export function nearestModel(index: Catalogue, upper: string, category: string | null): string | null {
+  const want = shapeFor(upper, category);
+  let best: string | null = null;
+  let bestCost = Infinity;
+  for (const { id, shape } of profilesOf(index)) {
+    if (shape.kind !== want.kind) continue;
+    let cost = Math.abs(Math.log(shape.length / want.length)) * 4;
+    if (shape.engines !== want.engines) cost += 1.2;
+    if (shape.engineMount !== want.engineMount) cost += 1.5;
+    if (shape.tTail !== want.tTail) cost += 0.4;
+    cost += Math.abs(shape.sweepDeg - want.sweepDeg) / 60;
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = id;
+    }
+  }
+  return best ?? index.fallback[want.kind] ?? null;
+}
+
+/** Exact type, then the nearest model of the same kind and size. */
+export function resolveModelId(index: Catalogue, upper: string, category: string | null): string | null {
+  return index.types[upper] ?? nearestModel(index, upper, category);
+}
 
 /** In-flight and completed loads, so two aircraft of a type share one download. */
 const models = new Map<string, Promise<LoadedModel | null>>();
@@ -192,12 +249,13 @@ export async function loadModelFor(
    * than an accurate drawing of a generic one, and every helicopter in the
    * sky looks more like an EC135 than like anything a mesh generator makes.
    *
-   * The fallback is per *kind*, never per type, so an unknown narrowbody
-   * cannot be handed a helicopter. Where the kind is unknown too, nothing is
+   * The stand-in is of the same *kind* and the nearest size and layout, so an
+   * unknown narrowbody cannot be handed a helicopter, nor a regional twin a
+   * jumbo. Where the kind is unknown too, nothing is
    * downloaded and the generator keeps the aircraft.
    */
   const upper = typeCode.toUpperCase();
-  const id = index.types[upper] ?? index.fallback[shapeFor(upper, category ?? null).kind];
+  const id = resolveModelId(index, upper, category ?? null);
   if (!id) return null;
 
   // A livery belongs to the airframe it was painted for. Putting an Air France
@@ -218,7 +276,7 @@ export async function modelIdFor(typeCode: string | null, category?: string | nu
   const index = await loadCatalogue();
   if (!index) return null;
   const upper = typeCode.toUpperCase();
-  return index.types[upper] ?? index.fallback[shapeFor(upper, category ?? null).kind] ?? null;
+  return resolveModelId(index, upper, category ?? null);
 }
 
 /**

@@ -17,6 +17,8 @@ import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
 import type { Buildings } from '@/render/buildings';
+import { NightLights } from '@/render/nightLights';
+import { atmoData } from '@/render/sky/shader';
 import type { OwnAircraft } from '@/render/ownAircraft';
 import { isInterior, type PovController, type CameraGroup, type CameraMode } from '@/render/pov';
 import { isFreighter } from '@/data/freighters';
@@ -61,7 +63,6 @@ import { loadModelFor, operatorOf } from '@/render/aircraft/library';
 import { fillContacts, readingsFromSample } from './cockpitReadings';
 import { WindField } from '@/data/weather/wind';
 import { fetchCurrentWeather } from '@/data/weather/openmeteo';
-import type { ContrailInputs } from '@/render/contrails';
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
@@ -113,20 +114,14 @@ function describeFeedError(message: string): string {
 export class Orchestrator {
   private readonly origin = new FloatingOrigin(50_000);
   private readonly traffic = new TrafficStore();
-  /** The wind the contrails drift in: the traffic's own reports, layer by layer. */
+  /** The wind the clouds drift in: the traffic's own reports, layer by layer. */
   private readonly wind = new WindField();
-  private readonly contrailInputs: ContrailInputs = {
-    trailOf: (hex) => this.traffic.get(hex)?.trailPoints,
-    shapeOf: (sample) => this.traffic3d!.shapeOf(sample),
-    wind: this.wind,
-    aloft: null,
-    nowMs: 0,
-  };
   private readonly client: TrafficClient;
 
   private engine: Engine | null = null;
   private globe: Globe | null = null;
   private buildings: Buildings | null = null;
+  private readonly nightLights = new NightLights();
   private traffic3d: Traffic3D | null = null;
   private ownAircraft: OwnAircraft | null = null;
   private pins3d: Pins3D | null = null;
@@ -399,14 +394,13 @@ export class Orchestrator {
 
       globe.update(engine.camera, dt, engine.viewportHeight);
       this.buildings?.update(engine.camera, dt, globe);
+      // The night factor is the shared atmosphere's (slot 5, w).
+      this.nightLights.update(flying.lat, flying.lon, atmoData[23] ?? 0, dt);
 
       this.cameraEcefVec.copy(engine.camera.position);
       traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
         globe.sampleHeight(lat, lon),
       );
-      this.contrailInputs.aloft = app.weather?.aloft ?? null;
-      this.contrailInputs.nowMs = now;
-      traffic3d.contrails.update(samples, this.cameraEcefVec, this.contrailInputs);
 
       // The followed aircraft is drawn by its own renderer, at true scale and
       // with the silhouette of its actual type — but not from inside it.
@@ -544,7 +538,6 @@ export class Orchestrator {
     updateSunlight(engine, globe, this.sunVec);
     this.ownAircraft?.setLight(engine.atmosphere.light);
     this.traffic3d?.lights.setLight(engine.atmosphere.light);
-    this.traffic3d?.contrails.setLight(engine.atmosphere.light);
     this.cockpit.setLight(engine.atmosphere.light);
     engine.atmosphere.setHaze(hazeForVisibility(app.weather?.visibilityM ?? null));
   }
@@ -571,9 +564,8 @@ export class Orchestrator {
     // arriving once the map is no longer driving it.
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
 
-    // The air the contrails form in: the wind the traffic reports about the
-    // aircraft, and the weather model's aloft (cached by cell, so this is a
-    // request every ten minutes at most).
+    // The weather about the aircraft: the wind the traffic reports, and the
+    // weather model's (cached by cell, so a request every ten minutes at most).
     this.wind.observe(this.lastSamples, sample.lat, sample.lon);
     this.updateClouds(sample);
     void fetchCurrentWeather(sample.lat, sample.lon).then((weather) => {
@@ -709,7 +701,6 @@ export class Orchestrator {
     if (!engine || !globe) return;
 
     app.selected = selected;
-    if (this.pov) app.viewHeadingDeg = this.pov.viewHeadingDeg;
     if (app.view === 'pov') {
       app.phase = this.phaseTracker.phase;
       app.touchdownInS = this.phaseInput ? secondsToTouchdown(this.phaseInput) : null;
@@ -1104,6 +1095,7 @@ export class Orchestrator {
     this.engine?.dispose();
     this.globe?.dispose();
     this.buildings?.dispose();
+    this.nightLights.dispose();
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
     this.pins3d?.dispose();

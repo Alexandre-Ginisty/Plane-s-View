@@ -31,7 +31,7 @@ import {
   clearanceFor,
   surfaceAltitudeM,
 } from '@/render/ground';
-import { aircraftFrame, bearingOf, isInterior, type AircraftFrame, type CameraMode } from './frame';
+import { aircraftFrame, isInterior, type AircraftFrame, type CameraMode } from './frame';
 import { placeCamera } from './placement';
 import type { PovState } from './state';
 
@@ -355,21 +355,6 @@ export class PovController {
    * both go blind at the same moment — and both have to remember.
    */
   private readonly ground = new GroundMemory();
-
-  /**
-   * Compass bearing the camera is actually looking along, degrees.
-   *
-   * Not the aircraft's heading. The HUD strip sits over the *view*, so it has
-   * to describe the view: free look turns the head without turning the
-   * aeroplane, and in the external modes the camera is not pointing along the
-   * airframe at all. Feeding it the heading made the strip disagree with the
-   * window it was drawn on.
-   */
-  private viewHeading = 0;
-
-  get viewHeadingDeg(): number {
-    return this.viewHeading;
-  }
 
   constructor(private readonly origin: FloatingOrigin) {}
 
@@ -731,8 +716,6 @@ export class PovController {
     );
     camera.quaternion.copy(_desiredQuat);
     camera.updateMatrixWorld();
-
-    this.viewHeading = bearingOf(forward, frame, this.viewHeading);
 
     return frame;
   }

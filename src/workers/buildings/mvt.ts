@@ -153,7 +153,7 @@ function decodeRings(cmds: number[]): Float64Array[] {
 }
 
 /** Shoelace in tile units; MVT outer rings are positive (clockwise, y down). */
-export function ringArea(r: Float64Array): number {
+function ringArea(r: Float64Array): number {
   let a = 0;
   for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) a += (r[j]! - r[i]!) * (r[i + 1]! + r[j + 1]!);
   return a / 2;

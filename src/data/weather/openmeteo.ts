@@ -13,7 +13,7 @@
 import { DIRECT } from '@/data/endpoints';
 import { fetchJson } from '@/data/http';
 import { LruCache } from '@/core/lru';
-import type { AloftLevel, CurrentWeather } from '@/data/types';
+import type { CurrentWeather } from '@/data/types';
 
 interface OpenMeteoResponse {
   current?: {
@@ -22,19 +22,15 @@ interface OpenMeteoResponse {
     wind_speed_10m?: number;
     wind_direction_10m?: number;
     cloud_cover?: number;
+    cloud_cover_low?: number;
+    cloud_cover_mid?: number;
+    cloud_cover_high?: number;
+    dew_point_2m?: number;
     pressure_msl?: number;
     visibility?: number;
     is_day?: number;
-    [level: string]: number | string | undefined;
   };
 }
-
-/**
- * Pressure levels read for the air aloft, hPa: from about FL240 to FL450,
- * where contrails form. The feed's own temperature is better where an
- * aircraft broadcasts it; humidity nothing on board reports.
- */
-const ALOFT_HPA = [400, 300, 250, 200, 150] as const;
 
 const CURRENT_FIELDS = [
   'temperature_2m',
@@ -48,7 +44,6 @@ const CURRENT_FIELDS = [
   'pressure_msl',
   'visibility',
   'is_day',
-  ...ALOFT_HPA.flatMap((hPa) => [`temperature_${hPa}hPa`, `relative_humidity_${hPa}hPa`]),
 ].join(',');
 
 const TTL_MS = 10 * 60_000;
@@ -60,16 +55,6 @@ const inFlight = new Map<string, Promise<CurrentWeather | null>>();
 
 const n = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
-
-function aloftOf(c: NonNullable<OpenMeteoResponse['current']>): CurrentWeather['aloft'] {
-  const out: AloftLevel[] = [];
-  for (const hPa of ALOFT_HPA) {
-    const tempC = n(c[`temperature_${hPa}hPa`]);
-    const rhPct = n(c[`relative_humidity_${hPa}hPa`]);
-    if (tempC !== null && rhPct !== null) out.push({ hPa, tempC, rhPct });
-  }
-  return out.length ? out : null;
-}
 
 export async function fetchCurrentWeather(
   lat: number,
@@ -114,7 +99,6 @@ export async function fetchCurrentWeather(
         pressureMslHpa: n(c.pressure_msl),
         visibilityM: n(c.visibility),
         isDay: c.is_day === undefined ? null : c.is_day === 1,
-        aloft: aloftOf(c),
         observedAt: Date.now(),
       };
 

@@ -74,7 +74,6 @@ import type { SampledAircraft } from '@/state/traffic';
 import { registry } from '@/data/meta/registry';
 import { isSurfaceVehicle, rotorRpm, shapeFor, visibleSpinRate, type AirframeShape } from './aircraft';
 import { AircraftLights, lightSeed } from './aircraftLights';
-import { Contrails } from './contrails';
 import { loadModelFor, operatorOf } from './aircraft/library';
 import type { LoadedModel } from './aircraft/pvm';
 import { lightAnchorsFor, type LightAnchors } from './aircraft/lightAnchors';
@@ -273,7 +272,6 @@ export class Traffic3D {
   /** Every aircraft's lights, the one being ridden included (see `OwnAircraft`). */
   readonly lights = new AircraftLights();
   /** The trails behind the cruising traffic, the one being ridden included. */
-  readonly contrails: Contrails;
   /** To put a detailed airframe on the GPU before it replaces the stand-in (see `prewarm`). */
   warm: { renderer: WebGLRenderer; scene: Scene } | null = null;
 
@@ -305,8 +303,6 @@ export class Traffic3D {
   constructor(private readonly origin: FloatingOrigin) {
     this.scene.matrixAutoUpdate = false;
     this.scene.add(this.lights.points);
-    this.contrails = new Contrails(origin);
-    this.scene.add(this.contrails.mesh);
 
     /*
      * Nothing is drawn until the airframes arrive, and that is deliberate.
@@ -857,11 +853,6 @@ export class Traffic3D {
     this.lights.add(this.dummy.matrix, airframe.shape, lightSeed(sample.hex), sample.altFt < LANDING_LIGHTS_FT, layer?.anchors ?? null);
   }
 
-  /** An aircraft's airframe, from its type where known. */
-  shapeOf(sample: SampledAircraft): AirframeShape {
-    return this.classify(sample).shape;
-  }
-
   private classify(sample: SampledAircraft): Airframe {
     const memo = this.airframes.get(sample.hex);
     if (memo) return memo;
@@ -895,6 +886,5 @@ export class Traffic3D {
     this.fixedWing?.dispose();
     this.rotorcraft?.dispose();
     this.lights.dispose();
-    this.contrails.dispose();
   }
 }

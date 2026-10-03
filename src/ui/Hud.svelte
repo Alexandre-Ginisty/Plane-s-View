@@ -19,8 +19,6 @@
   import { CAMERA_MODES, type CameraGroup } from '@/render/pov';
   import { PHASE_LABELS, isLandingPhase, isTakeoffPhase } from '@/state/phase';
   import type { Orchestrator } from '@/app/orchestrator';
-  import Attitude from './hud/Attitude.svelte';
-  import Compass from './hud/Compass.svelte';
   import FlightCard from './hud/FlightCard.svelte';
   import Tapes from './hud/Tapes.svelte';
   import Icon, { type IconName } from './Icon.svelte';
@@ -33,17 +31,6 @@
   const callsign = $derived(
     sample?.latest.callsign ?? dossier?.meta?.registration ?? sample?.hex.toUpperCase() ?? '',
   );
-
-  /*
-   * The artificial horizon and the heading strip are *first-person*
-   * instruments: they describe what the pilot sees out of the windscreen. In
-   * chase, wing or orbit the camera is not the pilot, so the horizon line
-   * refers to an attitude the view does not have and the compass to a
-   * heading it is not pointing along — and both are drawn straight across the
-   * aircraft you came to look at. The tapes stay in every view, because speed
-   * and altitude are facts about the aircraft rather than about the eye.
-   */
-  const firstPerson = $derived(app.cameraMode === 'cockpit');
 
   /*
    * Only when the *link* is what is constraining the picture.
@@ -130,13 +117,6 @@
 
 {#if sample}
   <div class="hud" aria-live="off">
-    <!-- With the 3D cockpit up, its own instruments show attitude and heading,
-         redrawn every frame; these DOM ones refresh at the UI rate and would
-         trail the view. -->
-    {#if firstPerson && !app.cockpit3d}
-      <Attitude pitchDeg={sample.pitchDeg} rollDeg={sample.rollDeg} />
-      <Compass headingDeg={app.viewHeadingDeg} />
-    {/if}
     <Tapes {sample} />
 
     <div class="ident">
@@ -334,7 +314,7 @@
 
   .phase {
     position: absolute;
-    /* Under the heading strip, above the warning banner. */
+    /* Top centre, above the warning banner. */
     top: 60px;
     left: 50%;
     transform: translateX(-50%);

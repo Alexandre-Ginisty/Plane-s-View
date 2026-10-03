@@ -92,9 +92,10 @@ the same filter with 4 terms to propagate instead of 16.
 ### Attitude is real, not faked
 
 ADS-B v2 transponders broadcast `roll`, `track_rate`, `ias`, `tas`, `mach` and
-wind and temperature measured by the aircraft itself. The cockpit horizon tilts
-with the actual bank angle, and the HUD shows the aircraft's own wind rather
-than a surface forecast.
+wind and temperature measured by the aircraft itself. The aircraft banks by the
+broadcast roll — or, where none is sent, by the turn read off successive
+reports — and the HUD shows the aircraft's own wind rather than a surface
+forecast. Helicopters fly as helicopters: nose down to go fast, flared to slow.
 
 ---
 
@@ -129,7 +130,7 @@ The tests concentrate on two things that are expensive to debug any other way.
 
 **Maths that is wrong plausibly rather than obviously** — WGS84 round-trips to
 sub-millimetre, the ellipsoid normal's 0.19° deviation from the radial, filter
-convergence, compass bearings against an east/north swap, and the two unit
+convergence, a helicopter that must never slide backwards, and the two unit
 traps that cost the most time: Esri's `{z}/{y}/{x}` axis order, and feed clocks
 that are milliseconds on adsb.lol but seconds on adsb.fi.
 
