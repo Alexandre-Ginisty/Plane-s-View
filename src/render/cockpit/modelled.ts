@@ -77,6 +77,9 @@ const CRJ7 = deck('crj7', 'airliner');
 const E145 = deck('e145', 'airliner');
 const DA40 = deck('da40', 'light');
 const EC35 = deck('ec35', 'heli');
+const B748 = deck('b748', 'airliner');
+const B77W = deck('b77w', 'airliner');
+const MD80 = deck('md80', 'airliner');
 
 /*
  * By the exterior model a type is drawn with: its own deck, or the nearest
@@ -84,7 +87,7 @@ const EC35 = deck('ec35', 'heli');
  * airliners and regional jets, a twin turboprop's in the twin turboprops, a
  * light aircraft's in the singles, a helicopter's in the helicopters.
  */
-const FIGHTERS = ['a10', 'f15', 'f14', 'f18', 'm2k', 'mig29', 'su25', 'jas39', 'mig21'].map((id) => deck(id, 'fighter'));
+const FIGHTERS = ['a10', 'f15', 'f18', 'm2k', 'jas39'].map((id) => deck(id, 'fighter'));
 const WARBIRDS = ['f4u', 'p51'].map((id) => deck(id, 'warbird'));
 const AH64 = deck('ah64', 'heli');
 
@@ -92,8 +95,8 @@ const BY_MODEL: Record<string, Entry> = {
   f16: F16,
   ...Object.fromEntries([...FIGHTERS, ...WARBIRDS].map((e) => [e.aircraft, e])),
   c750: C750,
-  b738: B738, b733: B738, b732: B738, b712: B738, md80: B738, md11: B738, dc10: B738, crj7: CRJ7, e145: E145, mrj9: E145,
-  f100: B738, f70: B738, b752: B738, b763: B738, b77w: B738, b788: B738, b748: B738, b742: B738, b463: B738, il76: B738,
+  b738: B738, b733: B738, b732: B738, md80: MD80, md11: B77W, dc10: B77W, crj7: CRJ7, e145: E145, mrj9: E145,
+  f100: B738, f70: B738, b752: B738, b763: B77W, b77w: B77W, b788: B77W, b748: B748, b742: B748, b463: B738, il76: B738,
   a320: A320, a346: A320, a388: A320, a306: A320,
   at72: AT72, dh8d: AT72, f27: AT72, f50: AT72, b190: AT72, be20: AT72, d228: AT72, l410: AT72,
   da40: DA40, c172: DA40, c208: DA40, pc12: DA40,
@@ -112,9 +115,17 @@ const BY_MODEL: Record<string, Entry> = {
 const cabin = (file: string, aircraft: string): Entry => ({ file, aircraft, kind: 'airliner', fit: { hud: null, screens: [] } });
 const RJ_CABIN = cabin('crj7-cabin', 'crj7');
 const RJ_IN_ATR = cabin('crj7-cabin', 'at72');
-const RJ_IN_737 = cabin('crj7-cabin', 'b738');
-const RJ_IN_A320 = cabin('crj7-cabin', 'a320');
-const RJ_IN_MD11 = cabin('crj7-cabin', 'md11');
+/*
+ * Generated cabins (`tools/cabin`), by what the passenger sits in: the
+ * single-aisle 3-3, the twin-aisle 2-4-2 and the 3-4-3 of the big twins and
+ * the jumbo. Each is drawn in an airframe of its own family, its eye over the
+ * wing there.
+ */
+const SINGLE_AISLE_A320 = cabin('n33-cabin', 'a320');
+const SINGLE_AISLE_737 = cabin('n33-cabin', 'b738');
+const TWIN_AISLE_MD11 = cabin('w242-cabin', 'md11');
+const BIG_TWIN_777 = cabin('w343-cabin', 'b77w');
+const JUMBO_747 = cabin('w343-cabin', 'b748');
 const BIZJET_CABIN = cabin('c750-cabin', 'c750');
 const JET_HOLD = cabin('md11-cargo', 'md11');
 
@@ -124,14 +135,15 @@ const RIGHT_SEAT = sideSeat(DA40, [0.51, 0, 0], -1.25, -0.2);
 // The EC135 is flown from the right: the passenger is on the left.
 const LEFT_SEAT_HELI = sideSeat(EC35, [-0.84, 0, 0], 1.3, -0.3);
 
-const WIDEBODIES = ['md11', 'dc10', 'a346', 'a388', 'a306', 'b763', 'b77w', 'b788', 'b748', 'b742', 'il76'];
 const TURBOPROPS = ['at72', 'dh8d', 'f27', 'f50', 'b190', 'be20', 'd228', 'l410'];
 
 const CABIN_BY_MODEL: Record<string, Entry> = {
-  crj7: RJ_CABIN, e145: RJ_CABIN, mrj9: RJ_CABIN, f70: RJ_CABIN, f100: RJ_CABIN, b463: RJ_CABIN, b712: RJ_CABIN,
-  b738: RJ_IN_737, b733: RJ_IN_737, b732: RJ_IN_737, md80: RJ_IN_737, b752: RJ_IN_737,
-  a320: RJ_IN_A320,
-  ...Object.fromEntries(WIDEBODIES.map((id) => [id, RJ_IN_MD11])),
+  crj7: RJ_CABIN, e145: RJ_CABIN, mrj9: RJ_CABIN, f70: RJ_CABIN, f100: RJ_CABIN, b463: RJ_CABIN,
+  a320: SINGLE_AISLE_A320,
+  b738: SINGLE_AISLE_737, b733: SINGLE_AISLE_737, b732: SINGLE_AISLE_737, md80: SINGLE_AISLE_737, b752: SINGLE_AISLE_737,
+  md11: TWIN_AISLE_MD11, dc10: TWIN_AISLE_MD11, a346: TWIN_AISLE_MD11, a306: TWIN_AISLE_MD11, b763: TWIN_AISLE_MD11, b788: TWIN_AISLE_MD11, il76: TWIN_AISLE_MD11,
+  b77w: BIG_TWIN_777,
+  b748: JUMBO_747, b742: JUMBO_747, a388: JUMBO_747,
   ...Object.fromEntries(TURBOPROPS.map((id) => [id, RJ_IN_ATR])),
   c750: BIZJET_CABIN,
   da40: RIGHT_SEAT, c172: RIGHT_SEAT, c208: RIGHT_SEAT, pc12: RIGHT_SEAT,
@@ -171,7 +183,7 @@ function entryFor(id: string | null, kind: CockpitKind, seat: Seat, freighter: b
   if (own) return own;
   switch (kind) {
     case 'airliner':
-      return RJ_IN_737;
+      return SINGLE_AISLE_737;
     case 'light':
       return RIGHT_SEAT;
     case 'heli':

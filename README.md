@@ -3,7 +3,9 @@
 Live air traffic on a photoreal globe, and a first-person view from inside any
 aircraft in the sky.
 
-Free data only — no API key, no account, no card.
+Free data only — no API key, no account, no card — and only data whose terms
+allow a commercial product to use it. Every source is listed, with its licence,
+in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ```bash
 npm install
@@ -12,43 +14,61 @@ npm run dev      # http://localhost:5173
 
 ---
 
-## The one thing the brief got wrong
+## Where the data comes from, and why a relay
 
 The project brief specifies **"Aucun backend"** — everything in the browser.
 That is achievable for most of this app, but **not for the aircraft positions**,
 and no amount of client-side code changes it. Measured against the live
 services:
 
-| Service | `Access-Control-Allow-Origin` | Callable from a page? |
-|---|---|---|
-| adsb.lol | *absent* | ❌ |
-| adsb.fi | *absent* | ❌ |
-| OpenSky | `https://opensky-network.org` only | ❌ |
-| airplanes.live | 403 — written approval required | ❌ |
-| Planespotters | `*`, but demands a custom `User-Agent`, which browsers forbid scripts from setting | ❌ |
-| adsbdb | `*` | ✅ |
-| Open-Meteo | `*` | ✅ |
-| Esri / EOX / AWS Terrarium | `*` | ✅ |
+| Service | Licence | `Access-Control-Allow-Origin` | Callable from a page? |
+|---|---|---|---|
+| adsb.lol (traffic) | ODbL | *absent* | ❌ — relay |
+| adsb.fi (traffic, demo only — non-commercial) | personal use | *absent* | ❌ — relay |
+| MET Norway (weather) | CC BY 4.0 | `*`, but demands a custom `User-Agent`, which browsers forbid scripts from setting | ❌ — relay |
+| Wikimedia Commons (photos) | per file, filtered to CC BY / CC BY-SA / CC0 / PD | `*` | ✅ |
+| **Esri World Imagery** (default while the site is a demonstration; not for commercial use) | ArcGIS subscribers only | `*` | ⚠️ demo only |
+| Sentinel-2 cloudless 2016 (EOX), NASA GIBS, AWS Terrain Tiles, OpenFreeMap | CC BY 4.0 / public domain / open data | `*` | ✅ |
+| National aerial imagery (IGN, PDOK, basemap.at, PNOA, swisstopo, Géoportail.lu, Maa-amet, USGS, Geobasis NRW, Bavaria), from zoom 13 inside each country | Etalab / CC BY 4.0 / CC0 / public domain / open government data | `*` | ✅ |
 
-So imagery, terrain, airframe metadata and weather are genuinely backend-free.
-Traffic and photos need a relay, which keeps every constraint that actually
-mattered — free, no key, no account, no card:
+Routes and airline names are not fetched from anyone: they ship with the app,
+built from the CC0 Virtual Radar Server standing data (`tools/routes`).
+
+So imagery, terrain, photos and routes are genuinely backend-free. Traffic and
+weather need a relay, which keeps every constraint that actually mattered —
+free, no key, no account, no card:
 
 - **Development** — Vite's dev server proxies `/feeds/*`. No extra process.
-- **Production** — `functions/feeds/[[path]].ts`, a Cloudflare Pages Function
-  on the free tier. Deploy it beside the static build.
+- **Production** — `functions/feeds/[[path]].ts`, a Cloudflare Pages Function.
+  Deploy it beside the static build. Mind the platform's free allowance
+  (100,000 function requests a day): a visitor polls traffic every few seconds,
+  so a busy site outgrows it — see "Going live" in `THIRD_PARTY_NOTICES.md`.
 
 The relay is an **allowlist**, not an open proxy: the target is matched against
 a fixed map of origins in `relay-targets.json`, so an arbitrary URL can never
 be reached through it. Set `VITE_DIRECT_FEEDS=1` to bypass it entirely (useful
 in an extension or Electron shell).
 
-Two smaller corrections to the brief, both verified against live payloads:
+### What was left out, and why
 
-- In the readsb schema, **`r` is the registration and `t` the type code** — not
-  receiver distance and timestamp. Mapping them correctly means most aircraft
-  show their identity with no extra lookup.
-- **adsb.fi's URL is `/api/v2/lat/{lat}/lon/{lon}/dist/{d}/`**, not `/point/`.
+A feed is used only if its terms allow a commercial product to use it. Several
+services that look free are not:
+
+| Not used | Why |
+|---|---|
+| OpenSky Network | "Any use by a for-profit or commercial entity requires a written license" |
+| adsb.fi | "personal, non-commercial use only" |
+| airplanes.live | requires prior approval |
+| Open-Meteo (free API) | "only … non-commercial purposes"; commercial use needs a paid plan |
+| Esri World Imagery | licensed to ArcGIS subscribers; not for commercial use |
+| Sentinel-2 cloudless 2017+ | CC BY-NC-SA (the 2016 edition is CC BY 4.0, and is used) |
+| adsbdb | its route data may not be copied or incorporated elsewhere without its author's permission |
+| Planespotters, airport-data.com photos | all rights reserved by the photographers |
+
+Two details of the readsb schema worth knowing, both verified against live
+payloads: **`r` is the registration and `t` the type code** — not receiver
+distance and timestamp — so most aircraft show their identity with no lookup,
+and adsb.lol's clock is in milliseconds where some forks send seconds.
 
 ---
 
@@ -120,7 +140,7 @@ map — useful for a bookmark, and for anything sharing a specific view.
 ## Testing
 
 ```bash
-npm test          # 369 tests
+npm test          # unit tests
 npm run check     # svelte-check + TypeScript strict
 npm run build     # production build
 npx knip          # unused files, exports and dependencies
@@ -131,8 +151,8 @@ The tests concentrate on two things that are expensive to debug any other way.
 **Maths that is wrong plausibly rather than obviously** — WGS84 round-trips to
 sub-millimetre, the ellipsoid normal's 0.19° deviation from the radial, filter
 convergence, a helicopter that must never slide backwards, and the two unit
-traps that cost the most time: Esri's `{z}/{y}/{x}` axis order, and feed clocks
-that are milliseconds on adsb.lol but seconds on adsb.fi.
+traps that cost the most time: WMTS's `{z}/{y}/{x}` axis order, and feed clocks
+that are milliseconds on adsb.lol but seconds on some readsb forks.
 
 **Behaviour that only misbehaves on someone else's connection** — the network
 classifier's hysteresis, the rule that a grade change must persist before the
@@ -159,7 +179,7 @@ twin. Original work, under this project's licence.
 
 **Converted.** `tools/fgmodel/convert.mjs` pulls real textured airframes from
 the [FlightGear](https://www.flightgear.org/) add-on hangar and converts them
-to a compact binary the app loads on demand — **27 airframes covering 127 type
+to a compact binary the app loads on demand — **49 airframes covering about 200 type
 designators**. The procedural model is shown immediately and the real one
 replaces it when it arrives, so nothing ever waits on a download.
 
@@ -274,11 +294,13 @@ account, no card is the premise, not a precaution.
 
 ---
 
-## Attribution
+## Licence and attribution
 
-Required and always on screen: Esri World Imagery; Sentinel-2 cloudless by EOX;
-Mapzen Terrain Tiles on AWS Open Data; adsb.lol, adsb.fi and OpenSky Network;
-adsbdb; Planespotters (photographer credit and link); Open-Meteo.
+The application code is MIT (`LICENSE`). The data it shows and the 3D models it
+loads are not the project's own; every one is listed, with its licence and the
+obligation it carries, in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The credits are also always on screen: the status pill opens a "Sources" panel
+with each one.
 
 3D aircraft models from FlightGear FGAddon, GPL-2.0 — see
 `public/models/CREDITS.md` for the per-aircraft authors and licences.

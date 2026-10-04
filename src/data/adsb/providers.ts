@@ -8,13 +8,11 @@
 
 import { fetchJson } from '@/data/http';
 import { relayUrl } from '@/data/endpoints';
-import { clamp, metresPerDegree, NM_TO_METRES, wrapLongitude } from '@/core/math/geo';
+import { clamp, wrapLongitude } from '@/core/math/geo';
 import type { AircraftState, ProviderId, TrafficQuery } from '@/data/types';
 import {
-  normalizeOpenSkyResponse,
   normalizeReadsbResponse,
   type InlineAirframeHint,
-  type OpenSkyResponse,
   type ReadsbResponse,
 } from './normalize';
 
@@ -142,77 +140,20 @@ const adsbFi = readsbProvider({
   label: 'adsb.fi (OpenData)',
   homepage: 'https://adsb.fi',
   target: 'adsb-fi',
+  // Measured: answers every request, one a second, in about 60 ms.
   minIntervalMs: 2000,
-  // Not `/v2/point/...` as the brief states — adsb.fi spells the query out.
+  // Not `/v2/point/...`: adsb.fi spells the query out.
   pointPath: (lat, lon, r) => `/api/v2/lat/${lat}/lon/${lon}/dist/${r}/`,
   hexPath: (hex) => `/api/v2/hex/${hex}/`,
 });
 
-const airplanesLive = readsbProvider({
-  id: 'airplanes.live',
-  label: 'airplanes.live',
-  homepage: 'https://airplanes.live',
-  target: 'airplanes-live',
-  // Verified 2026-09: the public v2 API answers 403 to unapproved clients,
-  // asking that projects email contact@airplanes.live first. Left in the chain
-  // so it can be switched on once approved, but off by default — hammering an
-  // endpoint that is telling us to ask permission is not acceptable.
-  enabled: false,
-  disabledReason:
-    'Requires prior approval from airplanes.live (email contact@airplanes.live). Enable once granted.',
-  minIntervalMs: 2000,
-  pointPath: (lat, lon, r) => `/v2/point/${lat}/${lon}/${r}`,
-  hexPath: (hex) => `/v2/hex/${hex}`,
-});
-
 /**
- * OpenSky takes a bounding box rather than a radius, and its anonymous tier is
- * both slow (10 s resolution) and credit-metered — hence last in the chain.
+ * Fallback order. Disabled entries are skipped.
+ *
+ * adsb.fi first: adsb.lol answers 429 to most requests from a single address
+ * (measured: one in three at a request a second), so asking it first spent a
+ * request and, after three refusals, a thirty-second lockout before the feed
+ * that works was tried. It stays in the chain, where its ODbL data is the one
+ * a commercial product may keep once adsb.fi's personal-use terms rule it out.
  */
-const openSky: AdsbProvider = {
-  id: 'opensky',
-  label: 'OpenSky Network',
-  homepage: 'https://opensky-network.org',
-  enabled: true,
-  fallbackOnly: true,
-  maxRadiusNm: 400,
-  // The anonymous tier grants ~400 credits/day. One request per 15 s is about
-  // 5 700/day, so the client's budget guard (not this floor) does the limiting;
-  // this just stops bursts.
-  minIntervalMs: 10_000,
-  async fetchTraffic(query, signal) {
-    const radiusM = clamp(query.radiusNm, 1, 400) * NM_TO_METRES;
-    const per = metresPerDegree(query.lat);
-    const dLat = radiusM / per.lat;
-    // Guard the cosine collapsing near the poles.
-    const dLon = per.lon > 1 ? radiusM / per.lon : 180;
-
-    const lamin = clamp(query.lat - dLat, -90, 90);
-    const lamax = clamp(query.lat + dLat, -90, 90);
-    const lomin = clamp(query.lon - dLon, -180, 180);
-    const lomax = clamp(query.lon + dLon, -180, 180);
-
-    const qs = new URLSearchParams({
-      lamin: lamin.toFixed(4),
-      lomin: lomin.toFixed(4),
-      lamax: lamax.toFixed(4),
-      lomax: lomax.toFixed(4),
-      extended: '1', // adds the category field
-    });
-
-    const body = await fetchJson<OpenSkyResponse>(
-      relayUrl('opensky', `/api/states/all?${qs}`),
-      { timeoutMs: 14_000, retries: 0, signal },
-    );
-
-    return { states: normalizeOpenSkyResponse(body, Date.now()), hints: [] };
-  },
-};
-
-/** Fallback order, exactly as the brief specifies. Disabled entries are skipped. */
-export const PROVIDERS: readonly AdsbProvider[] = [
-  adsbLol,
-  airplanesLive,
-  adsbFi,
-  openSky,
-];
+export const PROVIDERS: readonly AdsbProvider[] = [adsbFi, adsbLol];

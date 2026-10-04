@@ -153,6 +153,12 @@ function floatsOf(buffer: ArrayBuffer, at: number, range: Range, quant?: readonl
   return new Float32Array(buffer, at, range.count);
 }
 
+/** Whether any coordinate lies clear of the 0–1 square (a margin for a sheet a little oversewn at its edge). */
+function outsideUnitSquare(uv: Float32Array): boolean {
+  for (let i = 0; i < uv.length; i++) if (uv[i]! < -0.1 || uv[i]! > 1.1) return true;
+  return false;
+}
+
 /** Parse a `.pvm` payload into geometries and materials. */
 export function parsePvm(
   buffer: ArrayBuffer,
@@ -199,7 +205,15 @@ export function parsePvm(
     }
 
     const texture = part.texture >= 0 ? textures[part.texture] ?? null : null;
-    if (texture && part.repeat && texture.wrapS !== RepeatWrapping) {
+    /*
+     * Coordinates past the unit square tile the texture in the simulator, which
+     * wraps by default; here the default is to clamp, which smears the sheet's
+     * edge pixels across the surface into streaks. Seat fabric, carpet, wall
+     * lining and floors run to dozens of repeats, so the part's own coordinates
+     * decide, not only the converter's `repeat` flag.
+     */
+    const tiles = part.repeat === true || (texture !== null && outsideUnitSquare(geometry.getAttribute('uv').array as Float32Array));
+    if (texture && tiles && texture.wrapS !== RepeatWrapping) {
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       texture.needsUpdate = true;

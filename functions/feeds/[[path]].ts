@@ -7,9 +7,14 @@
  * the browser never makes a cross-origin request and CORS stops mattering.
  *
  * It exists for exactly two reasons the browser cannot solve on its own:
- *   1. adsb.lol / adsb.fi / OpenSky send no usable `Access-Control-Allow-Origin`.
- *   2. Planespotters requires a descriptive `User-Agent`, and `User-Agent` is a
- *      forbidden header for `fetch` in a page.
+ *   1. adsb.lol sends no usable `Access-Control-Allow-Origin`.
+ *   2. MET Norway requires a descriptive `User-Agent` identifying the project,
+ *      and `User-Agent` is a forbidden header for `fetch` in a page.
+ *
+ * adsb.lol and MET Norway allow commercial use (ODbL; CC BY 4.0 / NLOD).
+ * adsb.fi is here as a second traffic feed because adsb.lol rate-limits hard,
+ * and its terms are personal / non-commercial: fine for a demonstration, the
+ * first thing to drop before the site earns money.
  *
  * ## This is an allowlist, not a proxy
  *
@@ -42,19 +47,19 @@ import relayTargets from '../../relay-targets.json';
 const UPSTREAM: Record<string, string> = relayTargets;
 
 /** Identifies the project to upstream operators, as their terms ask. */
-const USER_AGENT = 'PlanesView/0.1 (+https://github.com/planesview/planesview)';
+const USER_AGENT = 'PlanesView/1.0 (+https://github.com/Alexandre-Ginisty/Plane-s-View)';
 
 /**
- * Edge-cache windows, seconds. Positions go stale in about a second; airframe
- * photos essentially never change. Caching is what keeps a popular deployment
+ * Edge-cache windows, seconds. Positions go stale in about a second; a surface
+ * forecast changes over minutes. Caching is what keeps a popular deployment
  * from becoming a burden on services that are donating their bandwidth.
  */
 const CACHE_SECONDS: Record<string, number> = {
   'adsb-lol': 1,
   'adsb-fi': 1,
-  'airplanes-live': 1,
-  opensky: 5,
-  planespotters: 86_400,
+  // MET Norway asks that a forecast not be re-requested before its `Expires`,
+  // which is usually the better part of an hour; ten minutes is well inside it.
+  metno: 600,
 };
 
 /**
@@ -67,10 +72,11 @@ const HEX = '~?[0-9a-f]{6}';
 const READSB = new RegExp(`^v2/(?:point/${NUM}/${NUM}/\\d{1,3}|hex/${HEX})$`, 'i');
 const ROUTES: Record<string, { path: RegExp; query: readonly string[] }> = {
   'adsb-lol': { path: READSB, query: [] },
-  'airplanes-live': { path: READSB, query: [] },
   'adsb-fi': { path: new RegExp(`^api/v2/(?:lat/${NUM}/lon/${NUM}/dist/\\d{1,3}|hex/${HEX})/?$`, 'i'), query: [] },
-  opensky: { path: /^api\/states\/all$/, query: ['lamin', 'lomin', 'lamax', 'lomax', 'extended'] },
-  planespotters: { path: new RegExp(`^pub/photos/hex/${HEX}$`, 'i'), query: [] },
+  // `complete` rather than `compact`: only it carries the cloud layers and
+  // the dew point. Coordinates are the client's business (MET Norway asks for
+  // at most four decimals); the relay only fixes which endpoint is reachable.
+  metno: { path: /^weatherapi\/locationforecast\/2\.0\/complete$/, query: ['lat', 'lon'] },
 };
 
 /** Longest URL the client ever builds, with room to spare. */

@@ -47,17 +47,9 @@
   // The designator: the registry's, else the one the feed sent with the
   // position — there from the first frame, lookup or no lookup.
   const typeCode = $derived(meta?.icaoTypeCode ?? registry.knownTypeCode(sample.hex));
-  // The model's name: the registry's own words where it has a record, else
-  // the local table, else the bare designator. Never nothing.
-  const subtitle = $derived(registryName(meta?.manufacturer, meta?.typeName) || typeName(typeCode) || typeCode || '');
+  // The model's name: the local table, else the bare designator. Never nothing.
+  const subtitle = $derived(meta?.typeName || typeName(typeCode) || typeCode || '');
 
-  /** "Boeing" + "BOEING 737-8200" is "Boeing 737-8200": the registry often repeats the maker in the type. */
-  function registryName(maker: string | null | undefined, type: string | null | undefined): string {
-    if (!type) return maker ?? '';
-    if (!maker) return type;
-    const t = type.trim();
-    return t.toLowerCase().startsWith(maker.toLowerCase()) ? `${maker}${t.slice(maker.length)}` : `${maker} ${t}`;
-  }
   const emergencyNote = $derived(latest.emergency ?? squawkMeaning(latest.squawk ?? null));
 
   /** Present, not merely defined — the feeds send explicit nulls. */

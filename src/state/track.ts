@@ -189,13 +189,11 @@ export interface SampledAircraft {
 function positionVariance(s: AircraftState): number {
   if (s.isMlat) return 500 * 500;
   if (s.isTisb) return 300 * 300;
-  if (s.source === 'opensky') return 60 * 60;
   return 25 * 25;
 }
 
 function velocityVariance(s: AircraftState): number {
   if (s.isMlat) return 25;
-  if (s.source === 'opensky') return 9;
   return 1;
 }
 

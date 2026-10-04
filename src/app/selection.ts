@@ -17,7 +17,7 @@
  */
 
 import { registry } from '@/data/meta/registry';
-import { fetchCurrentWeather } from '@/data/weather/openmeteo';
+import { fetchCurrentWeather } from '@/data/weather/metno';
 import type { SelectionMap } from '@/map2d/map';
 import { app } from '@/state/appStore.svelte';
 import type { SampledAircraft } from '@/state/traffic';
@@ -27,7 +27,7 @@ export function clearSelection(map: SelectionMap | null): void {
   app.dossier = null;
   app.selected = null;
   // Cleared with the rest of the selection, not left to be overwritten when
-  // the next Open-Meteo call returns. That call takes seconds, and until it
+  // the next weather call returns. That call takes seconds, and until it
   // did the panel showed the previous aircraft's wind and temperature under
   // the new aircraft's name — a plausible-looking number for the wrong place.
   app.weather = null;

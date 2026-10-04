@@ -4,7 +4,10 @@
     "src/workers/**/*.worker.ts",
     "functions/**/*.ts",
     "tools/fgmodel/{convert,cockpit,combat,tidy,pvmpack}.mjs",
-    "tools/map/build-places.mjs"
+    "tools/cabin/*.mjs",
+    "tools/map/*.mjs",
+    "tools/routes/*.mjs",
+    "tools/tiles/*.mjs"
   ],
   "project": [
     "src/**/*.{ts,svelte}",

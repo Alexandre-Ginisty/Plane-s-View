@@ -2,59 +2,84 @@
  * City lights, at night.
  *
  * The ground's imagery is a daytime photograph, so at night it went the
- * colour of the sky and nothing else — every city on Earth switched off. The
- * lights come from NASA's Black Marble (VIIRS day/night band, 2016 composite),
- * which is public domain and is exactly what the ground looks like from a
- * window seat at night: the street grids of the towns, the motorways between
- * them, the dark of the countryside and the sea.
+ * colour of the sky and nothing else — every city on Earth switched off. What a
+ * city looks like from a window at night is its *plan*: the streets as threads
+ * of orange, the motorways brighter and whiter, the dark of a river or a park
+ * cutting through the glow, the runways and taxiways of an airport in white and
+ * blue. So the lights are drawn from the map, not guessed from the photograph.
  *
- * ## Two textures
+ * ## Four levels of the map, and the world
  *
- *  - **The world**, 4096 × 2048, shipped with the app (`public/night`): about
- *    ten kilometres a texel, the glow of a city seen from cruise.
- *  - **The region about the aircraft**, 2048 × 2048 from NASA GIBS, at the
- *    composite's own resolution (about 450 m): the shape of the city when
- *    descending into it. Fetched only at night, re-centred when the aircraft
- *    nears its edge, faded in over the world's.
+ * `workers/nightmap/levels.ts` describes four squares of light centred on the
+ * aircraft, each finer and smaller than the last (320, 80, 20 and 3 km a
+ * side). A worker draws each from the OpenStreetMap vector tiles: roads by class, runways, built-up land and
+ * building footprints, and — in the finest — every street lamp as a point.
+ * Red carries warm sodium light, green warm-white glow, blue cool white.
  *
- * Both are sampled by latitude and longitude, worked out in the shader from the
- * fragment's position (`cityLights`), so every terrain tile shares them
- * whatever its zoom and nothing has to be fetched per tile.
+ * Under them, NASA's Black Marble (VIIRS day/night band, public domain) gives
+ * the measured glow of every town — what the map's streets cannot say, how
+ * much light a place really throws up. Two textures of it: the world, shipped
+ * at 4096 × 2048 in `public/night`, about ten kilometres a texel; and the
+ * region about the aircraft, 1024 × 1024 from NASA GIBS, about 900 m a texel, fetched only at night.
+ *
+ * All four are sampled by latitude and longitude, worked out in the shader from
+ * the fragment's position (`cityLights`), so every terrain tile shares them
+ * whatever its zoom and nothing has to be fetched per tile. A level is re-drawn
+ * about the aircraft as it flies on; the new square shows the same ground as
+ * the old one under the aircraft, so the swap is not seen.
  */
 
 import { LinearFilter, LinearMipmapLinearFilter, SRGBColorSpace, Texture } from 'three';
 
+import { levelBounds, NIGHT_LEVELS } from '@/workers/nightmap/levels';
+import { vectorTileTemplate } from './vectorTiles';
+import type { NightMapRequest, NightMapResponse } from '@/workers/nightmap.worker';
+
+const WORLD_URL = `${import.meta.env.BASE_URL ?? '/'}night/black-marble-4096.webp`;
 /** NASA GIBS WMS, plate carrée. Public domain imagery; CORS-enabled. */
 const GIBS_WMS = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi';
 const LAYER = 'VIIRS_Black_Marble';
-const WORLD_URL = `${import.meta.env.BASE_URL ?? '/'}night/black-marble-4096.webp`;
-
 /** The region's height in degrees of latitude; its width is the same distance east-west. */
 const REGION_LAT_SPAN = 5;
-const REGION_PX = 2048;
-/** Re-centre once the aircraft is this far through the region towards an edge (0 centre, 1 edge). */
-const RECENTRE_AT = 0.55;
+const REGION_PX = 1024;
+const REGION_RECENTRE_AT = 0.55;
+
 /** Lights only when it is this dark (the shared night factor, 0 day … 1 night). */
 const NIGHT_FROM = 0.02;
+/** Re-draw a level once the aircraft is this far through it towards an edge (0 centre, 1 edge). */
+const RECENTRE_AT = 0.45;
+/** How far ahead of the aircraft a level is centred, in seconds of flight, capped by the level's size. */
+const LEAD_S = 12;
 
 /**
  * [0] region: west longitude, south latitude, 1 / width, 1 / height (degrees)
  * [1] x: region weight (0 none … 1 in), y: brightness
  */
 const data = new Float32Array(8);
-data[5] = 1.5;
+data[5] = 1.25;
 
-const world = new Texture();
-world.colorSpace = SRGBColorSpace;
-world.minFilter = LinearMipmapLinearFilter;
-world.magFilter = LinearFilter;
-world.name = 'night lights (world)';
+/** Per level: west, south, 1/width, 1/height of the square (degrees). Width 0 means "not drawn yet". */
+const levelBox = new Float32Array(NIGHT_LEVELS.length * 4);
+/** Per level: x opacity (fades in once), y texel size in metres. */
+const levelFx = new Float32Array(NIGHT_LEVELS.length * 4);
+NIGHT_LEVELS.forEach((level, i) => {
+  levelFx[i * 4 + 1] = (level.spanKm * 1000) / level.px;
+});
 
-const region = new Texture();
-region.colorSpace = SRGBColorSpace;
-region.minFilter = LinearMipmapLinearFilter;
-region.magFilter = LinearFilter;
-region.name = 'night lights (region)';
+function makeTexture(name: string): Texture {
+  const t = new Texture();
+  t.colorSpace = SRGBColorSpace;
+  // Mipmapped: a coarse look at a fine level averages its streets into the
+  // glow they make, instead of shimmering as single texels switch on and off.
+  t.minFilter = LinearMipmapLinearFilter;
+  t.magFilter = LinearFilter;
+  t.name = name;
+  return t;
+}
+
+const world = makeTexture('night lights (world)');
+const region = makeTexture('night lights (region)');
+const levelTextures = NIGHT_LEVELS.map((_, i) => makeTexture(`night lights (level ${i})`));
 
 // No image until loaded: three samples a texture it has never uploaded as black, which is no lights.
 
@@ -63,15 +88,19 @@ region.name = 'night lights (region)';
  * texture uniforms, which would cut them off from the loads below).
  */
 export function attachNightLights(uniforms: Record<string, { value: unknown }>): void {
-  uniforms['nightLights'] = NIGHT_UNIFORMS.nightLights;
-  uniforms['nightWorld'] = NIGHT_UNIFORMS.nightWorld;
-  uniforms['nightRegion'] = NIGHT_UNIFORMS.nightRegion;
+  for (const [name, uniform] of Object.entries(NIGHT_UNIFORMS)) uniforms[name] = uniform;
 }
 
-const NIGHT_UNIFORMS = {
+const NIGHT_UNIFORMS: Record<string, { value: unknown }> = {
   nightLights: { value: data },
   nightWorld: { value: world },
   nightRegion: { value: region },
+  nightMapBox: { value: levelBox },
+  nightMapFx: { value: levelFx },
+  nightMap0: { value: levelTextures[0] },
+  nightMap1: { value: levelTextures[1] },
+  nightMap2: { value: levelTextures[2] },
+  nightMap3: { value: levelTextures[3] },
 };
 
 /** Needs `ATMO_GLSL` before it: the planet's centre and the night factor come from there. */
@@ -79,6 +108,12 @@ export const NIGHT_GLSL = /* glsl */ `
 uniform vec4 nightLights[2];
 uniform sampler2D nightWorld;
 uniform sampler2D nightRegion;
+uniform sampler2D nightMap0;
+uniform sampler2D nightMap1;
+uniform sampler2D nightMap2;
+uniform sampler2D nightMap3;
+uniform vec4 nightMapBox[4];
+uniform vec4 nightMapFx[4];
 
 float nightHash(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * 0.1031);
@@ -86,64 +121,81 @@ float nightHash(vec2 p) {
   return fract((q.x + q.y) * q.z);
 }
 
-// How lit the ground is here, 0..1, from the composite.
-float nightIntensity(vec3 worldPos) {
-  vec3 p = worldPos - atmo[0].xyz;
-  // Geodetic latitude on the surface: the ellipsoid normal, not the radius
-  // (which is a fifth of a degree out at mid latitudes — twenty kilometres).
-  float lat = degrees(atan(p.z, length(p.xy) * 0.99330562));
-  float lon = degrees(atan(p.y, p.x));
-  vec3 c = texture2D(nightWorld, vec2(lon / 360.0 + 0.5, lat / 180.0 + 0.5)).rgb;
-  vec2 r = (vec2(lon, lat) - nightLights[0].xy) * nightLights[0].zw;
-  if (nightLights[1].x > 0.0 && r.x > 0.0 && r.y > 0.0 && r.x < 1.0 && r.y < 1.0) {
-    float edge = min(min(r.x, 1.0 - r.x), min(r.y, 1.0 - r.y));
-    c = mix(c, texture2D(nightRegion, r).rgb, smoothstep(0.0, 0.06, edge) * nightLights[1].x);
-  }
-  // The composite's land is moonlit grey-blue: only what stands above it is light.
-  return smoothstep(0.03, 0.75, max(c.r, c.g));
+// How much of a level's square covers this point, 0 outside, ramping in at its edge.
+float nightEdge(vec2 r) {
+  if (r.x <= 0.0 || r.y <= 0.0 || r.x >= 1.0 || r.y >= 1.0) return 0.0;
+  return smoothstep(0.0, 0.07, min(min(r.x, 1.0 - r.x), min(r.y, 1.0 - r.y)));
+}
+
+// How much a finer level should be used at this pixel size: all of it while a
+// pixel is smaller than its texels, none once a pixel is several of them.
+float nightFinerThan(float texelM, float footprint) {
+  return 1.0 - smoothstep(texelM * 0.8, texelM * 3.5, footprint);
 }
 
 /*
  * Emitted light at a point on the ground, linear, before aerial perspective.
  *
- * The composite says how lit a place is, at half a kilometre a texel: a glow,
- * with no streets in it. The streets come from the daytime imagery under it:
- * roads, car parks and concrete are the bright, grey part of a city by day
- * and the lit part by night, while parks, gardens and dark roofs are not —
- * so the city's own plan is what lights up, at whatever scale the imagery is
- * drawn. Close in, separate lamps (sodium orange, some LED white) sparkle in
- * the lit parts; where a lamp is smaller than a pixel it fades to its average,
- * so nothing shimmers or changes as the aircraft climbs away.
- *
- * q: ground position in Web Mercator metres (the terrain's grain frame);
- * footprint: metres per pixel there; albedo: the day imagery's colour.
+ * worldPos: the fragment in render space; footprint: Web Mercator metres a
+ * screen pixel covers there. The caller adds the result to the lit ground.
  */
 vec3 cityLights(vec3 worldPos, vec2 q, float footprint, vec3 albedo) {
   float night = atmo[5].w;
   if (night <= ${NIGHT_FROM.toFixed(3)}) return vec3(0.0);
-  float lit = nightIntensity(worldPos);
-  if (lit <= 0.0) return vec3(0.0);
 
-  float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
-  float green = clamp((albedo.g - max(albedo.r, albedo.b)) * 8.0, 0.0, 1.0);
-  float paved = smoothstep(0.12, 0.42, luma) * (1.0 - 0.85 * green);
-  float field = lit * (0.06 + 0.94 * paved);
+  vec3 p = worldPos - atmo[0].xyz;
+  // Geodetic latitude on the surface: the ellipsoid normal, not the radius
+  // (which is a fifth of a degree out at mid latitudes — twenty kilometres).
+  float lat = degrees(atan(p.z, length(p.xy) * 0.99330562));
+  float lon = degrees(atan(p.y, p.x));
+  // Mercator metres overstate ground distance by 1 / cos(latitude).
+  float ground = footprint * cos(radians(lat));
 
-  // Lamps on a 12 m grid, in a share of the cells set by how lit the ground is.
-  const float CELL = 12.0;
-  vec2 cell = floor(q / CELL);
-  float on = step(1.0 - field * 0.7, nightHash(cell));
-  vec2 jitter = vec2(nightHash(cell + 17.0), nightHash(cell + 41.0)) - 0.5;
-  float d = length(fract(q / CELL) - 0.5 - jitter * 0.7) * CELL;
-  float radius = max(1.8, footprint * 0.75);
-  float pool = on * smoothstep(radius, 0.0, d) * min(1.0, (1.8 * 1.8) / (radius * radius)) * 3.0;
-  float near = 1.0 - smoothstep(CELL * 0.2, CELL * 0.8, footprint);
+  // The measured glow of the towns: the world at ten kilometres a texel, the
+  // region about the aircraft at about 450 m. The composite's land is moonlit
+  // grey-blue: only what stands above it is light.
+  vec3 wc = texture2D(nightWorld, vec2(lon / 360.0 + 0.5, lat / 180.0 + 0.5)).rgb;
+  vec2 rr = (vec2(lon, lat) - nightLights[0].xy) * nightLights[0].zw;
+  if (nightLights[1].x > 0.0) {
+    wc = mix(wc, texture2D(nightRegion, rr).rgb, nightEdge(rr) * nightLights[1].x);
+  }
+  float glow = smoothstep(0.03, 0.75, max(wc.r, wc.g));
+  vec3 m = vec3(0.0);
 
-  vec3 sodium = vec3(1.0, 0.56, 0.22);
-  vec3 led = vec3(0.86, 0.9, 1.0);
-  vec3 lampTint = mix(sodium, led, step(0.72, nightHash(cell + 5.0)));
-  vec3 cityTint = mix(sodium, vec3(1.0, 0.82, 0.6), 0.35);
-  vec3 light = cityTint * field * 0.55 + lampTint * pool * near;
+  // The map, coarse to fine: each level is mixed in over the last where its
+  // square covers this point and its texels are no bigger than the pixel.
+  vec2 r0 = (vec2(lon, lat) - nightMapBox[0].xy) * nightMapBox[0].zw;
+  float c0 = nightEdge(r0) * nightMapFx[0].x;
+  if (c0 > 0.0) m = mix(m, texture2D(nightMap0, vec2(r0.x, 1.0 - r0.y)).rgb, c0);
+
+  vec2 r1 = (vec2(lon, lat) - nightMapBox[1].xy) * nightMapBox[1].zw;
+  float c1 = nightEdge(r1) * nightMapFx[1].x * nightFinerThan(nightMapFx[1].y, ground);
+  if (c1 > 0.0) m = mix(m, texture2D(nightMap1, vec2(r1.x, 1.0 - r1.y)).rgb, c1);
+
+  vec2 r2 = (vec2(lon, lat) - nightMapBox[2].xy) * nightMapBox[2].zw;
+  float c2 = nightEdge(r2) * nightMapFx[2].x * nightFinerThan(nightMapFx[2].y, ground);
+  if (c2 > 0.0) m = mix(m, texture2D(nightMap2, vec2(r2.x, 1.0 - r2.y)).rgb, c2);
+
+  vec2 r3 = (vec2(lon, lat) - nightMapBox[3].xy) * nightMapBox[3].zw;
+  float c3 = nightEdge(r3) * nightMapFx[3].x * nightFinerThan(nightMapFx[3].y, ground);
+  if (c3 > 0.0) m = mix(m, texture2D(nightMap3, vec2(r3.x, 1.0 - r3.y)).rgb, c3);
+
+  // What the satellite measured says how much light a place really throws up: it
+  // brightens the streets where it saw more, and is the only light beyond the
+  // map. On its own it would flood a whole city in one flat colour — it is
+  // saturated across the whole of an urban area — so it never stands in for them.
+  m *= 1.0 + glow * 1.1;
+  m += vec3(glow * 0.30, glow * 0.14, 0.0) * (1.0 - c0);
+
+  vec3 sodium = vec3(1.0, 0.50, 0.16);
+  vec3 warm = vec3(1.0, 0.80, 0.56);
+  vec3 cool = vec3(0.72, 0.86, 1.0);
+  vec3 light = m.r * sodium * 1.15 + m.g * warm * 0.95 + m.b * cool * 1.3;
+
+  // Linear while dim — a faint glow stays faint — and rolling off as it brightens, so a
+  // dense core blooms towards white instead of clipping to a flat orange.
+  light = light / (1.0 + light * 0.7);
+
   return light * nightLights[1].y * smoothstep(${NIGHT_FROM.toFixed(3)}, 0.6, night);
 }
 `;
@@ -155,29 +207,155 @@ async function bitmap(url: string, signal?: AbortSignal): Promise<ImageBitmap> {
   return createImageBitmap(await res.blob(), { imageOrientation: 'flipY' });
 }
 
-/** Keeps the region texture about the aircraft, at night. */
+/** Where the aircraft is, for deciding which levels to draw and where. */
+export interface NightView {
+  /** Height above the ground, metres. */
+  aglM: number;
+  /** The ground is still loading: fetch nothing new until it is done. */
+  hold?: boolean;
+  trackDeg: number;
+  groundSpeedMs: number;
+}
+
+interface LevelState {
+  /** Centre of the square last drawn, and its half-sizes in degrees. */
+  centre: { lat: number; lon: number; latHalf: number; lonHalf: number } | null;
+  loading: boolean;
+  /** Level has been fetched at least once: from then on it is only re-centred, never faded again. */
+  everDrawn: boolean;
+}
+
+/** Keeps the night map about the aircraft, at night. */
 export class NightLights {
   private worldLoading = false;
-  private centre: { lat: number; lon: number; latHalf: number; lonHalf: number } | null = null;
-  private loading: AbortController | null = null;
-  private target = 0;
+  private regionCentre: { lat: number; lon: number; latHalf: number; lonHalf: number } | null = null;
+  private regionLoading: AbortController | null = null;
+  private regionTarget = 0;
+  private template: string | null = null;
+  private templateLoading = false;
+  private worker: Worker | null = null;
+  private nextId = 1;
+  private readonly inFlight = new Map<number, number>();
+  private readonly levels: LevelState[] = NIGHT_LEVELS.map(() => ({ centre: null, loading: false, everDrawn: false }));
   private disposed = false;
 
   /** Call once a frame with where the aircraft is and the night factor. */
-  update(lat: number, lon: number, night: number, dt: number): void {
+  update(lat: number, lon: number, night: number, dt: number, view?: NightView): void {
     if (this.disposed) return;
     // By day nothing is fetched at all.
     if (night <= NIGHT_FROM) return;
+    if (view?.hold) return;
     if (!this.worldLoading) this.loadWorld();
 
-    data[4] += (this.target - data[4]) * Math.min(1, dt * 1.5);
+    // A negative or absurd step (a stalled tab, a clock that jumped back) must not
+    // push the fade out of 0..1: a NaN here is a NaN in every terrain uniform.
+    data[4] += (this.regionTarget - data[4]) * Math.min(1, Math.max(0, dt) * 1.5);
+    const rc = this.regionCentre;
+    const regionNear =
+      rc !== null &&
+      Math.abs(lat - rc.lat) < rc.latHalf * REGION_RECENTRE_AT &&
+      Math.abs(lonDelta(rc.lon, lon)) < rc.lonHalf * REGION_RECENTRE_AT;
+    if (!regionNear && !this.regionLoading) void this.loadRegion(lat, lon);
 
-    const c = this.centre;
-    const near =
-      c !== null &&
-      Math.abs(lat - c.lat) < c.latHalf * RECENTRE_AT &&
-      Math.abs(lonDelta(c.lon, lon)) < c.lonHalf * RECENTRE_AT;
-    if (!near && !this.loading) void this.loadRegion(lat, lon);
+    if (!this.template) {
+      void this.loadTemplate();
+      return;
+    }
+
+    const agl = view?.aglM ?? 0;
+    const speed = view?.groundSpeedMs ?? 0;
+    const track = ((view?.trackDeg ?? 0) * Math.PI) / 180;
+
+    // Finest first when low, coarsest first when high: what the window shows.
+    const order = agl < 2500 ? [3, 2, 1, 0] : agl < 7000 ? [2, 1, 0, 3] : agl < 16_000 ? [1, 0, 2, 3] : [0, 1, 2, 3];
+
+    for (let i = 0; i < NIGHT_LEVELS.length; i++) {
+      const level = NIGHT_LEVELS[i]!;
+      const state = this.levels[i]!;
+      // Fades in the first time, and out of the way of a level too fine to matter from here.
+      const want = agl <= level.maxAglM && state.everDrawn ? 1 : 0;
+      const fx = i * 4;
+      levelFx[fx] = levelFx[fx]! + (want - levelFx[fx]!) * Math.min(1, Math.max(0, dt) * 1.4);
+    }
+
+    if (this.inFlight.size > 0) return;
+    for (const i of order) {
+      const level = NIGHT_LEVELS[i]!;
+      const state = this.levels[i]!;
+      if (agl > level.maxAglM || state.loading) continue;
+
+      // Centred a little ahead, so the square is where the aircraft is going.
+      const kmAhead = Math.min(level.spanKm * 0.2, (speed * LEAD_S) / 1000);
+      const aheadLat = lat + (kmAhead / 111.32) * Math.cos(track);
+      const aheadLon = lon + (kmAhead / (111.32 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)))) * Math.sin(track);
+
+      const c = state.centre;
+      const near =
+        c !== null &&
+        Math.abs(lat - c.lat) < c.latHalf * RECENTRE_AT &&
+        Math.abs(lonDelta(c.lon, lon)) < c.lonHalf * RECENTRE_AT;
+      if (near) continue;
+      this.request(i, aheadLat, aheadLon);
+      return; // one at a time: the worker is one core, and the render loop is the point
+    }
+  }
+
+  private request(level: number, lat: number, lon: number): void {
+    const template = this.template;
+    if (!template) return;
+    this.worker ??= this.spawn();
+    const id = this.nextId++;
+    this.inFlight.set(id, level);
+    const state = this.levels[level]!;
+    state.loading = true;
+    // Whatever happens, ask again only after the aircraft has moved on.
+    const bounds = levelBounds(NIGHT_LEVELS[level]!, lat, lon);
+    state.centre = {
+      lat: (bounds.south + bounds.north) / 2,
+      lon: (bounds.west + bounds.east) / 2,
+      latHalf: (bounds.north - bounds.south) / 2,
+      lonHalf: (bounds.east - bounds.west) / 2,
+    };
+    this.worker.postMessage({ id, level, lat, lon, template } satisfies NightMapRequest);
+  }
+
+  private spawn(): Worker {
+    const worker = new Worker(new URL('../workers/nightmap.worker.ts', import.meta.url), {
+      type: 'module',
+      name: 'planesview-nightmap',
+    });
+    worker.onmessage = (e: MessageEvent<NightMapResponse>) => this.receive(e.data);
+    worker.onerror = () => {
+      // A worker that cannot start leaves the night as the world's glow alone.
+      for (const state of this.levels) state.loading = false;
+      this.inFlight.clear();
+    };
+    return worker;
+  }
+
+  private receive(msg: NightMapResponse): void {
+    const index = this.inFlight.get(msg.id);
+    this.inFlight.delete(msg.id);
+    if (index === undefined) return;
+    const state = this.levels[index]!;
+    state.loading = false;
+    if (!msg.ok) {
+      // Retried when the aircraft has moved far enough to ask again; never in a tight loop.
+      return;
+    }
+    if (this.disposed) return msg.bitmap.close();
+
+    const texture = levelTextures[index]!;
+    const old = texture.image;
+    replaceImage(texture, msg.bitmap);
+    if (old instanceof ImageBitmap) old.close();
+
+    const b = index * 4;
+    levelBox[b] = msg.west;
+    levelBox[b + 1] = msg.south;
+    levelBox[b + 2] = 1 / (msg.east - msg.west);
+    levelBox[b + 3] = 1 / (msg.north - msg.south);
+    state.everDrawn = true;
   }
 
   private loadWorld(): void {
@@ -202,7 +380,7 @@ export class NightLights {
     const east = west + 2 * lonHalf;
 
     const controller = new AbortController();
-    this.loading = controller;
+    this.regionLoading = controller;
     const params = new URLSearchParams({
       SERVICE: 'WMS',
       VERSION: '1.3.0',
@@ -226,21 +404,34 @@ export class NightLights {
       data[1] = south;
       data[2] = 1 / (east - west);
       data[3] = 1 / (north - south);
-      this.centre = { lat: (south + north) / 2, lon: (west + east) / 2, latHalf: (north - south) / 2, lonHalf };
-      this.target = 1;
+      this.regionCentre = { lat: (south + north) / 2, lon: (west + east) / 2, latHalf: (north - south) / 2, lonHalf };
+      this.regionTarget = 1;
       // Faded in from nothing rather than over the previous region's placement.
       data[4] = 0;
     } catch {
       // Try again on a later frame once the aircraft has moved on; never in a tight loop.
-      this.centre = { lat, lon, latHalf, lonHalf };
+      this.regionCentre = { lat, lon, latHalf, lonHalf };
     } finally {
-      if (this.loading === controller) this.loading = null;
+      if (this.regionLoading === controller) this.regionLoading = null;
+    }
+  }
+
+  /** The vector tiles' current URL, once it is known. */
+  private async loadTemplate(): Promise<void> {
+    if (this.templateLoading) return;
+    this.templateLoading = true;
+    try {
+      this.template = await vectorTileTemplate();
+    } finally {
+      this.templateLoading = false;
     }
   }
 
   dispose(): void {
     this.disposed = true;
-    this.loading?.abort();
+    this.worker?.terminate();
+    this.worker = null;
+    this.regionLoading?.abort();
   }
 }
 
@@ -248,8 +439,7 @@ export class NightLights {
  * A new image of a different size into the same texture object, so every
  * material holding it sees the change. The GPU side has to go first: three
  * allocates a texture's storage once, at the size of its first image, and a
- * different-sized image uploaded into it afterwards is silently dropped —
- * which is how the region, after the first, stayed on the old one.
+ * different-sized image uploaded into it afterwards is silently dropped.
  */
 function replaceImage(texture: Texture, img: ImageBitmap): void {
   texture.dispose();

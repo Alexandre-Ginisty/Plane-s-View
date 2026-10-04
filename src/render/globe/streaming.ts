@@ -26,7 +26,9 @@
  *    continuation does not free the loader's concurrency slot.
  */
 
+import { wrapTileX } from '@/core/math/geo';
 import { TileLoader } from '@/tiles/loader';
+import { imageryFor } from '@/tiles/regional';
 import { TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import { TerrainWorkerPool } from '@/workers/pool';
 import {
@@ -36,6 +38,7 @@ import {
   MAX_CONCURRENT_TILE_LOADS,
   MAX_LOAD_ATTEMPTS,
   RETRY_BASE_FRAMES,
+  ELEVATION_MAX_ZOOM,
 } from './constants';
 import { priorityOf } from './metrics';
 import { loadGeometry, loadTexture, type LoadContext, type StreamerOptions } from './tileFetch';
@@ -177,16 +180,20 @@ export class TileStreamer {
 
   /** Warm the cache for one tile, behind every live request. See `Globe`. */
   prefetchTile(z: number, x: number, y: number, priority: number): void {
-    void this.loader
-      .request(`${this.imagery.id}/${z}/${x}/${y}`, [this.imagery.url(z, x, y)], priority)
-      .catch(() => undefined);
+    const layer = imageryFor(this.imagery, z, wrapTileX(x, z), y);
+    if (layer) {
+      const wx = wrapTileX(x, z);
+      void this.loader
+        .request(`${layer.id}/${z}/${wx}/${y}`, [layer.url(z, wx, y)], priority)
+        .catch(() => undefined);
+    }
 
-    // Terrarium stops at zoom 15, so a deeper tile wants its z15 ancestor —
+    // Elevation is fetched no deeper than `ELEVATION_MAX_ZOOM`, so a deeper tile wants that ancestor —
     // the same heightmap `elevationRequest` will ask for when the tile is
     // really built. Asking for `terrarium/17/...` instead just 404s, and
     // before the descent prefetch existed nothing ever called this past z12
     // so the ceiling was never hit.
-    const ez = Math.min(z, TERRARIUM.maxZoom);
+    const ez = Math.min(z, TERRARIUM.maxZoom, ELEVATION_MAX_ZOOM);
     const shift = z - ez;
     const ex = x >> shift;
     const ey = y >> shift;
@@ -387,7 +394,7 @@ export class TileStreamer {
            * view sitting over one would otherwise pile up exhaustions with no
            * success between them and change layer for no reason at all.
            */
-          if (node.z <= FAILOVER_MAX_ZOOM) this.exhaustedSinceServed++;
+          if (node.z <= FAILOVER_MAX_ZOOM && !node.regionalTexture) this.exhaustedSinceServed++;
         } else {
           node.textureState = 'failed';
           node.textureRetryFrame = this.frame + RETRY_BASE_FRAMES * 2 ** node.textureAttempts;
@@ -396,7 +403,8 @@ export class TileStreamer {
         node.textureState = outcome === 'aborted' ? 'idle' : outcome;
         if (outcome === 'ready') {
           node.textureAttempts = 0;
-          this.exhaustedSinceServed = 0;
+          // A national server answering says nothing about the global layer.
+          if (!node.regionalTexture) this.exhaustedSinceServed = 0;
         }
       }
     }

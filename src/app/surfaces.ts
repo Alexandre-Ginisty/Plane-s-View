@@ -8,7 +8,6 @@
  * to the reasoning rather than found halfway down a boot sequence.
  */
 
-import { Buildings } from '@/render/buildings';
 import type { FloatingOrigin } from '@/core/frame';
 import { networkMonitor } from '@/net/quality';
 import { Engine } from '@/render/engine';
@@ -22,7 +21,6 @@ import { Traffic3D } from '@/render/traffic3d';
 export interface Surfaces {
   engine: Engine;
   globe: Globe;
-  buildings: Buildings;
   traffic3d: Traffic3D;
   ownAircraft: OwnAircraft;
   pov: PovController;
@@ -69,10 +67,9 @@ export function createSurfaces(
    * for three levels past anything the screen can resolve and the ground
    * never arrived at all. See `REFINE_TEXELS`.
    *
-   * 19 is Esri's own deepest level. Because the error target stops refinement
-   * the moment the imagery is at native resolution, the ceiling is inert
-   * everywhere except within a few hundred metres of the ground — which is
-   * exactly where 18 was leaving the last level visibly soft.
+   * A ceiling, not a target: the active imagery layer caps refinement at its
+   * own deepest zoom (see `Globe.maxZoom`), so this only matters if a layer
+   * with finer imagery is ever added.
    */
   const globe = new Globe(origin, { maxScreenSpaceError: 1, maxZoom: 19 });
 
@@ -85,7 +82,6 @@ export function createSurfaces(
   globe.applyProfile(networkMonitor.profile);
 
   const traffic3d = new Traffic3D(origin);
-  const buildings = new Buildings(origin);
   const ownAircraft = new OwnAircraft(origin);
   ownAircraft.lights = traffic3d.lights;
   ownAircraft.warm = { renderer: engine.renderer, scene: engine.scene };
@@ -95,10 +91,9 @@ export function createSurfaces(
   const overlay = new ViewOverlay(pinOverlay);
 
   engine.scene.add(globe.scene);
-  engine.scene.add(buildings.scene);
   engine.scene.add(traffic3d.scene);
   engine.scene.add(ownAircraft.scene);
   engine.scene.add(pins3d.scene);
 
-  return { engine, globe, buildings, traffic3d, ownAircraft, pov, pins3d, overlay };
+  return { engine, globe, traffic3d, ownAircraft, pov, pins3d, overlay };
 }

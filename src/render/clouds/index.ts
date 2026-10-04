@@ -1,7 +1,7 @@
 /**
  * The real cloud layers, from the weather model.
  *
- * Open-Meteo reports cover in three layers — low, mid and high — and the
+ * MET Norway reports cover in three layers — low, mid and high — and the
  * temperature and dew point that put the base of the low one at about
  * 125 m per degree of spread. Each layer is drawn as a sheet at its height:
  * cumulus and stratocumulus low, altocumulus in the middle, cirrus high and

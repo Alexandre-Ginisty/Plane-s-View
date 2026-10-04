@@ -61,6 +61,10 @@ export class TileNode {
 
   /** This tile's own imagery, once it has arrived. */
   texture: Texture | null = null;
+  /** Which imagery layer `texture` came from, for the credit. */
+  textureLayerId: string | null = null;
+  /** True while the texture is wanted from a national layer, not the global one. */
+  regionalTexture = false;
   textureState: NodeState = 'idle';
   /** 0 = showing the inherited ancestor texture, 1 = showing its own. */
   textureBlend = 0;

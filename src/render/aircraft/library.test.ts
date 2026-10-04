@@ -145,7 +145,7 @@ describe('the stand-in for a type with no model', () => {
     for (const code of ['A332', 'E190', 'SB20', 'PA28', 'AS50', 'GLF5']) {
       const id = resolveModelId(index, code, null);
       expect(id).not.toBeNull();
-      expect(['a10', 'f16', 'f4u', 'mig29', 'su25']).not.toContain(id);
+      expect(['a10', 'f16', 'f4u', 'm2k']).not.toContain(id);
     }
     expect(['ec35', 'bo05', 's76c', 'as32']).toContain(resolveModelId(index, 'AS50', null));
   });

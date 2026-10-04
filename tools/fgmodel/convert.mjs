@@ -258,7 +258,10 @@ export const AIRCRAFT = [
     id: 'md80',
     path: 'MD-80',
     model: 'Models/mesh_airframe.ac',
-    types: ['MD82', 'MD83', 'MD88', 'MD81', 'MD90'],
+    // The 717 and MD-95 are drawn as the MD-80, their ancestor. FGAddon's own
+    // 717 is not shipped: its README says it adapts Gary Neely's MD-81, which is
+    // under a Creative Commons licence "not compatible with the GNU GPL".
+    types: ['MD82', 'MD83', 'MD88', 'MD81', 'MD90', 'B712', 'MD95'],
     lengthM: 45.1,
     credit: 'MD-80 — FlightGear FGAddon, GPL-2.0',
   },
@@ -440,14 +443,6 @@ export const AIRCRAFT = [
     // The schemes are painted on the white sheet, which is named for none
     // of them.
     liveries: { replaces: '733_white.png' },
-  },
-  {
-    id: 'b712',
-    path: '717',
-    model: 'Models/717-200.ac',
-    types: ['B712', 'MD95'],
-    lengthM: 37.8,
-    credit: '717-200 — FlightGear FGAddon, GPL-2.0',
   },
   {
     id: 'a346',
@@ -1485,7 +1480,7 @@ export async function convert(entry, { quiet = false } = {}) {
    * before redistributing it.
    */
   const notices = [];
-  for (const file of ['LICENSE', 'COPYING', 'AUTHORS', 'README', 'README.md', 'Thanks']) {
+  for (const file of ['LICENSE', 'LICENSE.txt', 'COPYING', 'AUTHORS', 'README', 'README.md', 'README.licence', 'README.contributors', 'Thanks']) {
     try {
       const data = await fetchCached(
         `${FGADDON}/${entry.path}/${file}`,
@@ -1584,7 +1579,7 @@ function creditsMarkdown(rows) {
     const url = `https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/${row.path}/`;
     lines.push(
       `| \`${row.id}\` | ${row.types.join(', ')} | [Aircraft/${row.path}](${url}) | GPL-2.0 | ${
-        row.notices.length ? row.notices.map((n) => `\`${n}\``).join(', ') : '**none upstream**'
+        row.notices.length ? row.notices.map((n) => `\`${n}\``).join(', ') : 'none upstream — FGAddon only admits GPL-compatible aircraft'
       } |`,
     );
   }
@@ -1680,7 +1675,7 @@ async function main() {
   await writeFile(join(OUT, 'CREDITS.md'), creditsMarkdown(rows));
 
   // The licence text itself, fetched once from an aircraft that ships it.
-  const gpl = await fetchCached(`${FGADDON}/${list[0].path}/LICENSE`, 'gpl-2.0.txt').catch(
+  const gpl = await fetchCached(`${FGADDON}/MD-80/LICENSE`, 'gpl-2.0.txt').catch(
     () => null,
   );
   if (gpl) await writeFile(join(OUT, 'LICENSE-GPL-2.0.txt'), gpl);

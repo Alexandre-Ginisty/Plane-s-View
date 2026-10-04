@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TERRARIUM } from '@/tiles/sources';
-import { RELIEF, meshResolutionFor } from './constants';
+import { ELEVATION_MAX_ZOOM, RELIEF, meshResolutionFor } from './constants';
 
 describe('RELIEF', () => {
   it('exaggerates enough to read, and not so much that it is a cartoon', () => {
@@ -30,22 +30,23 @@ describe('RELIEF', () => {
 describe('meshResolutionFor', () => {
   it('never asks for more quads than there are elevation samples', () => {
     /*
-     * The ceiling that matters. Above zoom 15 a tile samples a sub-rectangle
-     * of its z15 ancestor, a quarter of the samples per level, so a fixed
-     * 128-quad mesh would spend sixteen thousand vertices on 256 numbers —
-     * and it would spend them on the tiles nearest the camera.
+     * The ceiling that matters. Above the deepest elevation zoom a tile
+     * samples a sub-rectangle of its ancestor, a quarter of the samples per
+     * level, so a fixed 128-quad mesh would spend sixteen thousand vertices on
+     * 256 numbers — and it would spend them on the tiles nearest the camera.
      */
-    for (let z = TERRARIUM.maxZoom + 1; z <= 19; z++) {
-      const real = TERRARIUM.tileSize >> (z - TERRARIUM.maxZoom);
-      expect(meshResolutionFor(z)).toBeLessThanOrEqual(real);
+    for (let z = ELEVATION_MAX_ZOOM + 1; z <= 19; z++) {
+      const real = TERRARIUM.tileSize >> (z - ELEVATION_MAX_ZOOM);
+      // 8 quads is the floor: fewer cannot carry a tile's skirt and morph.
+      expect(meshResolutionFor(z)).toBeLessThanOrEqual(Math.max(8, real));
     }
-    expect(meshResolutionFor(19)).toBe(16);
+    expect(meshResolutionFor(19)).toBe(8);
   });
 
   it('keeps a quarter of the heightmap where the heightmap is whole', () => {
     // 128 quads is 129x129 of a 256x256 tile, for no extra bandwidth at all:
     // the PNG has already been downloaded and decoded either way.
-    expect(meshResolutionFor(TERRARIUM.maxZoom)).toBe(128);
+    expect(meshResolutionFor(ELEVATION_MAX_ZOOM)).toBe(128);
     expect(meshResolutionFor(12)).toBe(128);
   });
 
@@ -65,7 +66,7 @@ describe('meshResolutionFor', () => {
   });
 
   it('rises with the zoom until the data runs out', () => {
-    for (let z = 3; z <= TERRARIUM.maxZoom; z++) {
+    for (let z = 3; z <= ELEVATION_MAX_ZOOM; z++) {
       expect(meshResolutionFor(z)).toBeGreaterThanOrEqual(meshResolutionFor(z - 1));
     }
   });

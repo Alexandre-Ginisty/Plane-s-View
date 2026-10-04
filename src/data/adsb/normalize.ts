@@ -1,27 +1,18 @@
 /**
  * Provider payload -> `AircraftState`.
  *
- * Two wire formats cover all four providers:
+ * One wire format: **readsb / tar1090 JSON** — `{ ac: [...] }`, one object per
+ * aircraft, aviation units. adsb.lol serves it; so would any other
+ * readsb-based feed, which is why the parser is not named after one provider.
  *
- *  - **readsb / tar1090 JSON** (adsb.lol v2, airplanes.live v2, adsb.fi v2):
- *    `{ ac: [...] }`, one object per aircraft, aviation units.
- *  - **OpenSky "state vector"**: `{ states: [[...]] }`, positional arrays, SI
- *    units, with `null` in most slots most of the time.
- *
- * Note on two fields the project brief described differently: in the real
- * readsb schema `r` is the **registration** and `t` is the **type code** (not
- * receiver distance and timestamp). Distance to the receiver is `dst`, and the
- * timestamp is the top-level `now`. Mapping them correctly means the
- * registration and airframe type arrive with the position, so the common case
- * needs no adsbdb round-trip at all.
+ * In the readsb schema `r` is the **registration** and `t` is the **type code**
+ * (not receiver distance and timestamp). Distance to the receiver is `dst`, and
+ * the timestamp is the top-level `now`. Mapping them correctly means the
+ * registration and airframe type arrive with the position, so the identity of
+ * an aircraft needs no lookup at all.
  */
 
-import {
-  FEET_TO_METRES,
-  MPS_TO_KNOTS,
-  wrapHeading,
-  wrapLongitude,
-} from '@/core/math/geo';
+import { wrapHeading, wrapLongitude } from '@/core/math/geo';
 import {
   emergencyOrNull,
   feedClockToMs,
@@ -176,7 +167,7 @@ export function normalizeReadsbResponse(
   source: ProviderId,
   receivedAt: number,
 ): { states: AircraftState[]; hints: InlineAirframeHint[] } {
-  // adsb.lol answers under `ac`, adsb.fi under `aircraft`.
+  // readsb answers under `ac`; some forks spell it `aircraft`.
   const list = body.ac ?? body.aircraft ?? [];
   const feedNow = usableFeedClock(feedClockToMs(body.now), receivedAt);
   const states: AircraftState[] = [];
@@ -191,132 +182,3 @@ export function normalizeReadsbResponse(
 
   return { states, hints };
 }
-
-// ---------------------------------------------------------------------------
-// OpenSky
-// ---------------------------------------------------------------------------
-
-/**
- * OpenSky state vector, by index:
- * 0 icao24, 1 callsign, 2 origin_country, 3 time_position, 4 last_contact,
- * 5 longitude, 6 latitude, 7 baro_altitude(m), 8 on_ground, 9 velocity(m/s),
- * 10 true_track, 11 vertical_rate(m/s), 12 sensors, 13 geo_altitude(m),
- * 14 squawk, 15 spi, 16 position_source, 17 category (optional).
- */
-type OpenSkyStateVector = readonly unknown[];
-
-export interface OpenSkyResponse {
-  time?: number;
-  states?: OpenSkyStateVector[] | null;
-}
-
-/** OpenSky reports categories as an integer; this is the ADS-B mapping. */
-const OPENSKY_CATEGORY: readonly (string | null)[] = [
-  null, // 0 = no information
-  'A0', // 1 = no ADS-B emitter category information
-  'A1', // light
-  'A2', // small
-  'A3', // large
-  'A4', // high-vortex large
-  'A5', // heavy
-  'A6', // high performance
-  'A7', // rotorcraft
-  'B1', // glider
-  'B2', // lighter-than-air
-  'B3', // parachutist
-  'B4', // ultralight
-  null, // 13 reserved
-  'B6', // UAV
-  'B7', // space vehicle
-  'C1', // surface emergency vehicle
-  'C2', // surface service vehicle
-  'C3', // point obstacle
-];
-
-function normalizeOpenSkyState(
-  v: OpenSkyStateVector,
-  receivedAt: number,
-  feedTimeSec: number | null,
-): AircraftState | null {
-  const hex = str(v[0])?.toLowerCase();
-  if (!hex) return null;
-
-  const lon = num(v[5]);
-  const lat = num(v[6]);
-  if (!validPosition(lat, lon)) return null;
-
-  const timePosition = num(v[3]);
-  const onGround = v[8] === true;
-  const baroAltM = num(v[7]);
-  const geoAltM = num(v[13]);
-  const velocityMs = num(v[9]);
-  const verticalMs = num(v[11]);
-  const track = num(v[10]);
-  const categoryIdx = num(v[17]);
-
-  const fixTime = timePosition !== null ? timePosition * 1000 : receivedAt;
-  const feedNowMs = feedTimeSec !== null ? feedTimeSec * 1000 : receivedAt;
-
-  return {
-    hex,
-    callsign: str(v[1]),
-    lat: lat as number,
-    lon: wrapLongitude(lon as number),
-    altBaroFt: onGround ? 0 : baroAltM === null ? null : baroAltM / FEET_TO_METRES,
-    altGeomFt: geoAltM === null ? null : geoAltM / FEET_TO_METRES,
-    groundSpeedKt: velocityMs === null ? null : velocityMs * MPS_TO_KNOTS,
-    trackDeg: track === null ? null : wrapHeading(track),
-    headingDeg: null,
-    // OpenSky reports m/s; the rest of the app speaks ft/min.
-    baroRateFpm: verticalMs === null ? null : (verticalMs / FEET_TO_METRES) * 60,
-    geomRateFpm: null,
-    squawk: str(v[14]),
-    category:
-      categoryIdx !== null && categoryIdx >= 0 && categoryIdx < OPENSKY_CATEGORY.length
-        ? OPENSKY_CATEGORY[categoryIdx] ?? null
-        : null,
-    emergency: null,
-    onGround,
-    navAltitudeMcpFt: null,
-    navHeadingDeg: null,
-    navQnhHpa: null,
-    // OpenSky's state vector carries no flight-dynamics fields at all.
-    iasKt: null,
-    tasKt: null,
-    mach: null,
-    rollDeg: null,
-    trackRateDegSec: null,
-    windDirectionDeg: null,
-    windSpeedKt: null,
-    oatC: null,
-    tatC: null,
-    navModes: null,
-    navAltitudeFmsFt: null,
-    isMlat: false,
-    isTisb: false,
-    seenPosSec: timePosition !== null ? Math.max(0, (feedNowMs - fixTime) / 1000) : null,
-    rssi: null,
-    receiverDistanceNm: null,
-    source: 'opensky',
-    observedAt: receivedAt,
-    fixTime,
-  };
-}
-
-export function normalizeOpenSkyResponse(
-  body: OpenSkyResponse,
-  receivedAt: number,
-): AircraftState[] {
-  const out: AircraftState[] = [];
-  // OpenSky documents `time` in seconds, but run it through the same guard so
-  // a format change cannot silently empty the map.
-  const normalised = usableFeedClock(feedClockToMs(body.time), receivedAt);
-  const feedTime = normalised === null ? null : normalised / 1000;
-  for (const v of body.states ?? []) {
-    const s = normalizeOpenSkyState(v, receivedAt, feedTime);
-    if (s) out.push(s);
-  }
-  return out;
-}
-
-/** Exported for tests: the units guard that keeps the fleet from vanishing. */

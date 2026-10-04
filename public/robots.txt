@@ -1,5 +1,8 @@
-# The app is one page; the relay and the model files are not content.
+# The app is one page; the relay and the data files are not content.
 User-agent: *
 Allow: /$
+Allow: /mentions-legales.html
 Disallow: /feeds/
 Disallow: /models/
+Disallow: /routes/
+Disallow: /map/

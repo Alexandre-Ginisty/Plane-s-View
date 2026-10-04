@@ -83,10 +83,9 @@ export interface StreamingProfile {
 const PROFILES: Record<NetworkGrade, Omit<StreamingProfile, 'grade'>> = {
   fast: {
     concurrency: 32,
-    // 19 is Esri's own ceiling, and it only binds near the ground: refinement
-    // stops once imagery reaches one pixel per texel, which at cruise is about
-    // zoom 13. Capping at 18 cost nothing in the air and left the last visible
-    // level blurry on approach, where detail is looked at hardest.
+    // A ceiling, not a target: the active imagery layer caps refinement at its
+    // own deepest zoom (14 for Sentinel-2), and refinement stops sooner than
+    // that once imagery reaches one pixel per texel.
     maxZoom: 19,
     screenSpaceError: 1,
     prefetchSeconds: 120,
@@ -104,18 +103,18 @@ const PROFILES: Record<NetworkGrade, Omit<StreamingProfile, 'grade'>> = {
     advice: 'Full detail, streaming slightly further ahead of the aircraft.',
   },
   slow: {
-    concurrency: 12,
-    maxZoom: 16,
-    screenSpaceError: 1.5,
-    prefetchSeconds: 60,
+    concurrency: 14,
+    maxZoom: 18,
+    screenSpaceError: 1.2,
+    prefetchSeconds: 75,
     timeoutMs: 18_000,
     label: 'Link: slow',
-    advice: 'Detail reduced so the ground finishes loading instead of stalling.',
+    advice: 'Slightly reduced detail so the ground finishes loading instead of stalling.',
   },
   poor: {
-    concurrency: 6,
-    maxZoom: 14,
-    screenSpaceError: 2.2,
+    concurrency: 10,
+    maxZoom: 15,
+    screenSpaceError: 1.7,
     prefetchSeconds: 25,
     timeoutMs: 25_000,
     label: 'Link: weak',

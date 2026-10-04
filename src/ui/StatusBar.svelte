@@ -4,8 +4,8 @@
   Two jobs. The first is telling the truth about where the data is coming from:
   which provider answered, how stale it is, and which are down — a tracker that
   silently shows minute-old positions as current is worse than one that admits
-  it. The second is attribution, which Esri, Mapzen, the ADS-B feeds and the
-  rest require.
+  it. The second is attribution, which EOX, NASA, Mapzen, OpenStreetMap and the
+  ADS-B feed require.
 
   It used to be a strip of small print across the whole bottom of the screen,
   on the map and under the cockpit alike. Now it is one pill — a health dot,
@@ -18,10 +18,13 @@
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
   import { profileFor } from '@/net/quality';
+  import { REGIONAL_LAYERS } from '@/tiles/regional';
   import { imageryById, TERRARIUM } from '@/tiles/sources';
   import { age } from './format';
 
   const imagery = $derived(imageryById(app.imageryId));
+  /** National layers drawn right now: the credit their licence asks for is shown while they are. */
+  const national = $derived(REGIONAL_LAYERS.filter((l) => app.regionalImagery.includes(l.id)));
 
   let now = $state(Date.now());
   $effect(() => {
@@ -141,10 +144,13 @@
           <p class="label">Sources</p>
           <p class="note credits">
             {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a><br />{/if}
+            Close-up aerial imagery, where open data exists: {#each REGIONAL_LAYERS as layer, i}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer" title={layer.attribution}>{layer.label}</a> ({layer.licence}){i < REGIONAL_LAYERS.length - 1 ? ' · ' : ''}{/each}<br />
             <a href={TERRARIUM.attributionUrl} target="_blank" rel="noopener noreferrer">{TERRARIUM.attribution}</a><br />
-            Buildings © OpenStreetMap contributors (ODbL), OpenMapTiles, OpenFreeMap<br />
-            Night lights NASA Black Marble (public domain)<br />
-            Places © Natural Earth, GeoNames (CC BY 4.0) · Aircraft data adsbdb · Photos Planespotters · Weather Open-Meteo
+            Roads, runways and footprints © OpenStreetMap contributors (ODbL), OpenMapTiles, OpenFreeMap<br />
+            Night lights NASA Black Marble (public domain) · 3D aircraft <a href="./models/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear community (GPL-2.0)</a><br />
+            Places © Natural Earth, GeoNames (CC BY 4.0) · Traffic <a href="https://adsb.fi" target="_blank" rel="noopener noreferrer">adsb.fi</a>, <a href="https://adsb.lol" target="_blank" rel="noopener noreferrer">adsb.lol</a> (ODbL)<br />
+            Weather: data from <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a> (CC BY 4.0) · Routes Virtual Radar Server community (CC0) · Photos Wikimedia Commons, credited on each<br />
+            <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">Mentions légales</a>
           </p>
         </section>
       </div>
@@ -168,10 +174,10 @@
 {:else}
   <!-- MapLibre's credit is hidden under the 3D view; this one stands in for it. -->
   <p class="credit">
-    {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a> · {/if}<a
+    {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a> · {/if}{#each national as layer}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer">{layer.attribution}</a> · {/each}<a
       href={TERRARIUM.attributionUrl}
       target="_blank"
-      rel="noopener noreferrer">{TERRARIUM.attribution}</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">Buildings © OpenStreetMap</a>
+      rel="noopener noreferrer">{TERRARIUM.attribution}</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a> · <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">Mentions légales</a>
   </p>
 {/if}
 

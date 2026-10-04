@@ -13,7 +13,6 @@ import type { Vector3 } from 'three';
 import { sunDirectionEcef } from '@/core/sun';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
-import { setBuildingSun } from '@/render/buildings/material';
 
 /**
  * @param sunVec Scratch vector the caller owns, left holding the sun direction
@@ -28,5 +27,4 @@ export function updateSunlight(engine: Engine, globe: Globe, sunVec: Vector3): v
   // atmosphere, which works out the sun's elevation from the camera itself.
   engine.setSky(sunVec);
   globe.setSun(sunVec);
-  setBuildingSun(sunVec);
 }

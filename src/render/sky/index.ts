@@ -244,9 +244,11 @@ export class Atmosphere {
       const tint = Math.min(1.1, l.sunColor[ch]! / this.noonSun[ch]!);
       atmoData[16 + ch] = tint * l.sunStrength;
     }
-    // The terrain keeps some legibility at night: satellite imagery with no
-    // lights of its own would otherwise go black.
-    atmoData[19] = 0.4 + 0.6 * l.skyStrength;
+    // What the terrain keeps at night is moonlight and
+    // starlight, not a dimmed day: faint enough that the lights are what make
+    // the picture (see `nightLights`), enough that a coast, a river and a
+    // runway-sized patch of field can still be told from the sea.
+    atmoData[19] = 0.22 + 0.78 * l.skyStrength;
     // The colour of that skylight, for what the sun does not reach: half-way
     // from neutral to the sky's own hue, so shadows lean blue without the
     // imagery turning blue.

@@ -4,7 +4,7 @@ import { httpsUrl } from './http';
 
 describe('httpsUrl', () => {
   it('keeps an https link', () => {
-    expect(httpsUrl('https://www.planespotters.net/photo/123')).toBe('https://www.planespotters.net/photo/123');
+    expect(httpsUrl('https://commons.wikimedia.org/wiki/File:Example.jpg')).toBe('https://commons.wikimedia.org/wiki/File:Example.jpg');
   });
 
   it('refuses anything that could run or leak in href or src', () => {

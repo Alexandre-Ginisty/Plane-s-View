@@ -1,9 +1,10 @@
 <!--
-  Airframe photo with its credit.
+  Airframe photo with its credit and licence.
 
-  The credit and the link back are a condition of the Planespotters API, not
+  The photographer, the licence and the link to the file page are a condition
+  of the Creative Commons licences these photographs are published under, not
   decoration — they render whenever a photo does, and the component is built so
-  that the two cannot be separated by a later edit.
+  that they cannot be separated by a later edit.
 -->
 <script lang="ts">
   import type { AircraftPhoto } from '@/data/types';
@@ -26,13 +27,9 @@
 <figure>
   <img src={photo.largeUrl} {alt} loading="lazy" onerror={() => (failed = true)} />
   <figcaption>
-    {#if photo.link}
-      <a href={photo.link} target="_blank" rel="noopener noreferrer">
-        {photo.photographer ?? 'Planespotters'}
-      </a>
-    {:else}
-      {photo.photographer ?? 'Photo: airport-data.com'}
-    {/if}
+    <a href={photo.link} target="_blank" rel="noopener noreferrer">
+      {photo.photographer ?? 'Wikimedia Commons'} · {photo.license}
+    </a>
   </figcaption>
 </figure>
 {/if}

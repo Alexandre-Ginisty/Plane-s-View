@@ -149,7 +149,9 @@ export class Engine {
     // battery and heat. The adaptive loop below lowers it further if needed.
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     this.maxPixelRatio = options.maxPixelRatio ?? Math.min(window.devicePixelRatio, coarse ? 1.5 : 2);
-    this.minPixelRatio = options.minPixelRatio ?? 0.65;
+    // Down to 0.8, not lower: below it the whole picture goes visibly soft, and a
+    // frame a little over budget is a smaller fault than a blurred site.
+    this.minPixelRatio = options.minPixelRatio ?? 0.8;
     this.pixelRatio = this.maxPixelRatio;
     this.targetFrameMs = 1000 / (options.targetFps ?? 60);
 
@@ -396,9 +398,9 @@ export class Engine {
     this.fps = 1000 / Math.max(1, this.frameIntervalAverage);
 
     let next = this.pixelRatio;
-    if (this.renderMsAverage > this.targetFrameMs * 0.8) {
-      next = this.pixelRatio * 0.94;
-    } else if (this.renderMsAverage < this.targetFrameMs * 0.45) {
+    if (this.renderMsAverage > this.targetFrameMs * 1.0) {
+      next = this.pixelRatio * 0.96;
+    } else if (this.renderMsAverage < this.targetFrameMs * 0.6) {
       next = this.pixelRatio * 1.02;
     }
 

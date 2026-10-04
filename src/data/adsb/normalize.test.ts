@@ -39,11 +39,11 @@ describe('feed clock units', () => {
     expect(feedClockToMs(ADSB_LOL_NOW_MS)).toBe(ADSB_LOL_NOW_MS);
   });
 
-  it('promotes adsb.fi seconds to milliseconds', () => {
+  it('promotes a seconds clock to milliseconds', () => {
     expect(feedClockToMs(ADSB_FI_NOW_SEC)).toBe(ADSB_FI_NOW_SEC * 1000);
   });
 
-  it('puts both providers at the same instant', () => {
+  it('puts both units at the same instant', () => {
     const lol = feedClockToMs(ADSB_LOL_NOW_MS)!;
     const fi = feedClockToMs(ADSB_FI_NOW_SEC)!;
     // The two captures were seconds apart in reality.
@@ -74,10 +74,10 @@ describe('normalizeReadsbResponse', () => {
     expect(states[0]!.hex).toBe('391d49');
   });
 
-  it('reads the adsb.fi shape (aircraft, seconds)', () => {
+  it('reads the alternative shape (aircraft, seconds)', () => {
     const receivedAt = ADSB_FI_NOW_SEC * 1000;
     const body: ReadsbResponse = { aircraft: [aircraftFixture], now: ADSB_FI_NOW_SEC };
-    const { states } = normalizeReadsbResponse(body, 'adsb.fi', receivedAt);
+    const { states } = normalizeReadsbResponse(body, 'adsb.lol', receivedAt);
     expect(states).toHaveLength(1);
   });
 
@@ -94,7 +94,7 @@ describe('normalizeReadsbResponse', () => {
     ] as const) {
       const key = now === ADSB_FI_NOW_SEC ? 'aircraft' : 'ac';
       const body = { [key]: [aircraftFixture], now } as ReadsbResponse;
-      const { states } = normalizeReadsbResponse(body, 'adsb.fi', receivedAt);
+      const { states } = normalizeReadsbResponse(body, 'adsb.lol', receivedAt);
 
       const ageSeconds = (receivedAt - states[0]!.fixTime) / 1000;
       expect(ageSeconds).toBeGreaterThanOrEqual(0);

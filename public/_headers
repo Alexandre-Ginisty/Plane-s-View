@@ -7,6 +7,9 @@
 # injected scripts, clickjacking frames, content sniffed into the wrong type,
 # and the referrer leaking where people came from.
 #
+# National aerial imagery (src/tiles/regional.ts) is fetched straight from each agency's server, so every
+# one of those hosts is listed in connect-src; a test fails if a layer is added without its host.
+#
 # The Content-Security-Policy starts from nothing (`default-src 'none'`) and
 # allows, per kind of request, every origin this app is supposed to talk to. Anything else — an injected analytics tag, a script
 # smuggled through a dependency, an exfiltration beacon — is refused by the
@@ -24,7 +27,7 @@
 # a policy that would break the deployed site breaks the local preview first.
 
 /*
-  Content-Security-Policy: default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://t.plnspttrs.net https://cdn.planespotters.net https://api.planespotters.net https://airport-data.com https://*.airport-data.com https://gibs.earthdata.nasa.gov; connect-src 'self' https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://api.adsbdb.com https://api.open-meteo.com https://gibs.earthdata.nasa.gov https://tiles.openfreemap.org; font-src 'self'; manifest-src 'self'; media-src 'none'; frame-src 'none'; child-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://gibs.earthdata.nasa.gov https://upload.wikimedia.org https://thumb.wikimedia.org; connect-src 'self' https://services.arcgisonline.com https://tiles.maps.eox.at https://s3.amazonaws.com https://gibs.earthdata.nasa.gov https://tiles.openfreemap.org https://commons.wikimedia.org https://data.geopf.fr https://service.pdok.nl https://mapsneu.wien.gv.at https://www.ign.es https://wmts.geo.admin.ch https://wmts1.geoportail.lu https://tiles.maaamet.ee https://basemap.nationalmap.gov https://www.wmts.nrw.de https://wmtsod1.bayernwolke.de; font-src 'self'; manifest-src 'self'; media-src 'none'; frame-src 'none'; child-src 'none'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
@@ -38,6 +41,10 @@
 # Hashed filenames, so these can never go stale.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Flight routes, built from the CC0 Virtual Radar Server data: replaced only by a deploy.
+/routes/*
+  Cache-Control: public, max-age=604800
 
 # Natural Earth borders and place names: static, replaced only by a deploy.
 /map/*

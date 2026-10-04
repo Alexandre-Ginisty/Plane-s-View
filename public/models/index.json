@@ -106,9 +106,8 @@
     "B733": "b733",
     "B734": "b733",
     "B735": "b733",
-    "b712": "b712",
-    "B712": "b712",
-    "MD95": "b712",
+    "B712": "md80",
+    "MD95": "md80",
     "a346": "a346",
     "A346": "a346",
     "A343": "a346",
@@ -189,26 +188,18 @@
     "CORS": "f4u",
     "f15": "f15",
     "F15": "f15",
-    "f14": "f14",
-    "F14": "f14",
     "f18": "f18",
     "F18": "f18",
     "F18H": "f18",
     "F18S": "f18",
     "m2k": "m2k",
     "MIR2": "m2k",
-    "mig29": "mig29",
-    "MG29": "mig29",
-    "su25": "su25",
-    "SU25": "su25",
     "p51": "p51",
     "P51": "p51",
     "ah64": "ah64",
     "H64": "ah64",
     "jas39": "jas39",
-    "GRIF": "jas39",
-    "mig21": "mig21",
-    "MG21": "mig21"
+    "GRIF": "jas39"
   },
   "liveries": {
     "b788": {
@@ -309,10 +300,6 @@
       "UAL": "b733-livery-UAL.webp",
       "TSO": "b733-livery-TSO.webp",
       "NEUTRAL": "b733-livery-NEUTRAL.webp"
-    },
-    "b712": {
-      "TRS": "b712-livery-TRS.webp",
-      "NEUTRAL": "b712-livery-NEUTRAL.webp"
     },
     "a346": {
       "ACA": "a346-livery-ACA.webp",

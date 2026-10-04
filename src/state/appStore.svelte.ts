@@ -194,6 +194,8 @@ class AppStore {
   /** The 3D cockpit (with its own instruments) is on screen. */
   cockpit3d = $state(false);
   imageryId = $state('esri');
+  /** National imagery layers in the picture now (ids from `tiles/regional.ts`): their credit is shown. */
+  regionalImagery = $state<readonly string[]>([]);
   /** Borders and place names drawn over the selection map. */
   showLabels = $state(true);
 

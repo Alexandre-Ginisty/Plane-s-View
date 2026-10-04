@@ -1,7 +1,7 @@
 {
   "name": "planesview",
-  "version": "0.1.0",
-  "description": "Real-time aircraft globe with immersive cockpit POV. Free data sources, no API key, no backend.",
+  "version": "1.0.0",
+  "description": "Real-time aircraft globe with immersive cockpit POV. Free, commercially usable data sources only; no API key, no account.",
   "type": "module",
   "private": true,
   "license": "MIT",

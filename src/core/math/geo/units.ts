@@ -45,7 +45,7 @@ export const EARTH_MEAN_RADIUS = 6371008.8;
 
 /**
  * Latitude beyond which Web Mercator is undefined. Every XYZ tile source in
- * this app (Esri, EOX, OSM, Terrarium) is Mercator, so the tiled globe is
+ * this app (EOX, NASA GIBS, OSM, Terrarium) is Mercator, so the tiled globe is
  * clipped here and the caps are filled separately.
  */
 export const MERCATOR_MAX_LAT = 85.051128779806604;
@@ -58,7 +58,7 @@ export const FEET_TO_METRES = 0.3048;
 export const METRES_TO_FEET = 1 / FEET_TO_METRES;
 export const KNOTS_TO_MPS = 0.514444444444;
 export const MPS_TO_KNOTS = 1 / KNOTS_TO_MPS;
-export const NM_TO_METRES = 1852;
+const NM_TO_METRES = 1852;
 export const METRES_TO_NM = 1 / NM_TO_METRES;
 /** Feet per minute -> metres per second. */
 export const FPM_TO_MPS = FEET_TO_METRES / 60;

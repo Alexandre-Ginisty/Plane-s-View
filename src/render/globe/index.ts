@@ -57,10 +57,12 @@ import {
   latToMercatorY,
   lonToMercatorX,
   tileKey,
+  wrapTileX,
   type Vec3,
 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { StreamingProfile } from '@/net/quality';
+import { imageryMaxZoom, imageryMaxZoomAt } from '@/tiles/regional';
 import { DEFAULT_IMAGERY, IMAGERY_FALLBACK_ORDER, type ImagerySource } from '@/tiles/sources';
 import {
   DESCENT_TRIGGER_M,
@@ -76,6 +78,11 @@ import { TileStreamer, type LoadFrontier } from './streaming';
 import { aimPoint, prefetchAlongPath, prefetchDescent, sampleTerrainHeight, terrainZoomAt } from './terrainQuery';
 import { TileNode } from './tileNode';
 
+/** The deepest zoom a warm-up asks for: past it the walk's own pace is fast enough. */
+const WARM_MAX_ZOOM = 15;
+/** The zoom the neighbours of a warm-up are asked down to. */
+const WARM_RING_ZOOM = 13;
+
 export type { GlobeOptions } from './constants';
 
 export interface GlobeStats {
@@ -86,6 +93,8 @@ export interface GlobeStats {
   inFlightRequests: number;
   triangles: number;
   deepestZoom: number;
+  /** National imagery layers drawn right now, for the credit. Ids from `regional.ts`. */
+  regionalLayers: readonly string[];
 }
 
 export class Globe {
@@ -145,6 +154,7 @@ export class Globe {
     inFlightRequests: 0,
     triangles: 0,
     deepestZoom: 0,
+    regionalLayers: [],
   };
 
   constructor(
@@ -294,7 +304,8 @@ export class Globe {
       origin: this.origin,
       scratchSphere: this.sphere,
       frame: this.frame,
-      maxZoom: this.effectiveMaxZoom(),
+      maxZoomFor: (node) =>
+        Math.min(this.options.maxZoom, imageryMaxZoom(this.imagery, node.z, wrapTileX(node.x, node.z), node.y)),
       maxScreenSpaceError: this.options.maxScreenSpaceError,
       refineResolution: REFINE_TEXELS,
       renderSet: this.renderSet,
@@ -319,6 +330,7 @@ export class Globe {
     this.stats.renderedTiles = drawn.rendered;
     this.stats.triangles = drawn.triangles;
     this.stats.deepestZoom = drawn.deepestZoom;
+    this.noteRegionalLayers();
 
     // The scene carries no rotation (the floating origin is a pure
     // translation), so the camera's world-space forward vector is already an
@@ -385,6 +397,24 @@ export class Globe {
     return Math.min(this.options.maxZoom, this.imagery.maxZoom);
   }
   // -------------------------------------------------------------------------
+  /**
+   * Which national layers the picture is made of right now, so the credit the
+   * licences ask for is on screen exactly when their imagery is. Rebuilt only
+   * when the set changes: the array is what the UI compares.
+   */
+  private noteRegionalLayers(): void {
+    let ids: string[] | null = null;
+    for (const node of this.renderSet) {
+      const id = node.textureLayerId;
+      if (id === null || id === this.imagery.id || node.texture === null) continue;
+      if (!ids) ids = [];
+      if (!ids.includes(id)) ids.push(id);
+    }
+    const next = ids ? ids.sort() : [];
+    const now = this.stats.regionalLayers;
+    if (next.length !== now.length || next.some((id, i) => id !== now[i])) this.stats.regionalLayers = next;
+  }
+
   private updateStats(): void {
     const loaderStats = this.streamer.loaderStats;
     this.stats.residentTiles = this.nodes.size;
@@ -414,7 +444,8 @@ export class Globe {
       return;
     }
 
-    const target = this.effectiveMaxZoom();
+    // How deep the imagery goes *here*: a national layer, where one covers.
+    const target = Math.min(this.options.maxZoom, imageryMaxZoomAt(this.imagery, eye.lat, eye.lon));
     if (deepestDrawn >= target - 2) return;
 
     // Keyed on a mid-level tile: a zoom-19 tile is about 24 m across, so
@@ -448,6 +479,40 @@ export class Globe {
   /** How refined the ground is at a position. See `terrainZoomAt`. */
   terrainZoom(latDeg: number, lonDeg: number): number {
     return terrainZoomAt(this.nodes, this.options.maxZoom, latDeg, lonDeg);
+  }
+
+  /**
+   * Ask for the ground under a place at every zoom, and about it at the
+   * middle ones, before the camera gets there.
+   *
+   * For a jump: stepping into an aircraft across the map, a new place from the
+   * search. The descent seed (`maybeSeedDescent`) waits until the camera is
+   * within four kilometres of the ground, which on a jump is only after the
+   * camera has flown there — so the first seconds of the new place were spent
+   * walking down one zoom level at a time, each a full round trip. Asked for
+   * at once, the levels arrive together, and the neighbours the view will want
+   * a moment later are already on their way.
+   *
+   * `neighbours` is the connection's call (see `networkMonitor`): on a weak
+   * link only the column underneath is worth the bytes.
+   */
+  warmAt(latDeg: number, lonDeg: number, neighbours: boolean): void {
+    const target = Math.min(this.options.maxZoom, imageryMaxZoomAt(this.imagery, latDeg, lonDeg), WARM_MAX_ZOOM);
+    prefetchDescent(this.streamer, this.nodes, latDeg, lonDeg, target);
+    if (!neighbours) return;
+    // About a kilometre either side at the zooms where the view's first
+    // screenful is decided: the ring one level above full detail.
+    const spreadM = 1500;
+    const dLat = spreadM / 111_320;
+    const dLon = spreadM / (111_320 * Math.max(0.2, Math.cos((latDeg * Math.PI) / 180)));
+    for (const [la, lo] of [
+      [dLat, 0],
+      [-dLat, 0],
+      [0, dLon],
+      [0, -dLon],
+    ] as const) {
+      prefetchDescent(this.streamer, this.nodes, latDeg + la, lonDeg + lo, Math.min(target, WARM_RING_ZOOM));
+    }
   }
 
   /** Warm the cache along a predicted path. See `prefetchAlongPath`. */

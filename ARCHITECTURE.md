@@ -4,7 +4,8 @@ A map of the code, written so that a change can be located before it is made.
 
 The project is a browser-only app: no backend, no API key, no account. The one
 server-side file is a relay allowlist (`functions/feeds/`), and it exists only
-because four ADS-B providers refuse cross-origin requests.
+because adsb.lol sends no CORS headers and MET Norway requires a `User-Agent`
+that a page cannot set.
 
 ## The three surfaces
 
@@ -54,8 +55,8 @@ src/
 
   data/           everything that comes over the network but is not a tile
     adsb/         provider chain, polling, normalisation, coercion
-    meta/         airframe registry and photos
-    weather/      Open-Meteo
+    meta/         dossier: routes (static CC0 files), photos (Wikimedia Commons)
+    weather/      MET Norway
     http.ts       resilient fetch, circuit breaker
     endpoints.ts  which services need the relay and why
 
@@ -80,12 +81,15 @@ src/
 
   tiles/
     sources.ts       imagery and elevation providers, verified keyless
+    regional.ts      national open orthophotos, chosen tile by tile from coverage.json
     loader.ts        fetch scheduling, concurrency, source fallback
     requestQueue.ts  priority, reference counting, shared continuations
     cache.ts         IndexedDB with LRU and a quota
 
   ui/             Svelte components; `palette.ts` is shared with the renderers
-  workers/        terrain decoding and meshing, off the main thread
+  workers/        terrain decoding and meshing, off the main thread; nightmap/ draws
+                  the night lights and the ground detail (roads, rail, runways,
+                  roofs from OpenStreetMap) that the terrain shader lays over soft imagery
 ```
 
 ## The quadtree, in detail

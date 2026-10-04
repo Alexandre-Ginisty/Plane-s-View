@@ -16,7 +16,7 @@ import {
 import { EngineAudio } from '@/audio/engineAudio';
 import type { Engine } from '@/render/engine';
 import type { Globe } from '@/render/globe';
-import type { Buildings } from '@/render/buildings';
+import { GroundDetail } from '@/render/groundDetail';
 import { NightLights } from '@/render/nightLights';
 import { atmoData } from '@/render/sky/shader';
 import type { OwnAircraft } from '@/render/ownAircraft';
@@ -34,6 +34,7 @@ import {
   haversineMetres,
 } from '@/core/math/geo';
 import { TrafficClient, type QuerySource } from '@/data/adsb/client';
+import { viewJumped } from './viewJump';
 import { Coverage, type ViewBounds, type ViewWindow } from '@/data/adsb/coverage';
 import { registry } from '@/data/meta/registry';
 import { DEFAULT_IMAGERY, imageryById, type ImagerySource } from '@/tiles/sources';
@@ -62,7 +63,12 @@ import { shapeFor } from '@/render/aircraft';
 import { loadModelFor, operatorOf } from '@/render/aircraft/library';
 import { fillContacts, readingsFromSample } from './cockpitReadings';
 import { WindField } from '@/data/weather/wind';
-import { fetchCurrentWeather } from '@/data/weather/openmeteo';
+import { fetchCurrentWeather } from '@/data/weather/metno';
+
+/** Terrain tiles still loading above which decoration (night map, ground detail) holds off. */
+const GROUND_BUSY_TILES = 3;
+/** The longest decoration is held back for, ms. */
+const GROUND_BUSY_MAX_MS = 6000;
 
 /** UI store writes per second. 60 would re-render the HUD needlessly. */
 const UI_REFRESH_HZ = 10;
@@ -120,8 +126,10 @@ export class Orchestrator {
 
   private engine: Engine | null = null;
   private globe: Globe | null = null;
-  private buildings: Buildings | null = null;
   private readonly nightLights = new NightLights();
+  private readonly groundDetail = new GroundDetail();
+  /** When the terrain last started loading in earnest, or null while it is not. */
+  private groundBusySince: number | null = null;
   private traffic3d: Traffic3D | null = null;
   private ownAircraft: OwnAircraft | null = null;
   private pins3d: Pins3D | null = null;
@@ -135,7 +143,21 @@ export class Orchestrator {
   private map: SelectionMap | null = null;
 
   /** The area traffic is wanted for: the map's view, or a followed aircraft. */
-  private query: ViewWindow = { ...FALLBACK_VIEW, radiusNm: 120 };
+  private currentQuery: ViewWindow = { ...FALLBACK_VIEW, radiusNm: 120 };
+  private get query(): ViewWindow {
+    return this.currentQuery;
+  }
+  /**
+   * Setting the area is also the moment to ask for it: a view that has moved
+   * somewhere new (or zoomed to a different scale) gets its traffic at once
+   * instead of at the next tick of a cadence tuned for a view that stays put.
+   */
+  private set query(next: ViewWindow) {
+    const previous = this.currentQuery;
+    this.currentQuery = next;
+    if (!viewJumped(previous, next)) return;
+    this.client?.requestNow();
+  }
   /** Tiles `query` into feed-sized circles and hands them out in turn. */
   private readonly coverage = new Coverage(this.query);
   private uiAccumulator = 0;
@@ -276,7 +298,6 @@ export class Orchestrator {
     this.engine.overlay = this.cockpit;
     this.cockpit.renderer = this.engine.renderer;
     this.globe = surfaces.globe;
-    this.buildings = surfaces.buildings;
     this.traffic3d = surfaces.traffic3d;
     this.ownAircraft = surfaces.ownAircraft;
     this.pov = surfaces.pov;
@@ -393,9 +414,20 @@ export class Orchestrator {
       this.maybeFollow(dt, flying.hex);
 
       globe.update(engine.camera, dt, engine.viewportHeight);
-      this.buildings?.update(engine.camera, dt, globe);
       // The night factor is the shared atmosphere's (slot 5, w).
-      this.nightLights.update(flying.lat, flying.lon, atmoData[23] ?? 0, dt);
+      const aglM = Math.max(0, flying.altFt * FEET_TO_METRES - globe.sampleHeight(flying.lat, flying.lon));
+      const where = { aglM, trackDeg: flying.trackDeg, groundSpeedMs: flying.groundSpeedKt * KNOTS_TO_MPS };
+      // The map's vector tiles and the satellite night glow are decoration over
+      // the ground: while the ground itself is still arriving they wait, rather
+      // than share a connection with the tiles the view cannot do without.
+      const stats = globe.getStats();
+      // Not for ever, though: over fresh ground at speed the terrain never quite
+      // stops loading, and decoration that never arrives is worse than late.
+      if (stats.loadingTiles <= GROUND_BUSY_TILES) this.groundBusySince = null;
+      else this.groundBusySince ??= performance.now();
+      const groundBusy = this.groundBusySince !== null && performance.now() - this.groundBusySince < GROUND_BUSY_MAX_MS;
+      this.nightLights.update(flying.lat, flying.lon, atmoData[23] ?? 0, dt, { ...where, hold: groundBusy });
+      this.groundDetail.update(flying.lat, flying.lon, dt, { ...where, hold: groundBusy });
 
       this.cameraEcefVec.copy(engine.camera.position);
       traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
@@ -732,7 +764,7 @@ export class Orchestrator {
 
   /**
    * The dossier lookup is awaited but token-guarded: a user clicking through a
-   * busy map faster than adsbdb answers would otherwise see a panel filled in
+   * busy map faster than the photo lookup answers would otherwise see a panel filled in
    * by whichever request happened to return last.
    */
   async select(hex: string | null): Promise<void> {
@@ -746,6 +778,8 @@ export class Orchestrator {
 
     const sample = this.traffic.sampleOne(hex);
     app.selected = sample;
+    // Before the camera goes there: see `Globe.warmAt`.
+    if (sample) this.globe?.warmAt(sample.lat, sample.lon, networkMonitor.profile.prefetchSeconds > 0);
     await loadSelection(hex, sample, ++this.dossierToken, () => this.dossierToken);
   }
 
@@ -776,6 +810,7 @@ export class Orchestrator {
 
     // Warm the area before the camera arrives, so the first frame of the
     // cockpit view already has terrain under it.
+    this.globe?.warmAt(sample.lat, sample.lon, networkMonitor.profile.prefetchSeconds > 0);
     this.globe?.prefetchAlong(
       sample.lat,
       sample.lon,
@@ -1094,8 +1129,8 @@ export class Orchestrator {
     this.client.stop();
     this.engine?.dispose();
     this.globe?.dispose();
-    this.buildings?.dispose();
     this.nightLights.dispose();
+    this.groundDetail.dispose();
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
     this.pins3d?.dispose();

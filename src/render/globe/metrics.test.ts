@@ -18,6 +18,7 @@ import { geodeticToEcef, lonToMercatorX, latToMercatorY, type Vec3 } from '@/cor
 import type { FloatingOrigin } from '@/core/frame';
 import {
   DESCENT_PRIORITY,
+  ELEVATION_MAX_ZOOM,
   MIN_OBLIQUITY,
   PREFETCH_PRIORITY,
   REFINE_TEXELS,
@@ -149,34 +150,34 @@ describe('isTileVisible', () => {
 });
 
 describe('elevationRequest', () => {
-  it('asks for the tile itself up to Terrarium\'s maximum zoom', () => {
-    const node = new TileNode(15, 16_370, 10_896, null);
+  it('asks for the tile itself up to the deepest elevation zoom', () => {
+    const node = new TileNode(ELEVATION_MAX_ZOOM, 4_092, 2_724, null);
     const req = elevationRequest(node);
-    expect(req).toMatchObject({ z: 15, x: 16_370, y: 10_896 });
+    expect(req).toMatchObject({ z: ELEVATION_MAX_ZOOM, x: 4_092, y: 2_724 });
     expect(req.rect).toEqual({ x0: 0, y0: 0, x1: 1, y1: 1 });
   });
 
-  it('reuses the z15 ancestor for deeper tiles, with the right sub-rectangle', () => {
-    // Terrarium serves nothing past z15, so a z17 tile samples the quarter of
-    // a quarter of its z15 ancestor that it actually covers. Getting this
-    // rectangle wrong puts the wrong mountain under the aircraft.
-    const z17 = new TileNode(17, 16_370 * 4 + 3, 10_896 * 4 + 1, null);
+  it('reuses the deepest elevation ancestor for deeper tiles, with the right sub-rectangle', () => {
+    // Elevation is not fetched past ELEVATION_MAX_ZOOM, so a tile two levels
+    // deeper samples the quarter of its ancestor that it actually covers.
+    // Getting this rectangle wrong puts the wrong mountain under the aircraft.
+    const z17 = new TileNode(ELEVATION_MAX_ZOOM + 2, 4_092 * 4 + 3, 2_724 * 4 + 1, null);
     const req = elevationRequest(z17);
 
-    expect(req.z).toBe(15);
-    expect(req.x).toBe(16_370);
-    expect(req.y).toBe(10_896);
+    expect(req.z).toBe(ELEVATION_MAX_ZOOM);
+    expect(req.x).toBe(4_092);
+    expect(req.y).toBe(2_724);
     expect(req.rect.x0).toBeCloseTo(3 / 4, 9);
     expect(req.rect.x1).toBeCloseTo(4 / 4, 9);
     expect(req.rect.y0).toBeCloseTo(1 / 4, 9);
     expect(req.rect.y1).toBeCloseTo(2 / 4, 9);
   });
 
-  it('gives the four children of a z15 tile four disjoint quarters', () => {
+  it('gives the four children of the deepest elevation tile four disjoint quarters', () => {
     const seen = new Set<string>();
     for (let dy = 0; dy < 2; dy++) {
       for (let dx = 0; dx < 2; dx++) {
-        const child = new TileNode(16, 16_370 * 2 + dx, 10_896 * 2 + dy, null);
+        const child = new TileNode(ELEVATION_MAX_ZOOM + 1, 4_092 * 2 + dx, 2_724 * 2 + dy, null);
         const { rect } = elevationRequest(child);
         seen.add(`${rect.x0},${rect.y0}`);
         expect(rect.x1 - rect.x0).toBeCloseTo(0.5, 9);

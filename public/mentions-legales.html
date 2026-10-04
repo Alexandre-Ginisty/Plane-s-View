@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Mentions légales — PlanesView</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!--
+      Page statique, sans script : le CSP du site n'en autorise aucun hors de
+      l'application, et celle-ci n'en a pas besoin. Les champs à remplir sont
+      marqués [À COMPLÉTER] ; ils sont volontairement laissés vides plutôt que
+      devinés : une mention légale fausse est pire qu'une mention incomplète.
+    -->
+    <style>
+      :root {
+        --bg: #03060c;
+        --panel: #07101c;
+        --text: #e6edf6;
+        --dim: #8ea0b7;
+        --accent: #7fd6ff;
+        --warm: #ffb02e;
+        --line: rgba(127, 214, 255, 0.18);
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2f7;
+          --panel: #ffffff;
+          --text: #0b1726;
+          --dim: #4a5b72;
+          --accent: #0a6aa6;
+          --warm: #9a5b00;
+          --line: rgba(10, 106, 166, 0.22);
+        }
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--bg); }
+      body {
+        margin: 0;
+        padding: 0 16px 64px;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.65 var(--sans);
+      }
+      main { max-width: 760px; margin: 0 auto; }
+      header { padding: 40px 0 8px; }
+      .back {
+        display: inline-block;
+        font: 12px var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      h1 { margin: 16px 0 4px; font-size: 32px; line-height: 1.2; }
+      .lead { margin: 0; color: var(--dim); }
+      h2 {
+        margin: 40px 0 8px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        font-size: 19px;
+      }
+      p, ul, dl { margin: 8px 0; }
+      ul { padding-left: 20px; }
+      li { margin: 4px 0; }
+      a { color: var(--accent); }
+      dt { margin-top: 10px; font-weight: 600; }
+      dd { margin: 0; color: var(--dim); }
+      .todo { color: var(--warm); font-family: var(--mono); font-size: 0.92em; }
+      .note {
+        margin: 16px 0;
+        padding: 12px 14px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--dim);
+      }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+      th, td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+      th { font: 12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+      @media (max-width: 560px) {
+        h1 { font-size: 26px; }
+        table { font-size: 13px; }
+        th, td { padding: 6px 4px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class="back" href="/">← Retour à PlanesView</a>
+        <h1>Mentions légales</h1>
+        <p class="lead">
+          PlanesView affiche en temps réel les avions captés par des récepteurs ADS-B, sur un globe 3D.
+          <span lang="en">(English: this is the French legal notice required for this site; the credits and
+          licences in section 6 apply to everyone.)</span>
+        </p>
+      </header>
+
+      <h2>1. Éditeur du site</h2>
+      <dl>
+        <dt>Nom ou raison sociale</dt>
+        <dd><span class="todo">[À COMPLÉTER — nom et prénom de l'éditeur, ou dénomination de la société]</span></dd>
+        <dt>Adresse</dt>
+        <dd><span class="todo">[À COMPLÉTER — adresse postale]</span></dd>
+        <dt>Contact</dt>
+        <dd><span class="todo">[À COMPLÉTER — adresse e-mail de contact]</span></dd>
+        <dt>Directeur de la publication</dt>
+        <dd><span class="todo">[À COMPLÉTER — nom]</span></dd>
+      </dl>
+      <p class="note">
+        Une personne physique qui édite un site à titre non professionnel peut ne communiquer que les
+        coordonnées de son hébergeur, à condition de lui avoir transmis les siennes (loi n° 2004-575 du
+        21 juin 2004, art. 6-III-2). Un site qui poursuit une activité commerciale doit, lui, donner toutes
+        les informations ci-dessus, et, selon le cas, son numéro d'immatriculation (SIRET / RCS) et son
+        numéro de TVA.
+      </p>
+
+      <h2>2. Hébergement</h2>
+      <p>
+        Le site est servi par <strong>Cloudflare Pages</strong> (fichiers statiques et fonction de relais),
+        exploité par Cloudflare, Inc., 101 Townsend Street, San Francisco, CA 94107, États-Unis —
+        <a href="https://www.cloudflare.com" rel="noopener noreferrer">cloudflare.com</a>.
+      </p>
+
+      <h2>3. Nature du site et avertissement</h2>
+      <p>
+        PlanesView est un site d'information et de démonstration. Il n'est affilié à aucune compagnie
+        aérienne, aucun constructeur, aucun aéroport ni aucune autorité de l'aviation civile.
+      </p>
+      <p>
+        <strong>Il ne doit jamais servir à la navigation, au contrôle ni à la sécurité aérienne.</strong>
+        Les positions viennent de réseaux de récepteurs ADS-B tenus par des bénévoles : elles peuvent être
+        absentes, anciennes ou erronées, et entre deux mesures le site extrapole la position de l'avion
+        (indiqué à l'écran par « Signal lost — position estimated »). Les images satellite, le relief, la
+        météo, les lumières nocturnes et les modèles d'avions sont des représentations, pas des mesures.
+        L'éditeur ne garantit ni l'exactitude, ni la disponibilité, ni la continuité du service.
+      </p>
+
+      <h2>4. Données personnelles et cookies</h2>
+      <p>
+        <strong>Pas de compte, pas de cookie, pas de publicité, pas de mesure d'audience, pas de traceur.</strong>
+        L'éditeur ne collecte aucune donnée personnelle de manière active et n'en revend aucune.
+      </p>
+      <p>Ce qui se passe malgré tout, parce que le site est un service en ligne :</p>
+      <ul>
+        <li>
+          <strong>Adresse IP.</strong> Comme toute requête sur Internet, chaque requête expose votre adresse IP
+          à l'hébergeur (Cloudflare), qui peut la conserver dans ses journaux techniques de sécurité et de
+          fonctionnement, et aux services tiers listés en section 6 que votre navigateur contacte pour charger
+          l'imagerie, le relief, les cartes et les photographies.
+        </li>
+        <li>
+          <strong>Zone affichée.</strong> Pour obtenir les avions et la météo de la zone que vous regardez, le
+          site envoie ses coordonnées (centre de la carte ou de l'avion suivi, avec un rayon) à une fonction de
+          relais, qui les transmet aux fournisseurs de trafic (adsb.fi, adsb.lol) et de météo (MET Norway).
+          Ces fournisseurs voient l'adresse du relais, pas la vôtre.
+        </li>
+        <li>
+          <strong>Position de l'appareil.</strong> Si vous l'autorisez, votre navigateur peut fournir sa position
+          pour centrer la carte. Elle est utilisée dans votre navigateur ; elle n'est pas enregistrée, et seule
+          la zone qui en résulte est transmise comme ci-dessus. Vous pouvez refuser, ou retirer l'autorisation,
+          dans les réglages de votre navigateur.
+        </li>
+        <li>
+          <strong>Stockage local de votre navigateur.</strong> Le site y garde, sans l'envoyer nulle part, votre
+          choix de thème clair ou sombre, vos réglages (son, étiquettes…), les repères que vous placez sur la carte, le fait que l'introduction a déjà été vue, et un cache des tuiles
+          d'imagerie et de relief déjà téléchargées (IndexedDB). Ce stockage est strictement technique : il ne
+          sert qu'au fonctionnement et à la rapidité du site, et il s'efface depuis les réglages de votre
+          navigateur.
+        </li>
+      </ul>
+      <p>
+        Conformément au règlement (UE) 2016/679 (RGPD) et à la loi « Informatique et Libertés », vous disposez
+        d'un droit d'accès, de rectification, d'effacement, d'opposition et de limitation sur les données qui
+        vous concernent, que vous pouvez exercer en écrivant à l'adresse de contact de la section 1. En cas de
+        désaccord, vous pouvez saisir la CNIL (<a href="https://www.cnil.fr" rel="noopener noreferrer">cnil.fr</a>).
+      </p>
+
+      <h2>5. Propriété intellectuelle</h2>
+      <p>
+        Le code source et le design du site sont la propriété de l'éditeur, sauf mention contraire. Les modèles
+        3D d'avions viennent de la communauté FlightGear et sont placés sous licence GNU GPL version 2 (texte et
+        auteurs : <a href="/models/CREDITS.md">/models/CREDITS.md</a>). Les noms de compagnies, de constructeurs
+        et d'avions, leurs logos et leurs livrées sont des marques et des œuvres de leurs titulaires, cités à
+        titre d'information ; ils n'impliquent aucun lien ni aucun accord avec eux.
+      </p>
+      <p>
+        Les photographies d'avions viennent de Wikimedia Commons et ne sont affichées que sous licence libre ;
+        l'auteur, la licence et un lien vers le fichier sont indiqués avec chacune.
+      </p>
+
+      <h2>6. Données, services tiers et crédits</h2>
+      <table>
+        <thead>
+          <tr><th>Service</th><th>Utilisation</th><th>Licence / conditions</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://adsb.fi" rel="noopener noreferrer">adsb.fi</a> ·
+              <a href="https://adsb.lol" rel="noopener noreferrer">adsb.lol</a></td>
+            <td>Positions des avions (ADS-B)</td>
+            <td>adsb.lol : ODbL 1.0 · adsb.fi : usage personnel non commercial</td>
+          </tr>
+          <tr>
+            <td><a href="https://www.met.no/en" rel="noopener noreferrer">MET Norway</a></td>
+            <td>Météo en surface et nuages</td>
+            <td>CC BY 4.0 / NLOD — « Data from MET Norway »</td>
+          </tr>
+          <tr>
+            <td>Esri World Imagery</td>
+            <td>Imagerie satellite (par défaut)</td>
+            <td>© Esri, Maxar, Earthstar Geographics et la communauté des utilisateurs SIG — usage de démonstration</td>
+          </tr>
+          <tr>
+            <td><a href="https://s2maps.eu" rel="noopener noreferrer">EOX</a> / Copernicus</td>
+            <td>Imagerie Sentinel-2 cloudless 2016 (couche de secours)</td>
+            <td>CC BY 4.0 — contient des données Copernicus Sentinel modifiées 2016</td>
+          </tr>
+          <tr>
+            <td>NASA (GIBS, Black Marble, Blue Marble)</td>
+            <td>Lumières nocturnes, imagerie de secours</td>
+            <td>Domaine public</td>
+          </tr>
+          <tr>
+            <td>Mapzen Terrain Tiles (AWS Open Data)</td>
+            <td>Relief</td>
+            <td>SRTM, GMTED, ETOPO1, NED et autres — voir
+              <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" rel="noopener noreferrer">l'attribution</a></td>
+          </tr>
+          <tr>
+            <td><a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">OpenStreetMap</a>,
+              OpenMapTiles, <a href="https://openfreemap.org" rel="noopener noreferrer">OpenFreeMap</a></td>
+            <td>Routes, pistes, empreintes de bâtiments (carte de nuit et détail du sol)</td>
+            <td>© les contributeurs d'OpenStreetMap — ODbL 1.0</td>
+          </tr>
+          <tr>
+            <td>IGN, PDOK, basemap.at, PNOA, swisstopo, Géoportail.lu, Maa-amet, USGS, Geobasis NRW, Bayern</td>
+            <td>Orthophotographies nationales (si la couche sans Esri est choisie)</td>
+            <td>Licence Ouverte Etalab 2.0, CC BY 4.0, CC0, domaine public, données publiques ouvertes — crédit
+              affiché à l'écran</td>
+          </tr>
+          <tr>
+            <td>Natural Earth · GeoNames</td>
+            <td>Frontières et noms de lieux</td>
+            <td>Domaine public · CC BY 4.0</td>
+          </tr>
+          <tr>
+            <td>Virtual Radar Server (communauté)</td>
+            <td>Routes et noms de compagnies</td>
+            <td>CC0</td>
+          </tr>
+          <tr>
+            <td><a href="https://commons.wikimedia.org" rel="noopener noreferrer">Wikimedia Commons</a></td>
+            <td>Photographies d'avions</td>
+            <td>CC BY, CC BY-SA, CC0 ou domaine public — selon chaque fichier</td>
+          </tr>
+          <tr>
+            <td>FlightGear (communauté)</td>
+            <td>Modèles 3D d'avions</td>
+            <td>GNU GPL v2</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Le détail complet, avec les obligations de chaque licence, est dans le fichier
+        <code>THIRD_PARTY_NOTICES.md</code> du dépôt du projet.
+      </p>
+
+      <h2>7. Responsabilité et liens</h2>
+      <p>
+        L'éditeur met tout en œuvre pour que le site fonctionne, sans obligation de résultat. Il ne saurait être
+        tenu responsable d'un dommage résultant de l'usage du site ou de l'impossibilité de l'utiliser, ni du
+        contenu des sites vers lesquels il renvoie.
+      </p>
+
+      <h2>8. Droit applicable</h2>
+      <p>
+        Le site et ses mentions légales sont soumis au droit français. En cas de litige, et à défaut de solution
+        amiable, les tribunaux français sont compétents.
+      </p>
+
+      <p class="note">
+        Dernière mise à jour : <span class="todo">[À COMPLÉTER — date]</span>
+      </p>
+    </main>
+  </body>
+</html>

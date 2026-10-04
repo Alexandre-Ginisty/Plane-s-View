@@ -5,7 +5,7 @@
  * `Access-Control-Allow-Origin: *`, with no key and no account, so the globe
  * and the 2D map both work from a purely static deployment.
  *
- * Attribution strings are not decorative. Esri, EOX, NASA and OpenStreetMap
+ * Attribution strings are not decorative. EOX, NASA, Mapzen and OpenStreetMap
  * all require visible credit, and the UI renders `attribution` for whichever
  * layer is active.
  */
@@ -21,6 +21,11 @@ export interface ImagerySource {
   /** Deepest zoom the service actually serves. Verified, not assumed. */
   readonly maxZoom: number;
   readonly tileSize: number;
+  /**
+   * Already as sharp as the sharpest national aerial imagery everywhere it
+   * matters, so `regional.ts` lays none over it (and cuts no seams into it).
+   */
+  readonly sharp?: boolean;
   /** Extension hint for the disk cache. */
   readonly format: 'jpeg' | 'png';
   /**
@@ -56,6 +61,8 @@ const esri: ImagerySource = {
   maxZoom: 19,
   tileSize: 256,
   format: 'jpeg',
+  // Already as sharp as any national orthophoto, so none is laid over it.
+  sharp: true,
   // Note the axis order: Esri's REST tile endpoint is {z}/{y}/{x}, not
   // {z}/{x}/{y}. Swapping them yields plausible-looking imagery of entirely
   // the wrong place.
@@ -66,35 +73,60 @@ const esri: ImagerySource = {
 
 const sentinel: ImagerySource = {
   id: 'sentinel',
-  label: 'Sentinel-2 cloudless',
-  description: 'EOX s2cloudless 2020 — cloud-free, seamless, consistent colour.',
+  label: 'Satellite',
+  description: 'Sentinel-2 cloudless 2016 — cloud-free, seamless, 10 m.',
   attribution:
-    'Sentinel-2 cloudless (2020) by EOX IT Services GmbH — Contains modified Copernicus Sentinel data',
+    'Sentinel-2 cloudless (2016) by EOX IT Services GmbH — Contains modified Copernicus Sentinel data 2016',
   attributionUrl: 'https://s2maps.eu',
   minZoom: 0,
-  maxZoom: 15,
+  // The mosaic is built from 10 m imagery, which is zoom 14. The server also
+  // answers deeper, but only with the same pixels enlarged.
+  maxZoom: 14,
+  tileSize: 256,
+  format: 'jpeg',
+  // `s2cloudless_3857` is the 2016 edition and nothing else: the later editions
+  // are `s2cloudless-YYYY_3857` and are licensed CC BY-NC-SA, which a public
+  // product cannot use. Axis order is WMTS's {z}/{row}/{col}, i.e. {z}/{y}/{x}.
+  template:
+    'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg',
+  url: (z, x, y) => fillTemplate(sentinel.template, z, x, y),
+};
+
+/**
+ * NASA Blue Marble Next Generation: the whole Earth at 500 m, public domain.
+ * Only there so the globe is never bare if the Sentinel server is unreachable.
+ */
+const blueMarble: ImagerySource = {
+  id: 'bluemarble',
+  label: 'Blue Marble',
+  description: 'NASA Blue Marble — the whole Earth at 500 m, public domain.',
+  attribution: 'Imagery: NASA Earth Observatory — Blue Marble Next Generation, via NASA GIBS',
+  attributionUrl: 'https://visibleearth.nasa.gov/collection/1484/blue-marble',
+  minZoom: 0,
+  maxZoom: 8,
   tileSize: 256,
   format: 'jpeg',
   template:
-    'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg',
-  url: (z, x, y) => fillTemplate(sentinel.template, z, x, y),
+    'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
+  url: (z, x, y) => fillTemplate(blueMarble.template, z, x, y),
 };
 
 /**
  * Selectable layers.
  *
- * Deliberately two, not four. NASA GIBS (daily MODIS) and OpenStreetMap were
- * both built and both worked, but neither belongs in this app: GIBS stops at
- * zoom 9, which is a blurry smear from a cockpit at any altitude, and OSM is a
- * street map whose tile-usage policy explicitly asks bulk consumers not to
- * send the kind of traffic a terrain renderer generates. Esri for sharpness,
- * Sentinel-2 cloudless for consistent colour, and nothing that makes the view
- * worse.
+ * Esri World Imagery is the default: the sharpest free global coverage, and
+ * the one the ground looks best in at every altitude. It is licensed for
+ * ArcGIS subscribers, not for a commercial product — fine for a site shown as
+ * a demonstration, and the first thing to replace before charging anyone or
+ * carrying advertising. The layers below it are the ones that may be used
+ * commercially: Sentinel-2 cloudless 2016 (CC BY 4.0; the later editions are
+ * non-commercial) with the national open orthophotos of `regional.ts` laid
+ * over it, and NASA Blue Marble. `THIRD_PARTY_NOTICES.md` says the same.
  */
-export const IMAGERY_SOURCES: readonly ImagerySource[] = [esri, sentinel];
+export const IMAGERY_SOURCES: readonly ImagerySource[] = [esri, sentinel, blueMarble];
 
 /** Order tried when a layer fails to serve a tile. */
-export const IMAGERY_FALLBACK_ORDER: readonly ImagerySource[] = [esri, sentinel];
+export const IMAGERY_FALLBACK_ORDER: readonly ImagerySource[] = [esri, sentinel, blueMarble];
 
 export const DEFAULT_IMAGERY = esri;
 
@@ -131,7 +163,7 @@ export const TERRARIUM: ElevationSource = {
   label: 'Mapzen Terrain Tiles',
   attribution:
     'Elevation: Mapzen Terrain Tiles on AWS Open Data — SRTM, GMTED, ETOPO1, NED and others',
-  attributionUrl: 'https://registry.opendata.aws/terrain-tiles/',
+  attributionUrl: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
   maxZoom: 15,
   tileSize: 256,
   url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,

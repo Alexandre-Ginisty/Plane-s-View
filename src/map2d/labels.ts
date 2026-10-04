@@ -2,8 +2,8 @@
  * Place names over the selection map, drawn as real text.
  *
  * MapLibre's own text layers need a glyph server, which this project will not
- * depend on (see `map.ts`). Esri's pre-rendered label tiles were the stand-in,
- * and they looked it: a bitmap of text, scaled, blurred between zoom levels,
+ * depend on (see `map.ts`). A pre-rendered label tile layer was the stand-in,
+ * and it looked it: a bitmap of text, scaled, blurred between zoom levels,
  * heavy and pixelated. This draws the names itself on a 2D canvas laid over
  * the map, in the interface's own typeface, at device resolution — so they
  * are as crisp as the rest of the UI at every zoom, not just the integer ones.

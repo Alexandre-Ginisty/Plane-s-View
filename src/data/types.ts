@@ -10,7 +10,15 @@
  * SI carries no suffix beyond the obvious.
  */
 
-export type ProviderId = 'adsb.lol' | 'airplanes.live' | 'adsb.fi' | 'opensky';
+/**
+ * Traffic feeds the app calls. adsb.lol is the one whose terms allow a
+ * commercial product (ODbL); adsb.fi is for personal and non-commercial use,
+ * which is what the site is while it is a demonstration. Two feeds because
+ * adsb.lol answers 429 to more than about one request in three from one
+ * address, and a relay shares one address among every visitor: with a single
+ * feed the aircraft went "signal lost" all the time.
+ */
+export type ProviderId = 'adsb.lol' | 'adsb.fi';
 
 /** A single decoded aircraft position report. */
 export interface AircraftState {
@@ -38,7 +46,7 @@ export interface AircraftState {
 
   // --- Flight dynamics -----------------------------------------------------
   // Broadcast by ADS-B version 2 transponders (BDS 6,0 / 5,0 derived). Absent
-  // on older equipment and on every OpenSky record, hence all nullable.
+  // on older equipment, hence all nullable.
   // These are what make the cockpit view honest instead of a guess: `rollDeg`
   // is the aircraft's *actual* bank angle, so the horizon tilts for real.
 
@@ -95,23 +103,16 @@ export interface AircraftState {
   fixTime: number;
 }
 
-/** Static airframe metadata, from adsbdb / OpenSky. */
+/** What is known of one airframe: what the feed sent, and the airline from the callsign. */
 export interface AircraftMeta {
   hex: string;
   registration: string | null;
-  typeCode: string | null;
-  typeName: string | null;
-  manufacturer: string | null;
-  owner: string | null;
-  registeredCountry: string | null;
-  registeredCountryIso: string | null;
   /** ICAO type designator, e.g. "B738". */
   icaoTypeCode: string | null;
-  /** Operator flag code, useful for picking an airline livery colour. */
-  operatorFlagCode: string | null;
-  /** Fallback photo bundled with the airframe record. */
-  photoUrl: string | null;
-  photoThumbnailUrl: string | null;
+  /** The model's name, e.g. "Boeing 737-800", where the type table knows it. */
+  typeName: string | null;
+  /** The airline flying it now, from the callsign. */
+  owner: string | null;
 }
 
 export interface Airport {
@@ -142,16 +143,19 @@ export interface FlightRoute {
   airline: Airline | null;
   origin: Airport | null;
   destination: Airport | null;
-  /** Intermediate stop on multi-leg callsigns, when adsbdb reports one. */
+  /** Intermediate stop on a flight with exactly one, when the route says so. */
   midpoint: Airport | null;
 }
 
+/** A photograph free to reuse commercially, with the credit its licence asks for. */
 export interface AircraftPhoto {
   thumbnailUrl: string;
   largeUrl: string;
   photographer: string | null;
-  /** Link back to the photo page — required by the Planespotters terms. */
-  link: string | null;
+  /** Licence short name, e.g. "CC BY-SA 2.0". Shown with every photograph. */
+  license: string;
+  /** The file's page on Wikimedia Commons: author, licence text, original. */
+  link: string;
 }
 
 /** Everything the detail panel shows for one aircraft. */
@@ -194,8 +198,8 @@ export interface CurrentWeather {
   /** Dew point two metres up, °C: with the temperature, where the cloud base is. */
   dewPointC: number | null;
   pressureMslHpa: number | null;
+  /** Estimated: the source reports fog, not visibility. */
   visibilityM: number | null;
-  isDay: boolean | null;
   observedAt: number;
 }
 

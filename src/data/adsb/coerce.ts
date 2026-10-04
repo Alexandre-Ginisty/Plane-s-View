@@ -20,11 +20,11 @@ export const num = (v: unknown): number | null =>
 /**
  * Normalise a feed clock to epoch milliseconds.
  *
- * The readsb-family providers disagree about units for the top-level `now`,
+ * The readsb-family feeds disagree about units for the top-level `now`,
  * and nothing in the payload declares which is meant:
  *
- *   adsb.lol -> 1790080770002  (milliseconds)
- *   adsb.fi  -> 1790080986     (seconds)
+ *   adsb.lol          -> 1790080770002  (milliseconds)
+ *   some readsb forks -> 1790080986     (seconds)
  *
  * Read the wrong way, a seconds timestamp lands in January 1970, every
  * aircraft appears decades stale, and the staleness pruner deletes the whole

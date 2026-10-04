@@ -44,7 +44,8 @@ export interface SelectionContext {
   origin: FloatingOrigin;
   scratchSphere: Sphere;
   frame: number;
-  maxZoom: number;
+  /** Deepest zoom worth refining a given tile to: the imagery there decides. */
+  maxZoomFor: (node: TileNode) => number;
   maxScreenSpaceError: number;
   /** Yardstick for the refinement test: imagery texels, not mesh quads. */
   refineResolution: number;
@@ -107,7 +108,7 @@ export function selectTiles(
   // no ancestor has a texture yet and the alternative really is a hole.
   if (node.opacity === 0 && node.textureAncestor()) node.opacity = 1;
 
-  if (node.z < ctx.maxZoom && error > ctx.maxScreenSpaceError) {
+  if (node.z < ctx.maxZoomFor(node) && error > ctx.maxScreenSpaceError) {
     const children = ensureChildren(ctx, node);
 
     // Rule 3: refine only once every child is built. A partially built quad

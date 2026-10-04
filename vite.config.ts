@@ -39,9 +39,10 @@ const feedProxy = Object.fromEntries(
       changeOrigin: true,
       rewrite: (path: string) => path.replace(new RegExp(`^/feeds/${target}`), ''),
       headers: {
-        // Planespotters rejects generic agents, and browsers forbid scripts
-        // from setting User-Agent. The relay is the only place it can be set.
-        'User-Agent': 'PlanesView/0.1 (+https://github.com/planesview/planesview)',
+        // MET Norway requires an agent that identifies the project, and
+        // browsers forbid scripts from setting User-Agent. The relay is the
+        // only place it can be set.
+        'User-Agent': 'PlanesView/1.0 (+https://github.com/Alexandre-Ginisty/Plane-s-View)',
       },
     },
   ]),

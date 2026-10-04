@@ -83,9 +83,7 @@ describe('the allowlist', () => {
     const expected: Record<string, [string, string[]]> = {
       'adsb-lol': ['https://api.adsb.lol/', ['v2', 'hex', '4ca7b5']],
       'adsb-fi': ['https://opendata.adsb.fi/', ['api', 'v2', 'hex', '4ca7b5']],
-      'airplanes-live': ['https://api.airplanes.live/', ['v2', 'hex', '4ca7b5']],
-      opensky: ['https://opensky-network.org/', ['api', 'states', 'all']],
-      planespotters: ['https://api.planespotters.net/', ['pub', 'photos', 'hex', '4ca7b5']],
+      metno: ['https://api.met.no/', ['weatherapi', 'locationforecast', '2.0', 'complete']],
     };
     for (const [target, [origin, path]] of Object.entries(expected)) {
       captured = [];
@@ -100,14 +98,14 @@ describe('path handling', () => {
     for (const path of [
       ['adsb-lol', 'v2', 'point', '48.85341', '2.34880', '120'],
       ['adsb-lol', 'v2', 'hex', '~a1b2c3'],
-      ['adsb-fi', 'api', 'v2', 'lat', '-33.94610', 'lon', '151.17720', 'dist', '60'],
-      ['planespotters', 'pub', 'photos', 'hex', '3C6444'],
+      ['adsb-fi', 'api', 'v2', 'lat', '48.85341', 'lon', '2.34880', 'dist', '120'],
+      ['adsb-fi', 'api', 'v2', 'hex', '4ca7b5'],
     ]) {
       const res = await onRequestGet(contextFor(path));
       expect(res.status, path.join('/')).toBe(200);
     }
-    await onRequestGet(contextFor(['opensky', 'api', 'states', 'all'], '?lamin=1&lomin=2&lamax=3&lomax=4&extended=1'));
-    expect(new URL(captured.at(-1)!.url).search).toBe('?lamin=1&lomin=2&lamax=3&lomax=4&extended=1');
+    await onRequestGet(contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=48.8534&lon=2.3488'));
+    expect(new URL(captured.at(-1)!.url).search).toBe('?lat=48.8534&lon=2.3488');
   });
 
   it('refuses any other path on an allowed origin', async () => {
@@ -116,8 +114,12 @@ describe('path handling', () => {
       ['adsb-lol', '..', '..', 'admin'],
       ['adsb-lol', 'https://evil.example/x'],
       ['adsb-lol', 'v2', 'hex', '4ca7b5', 'extra'],
-      ['opensky', 'api', 'tracks', 'all'],
-      ['planespotters', 'pub', 'photos', 'reg', 'G-EUPT'],
+      ['metno', 'weatherapi', 'locationforecast', '2.0', 'compact'],
+      ['metno', 'weatherapi', 'nowcast', '2.0', 'complete'],
+      // OpenSky was removed: metered, and its terms forbid commercial use.
+      ['opensky', 'api', 'states', 'all'],
+      ['adsb-fi', 'v2', 'hex', '4ca7b5'],
+      ['adsb-fi', 'api', 'v2', 'all'],
     ]) {
       const res = await onRequestGet(contextFor(path));
       expect(res.status, path.join('/')).toBe(404);
@@ -128,8 +130,10 @@ describe('path handling', () => {
   it('refuses query parameters the route does not take', async () => {
     const lol = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '?limit=200'));
     expect(lol.status).toBe(404);
-    const sky = await onRequestGet(contextFor(['opensky', 'api', 'states', 'all'], '?icao24=abc&time=0'));
-    expect(sky.status).toBe(404);
+    const met = await onRequestGet(
+      contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=1&lon=2&altitude=9000'),
+    );
+    expect(met.status).toBe(404);
     expect(captured).toHaveLength(0);
   });
 

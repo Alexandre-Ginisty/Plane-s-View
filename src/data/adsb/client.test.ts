@@ -64,13 +64,14 @@ function fakeState(hex: string): AircraftState {
   };
 }
 
+/** Any id: the chain's logic must not care which feeds exist, only that there are several. */
 function fakeProvider(
-  id: ProviderId,
+  id: string,
   behaviour: () => AircraftState[] | never,
   minIntervalMs = 0,
 ): AdsbProvider & { calls: number; hexCalls: number } {
   const provider = {
-    id,
+    id: id as ProviderId,
     label: id,
     homepage: 'https://example.invalid',
     enabled: true,
@@ -237,19 +238,80 @@ describe('TrafficClient polling', () => {
   });
 });
 
+describe('TrafficClient requestNow', () => {
+  it('polls at once after a jump of the view, inside the politeness floor', async () => {
+    const provider = fakeProvider('adsb.lol', () => [fakeState('aaa111')], 3000);
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [provider]);
+    client.start(() => ({ lat: 0, lon: 0, radiusNm: 50 }), 4000);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(provider.calls).toBe(1);
+
+    // Normal cadence: nothing for the next 3 s.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(provider.calls).toBe(1);
+
+    client.requestNow();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(provider.calls).toBe(2);
+    client.stop();
+  });
+
+  it('does not double the polling cadence by scheduling twice', async () => {
+    const provider = fakeProvider('adsb.lol', () => [fakeState('aaa111')]);
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [provider]);
+    client.start(() => ({ lat: 0, lon: 0, radiusNm: 50 }), 4000);
+    await vi.advanceTimersByTimeAsync(10);
+    client.requestNow();
+    await vi.advanceTimersByTimeAsync(2000);
+    client.requestNow();
+    await vi.advanceTimersByTimeAsync(2000);
+    const before = provider.calls;
+    await vi.advanceTimersByTimeAsync(40_000);
+    // One timer chain at 4 s: ten cycles, not twenty.
+    expect(provider.calls - before).toBeLessThanOrEqual(11);
+    client.stop();
+  });
+
+  it('is debounced, so a dragged view is not a stream of requests', async () => {
+    const provider = fakeProvider('adsb.lol', () => [fakeState('aaa111')]);
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [provider]);
+    client.start(() => ({ lat: 0, lon: 0, radiusNm: 50 }), 4000);
+    await vi.advanceTimersByTimeAsync(10);
+    for (let i = 0; i < 20; i++) client.requestNow();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(provider.calls).toBeLessThanOrEqual(2);
+    client.stop();
+  });
+
+  it('fetches a multi-circle view in parallel after a jump', async () => {
+    const cells: TrafficQuery[] = [0, 5, -5, 10].map((lat) => ({ lat, lon: 0, radiusNm: 250 }));
+    let cursor = 0;
+    const provider = fakeProvider('adsb.lol', () => [fakeState('aaa111')]);
+    const client = new TrafficClient({ onSnapshot: () => undefined }, [provider]);
+    client.start({ cellCount: cells.length, next: () => cells[cursor++ % cells.length] ?? null }, 4000);
+    await vi.advanceTimersByTimeAsync(10);
+    const before = provider.calls;
+    await vi.advanceTimersByTimeAsync(1000);
+    client.requestNow();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(provider.calls - before).toBe(4);
+    client.stop();
+  });
+});
+
 describe('TrafficClient provider chain', () => {
   it('keeps serving from a live provider while another is down', async () => {
     const dead = fakeProvider('adsb.lol', () => {
       throw new Error('upstream down');
     });
-    const alive = fakeProvider('adsb.fi', () => [fakeState('bbb222')]);
+    const alive = fakeProvider('backup', () => [fakeState('bbb222')]);
 
     const snapshots: TrafficSnapshot[] = [];
     const client = new TrafficClient({ onSnapshot: (s) => snapshots.push(s) }, [dead, alive]);
 
     client.start(() => query, 2000);
     await vi.advanceTimersByTimeAsync(0);
-    expect(snapshots[0]?.source).toBe('adsb.fi');
+    expect(snapshots[0]?.source).toBe('backup');
 
     // The breaker takes the dead one out after three strikes; the live one
     // keeps being asked every cycle.
@@ -269,7 +331,7 @@ describe('TrafficClient provider chain', () => {
    */
   it('asks every provider, so one network fills the other one\'s gaps', async () => {
     const quiet = fakeProvider('adsb.lol', () => []);
-    const covered = fakeProvider('adsb.fi', () => [fakeState('ccc333')]);
+    const covered = fakeProvider('backup', () => [fakeState('ccc333')]);
 
     const seen = new Set<string>();
     const client = new TrafficClient(
@@ -288,17 +350,17 @@ describe('TrafficClient provider chain', () => {
 
   it('does not stop the chain at an empty answer', async () => {
     const quiet = fakeProvider('adsb.lol', () => []);
-    const covered = fakeProvider('adsb.fi', () => [fakeState('ddd444')]);
+    const covered = fakeProvider('backup', () => [fakeState('ddd444')]);
     const client = new TrafficClient({ onSnapshot: () => undefined }, [quiet, covered]);
 
     const snapshot = await client.fetchOnce(query);
-    expect(snapshot?.source).toBe('adsb.fi');
+    expect(snapshot?.source).toBe('backup');
     expect(snapshot?.aircraft).toHaveLength(1);
   });
 
   it('keeps a metered fallback out of the sweep', async () => {
     const primary = fakeProvider('adsb.lol', () => [fakeState('eee555')]);
-    const metered = Object.assign(fakeProvider('opensky', () => [fakeState('fff666')]), {
+    const metered = Object.assign(fakeProvider('metered', () => [fakeState('fff666')]), {
       fallbackOnly: true,
     });
     const client = new TrafficClient({ onSnapshot: () => undefined }, [primary, metered]);
@@ -345,7 +407,7 @@ describe('TrafficClient provider chain', () => {
     const a = fakeProvider('adsb.lol', () => {
       throw new Error('boom a');
     });
-    const b = fakeProvider('adsb.fi', () => {
+    const b = fakeProvider('backup', () => {
       throw new Error('boom b');
     });
 
@@ -360,7 +422,7 @@ describe('TrafficClient provider chain', () => {
     client.start(() => query, 2000);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(failures[0]).toBe('adsb.fi,adsb.lol');
+    expect(failures[0]).toBe('adsb.lol,backup');
     expect(client.health().every((h) => h.status === 'degraded' || h.status === 'down')).toBe(true);
 
     client.stop();

@@ -26,6 +26,7 @@ import { BufferAttribute, BufferGeometry, Sphere, Texture, Vector3 } from 'three
 import { wrapTileX } from '@/core/math/geo';
 import type { TileLoader } from '@/tiles/loader';
 import { isNoDataTile } from '@/tiles/placeholder';
+import { imageryFor, type RegionalLayer } from '@/tiles/regional';
 import { TERRARIUM, type ImagerySource } from '@/tiles/sources';
 import type { TerrainWorkerPool } from '@/workers/pool';
 import { meshResolutionFor, skirtFloorFor } from './constants';
@@ -168,8 +169,8 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
    * One provider, per tile, always.
    *
    * This used to be a fallback chain — the active layer first, then any other
-   * layer covering this zoom — so a tile Esri happened to 500 on came back as
-   * Sentinel-2. Two global imagery sets photographed years apart do not agree
+   * layer covering this zoom — so a tile the primary layer happened to 500 on came
+   * back from another one. Two global imagery sets photographed years apart do not agree
    * about colour, season or cloud, so what that bought was a rectangle of a
    * visibly different planet in the middle of the view, with a hard edge at
    * the tile boundary. It is the single most obvious way the ground can fail
@@ -184,8 +185,16 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
    * `imageryFailing`: the whole globe changes layer at once, which looks like
    * a decision rather than like damage.
    */
-  const covers = node.z >= source.minZoom && node.z <= source.maxZoom;
-  const urls = covers ? [source.url(node.z, wrappedX, node.y)] : [];
+  /*
+   * National aerial imagery takes over, tile by tile, where an agency covers
+   * the ground (see `regional.ts`). Which layer a tile belongs to is a fact
+   * about where the tile is, so it is the same for everyone and every frame:
+   * two neighbours are never drawn from different providers by accident.
+   */
+  const layer = imageryFor(source, node.z, wrappedX, node.y);
+  const urls = layer ? [layer.url(node.z, wrappedX, node.y)] : [];
+  const national = layer !== null && layer.id !== source.id;
+  node.regionalTexture = national;
 
   if (urls.length === 0) {
     // Past this layer's max zoom: inherit from the ancestor permanently.
@@ -195,7 +204,7 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
     return;
   }
 
-  const key = `${source.id}/${node.z}/${wrappedX}/${node.y}`;
+  const key = `${layer!.id}/${node.z}/${wrappedX}/${node.y}`;
   node.textureRequestKey = key;
   let bitmap: ImageBitmap | null = null;
 
@@ -205,6 +214,13 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
 
     if (signal.aborted || node.textureGen !== gen) {
       if (signal.aborted) ctx.finish(node, 'texture', gen, 'aborted');
+      return;
+    }
+
+    // An agency's blank tile or error page, answered 200 outside its
+    // coverage: keep the ancestor's imagery rather than draw it.
+    if (national && result.data.byteLength < (layer as RegionalLayer).minBytes) {
+      ctx.finish(node, 'texture', gen, 'exhausted');
       return;
     }
 
@@ -243,6 +259,7 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
     // out of the render set: a hole in the globe for the length of a fetch.
     const replacing = node.texture;
     node.texture = texture;
+    node.textureLayerId = layer!.id;
     /*
      * The cross-fade is for an image arriving *underneath the viewer*, and
      * after the refinement gate that is the rare case. A tile that is not on

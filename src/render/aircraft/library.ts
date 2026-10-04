@@ -53,7 +53,7 @@ let catalogue: Promise<Catalogue | null> | null = null;
 
 
 /** Models that are combat aircraft: never the stand-in for an airliner or a Cessna. */
-const MILITARY = new Set(['a10', 'ah64', 'f14', 'f15', 'f16', 'f18', 'f4u', 'jas39', 'm2k', 'mig21', 'mig29', 'p51', 'su25']);
+const MILITARY = new Set(['a10', 'ah64', 'f15', 'f16', 'f18', 'f4u', 'jas39', 'm2k', 'p51']);
 
 interface Profile {
   id: string;
@@ -84,7 +84,7 @@ function profilesOf(index: Catalogue): Profile[] {
  * the nearest in length, engine count and layout — an A330 is drawn as a 777
  * or an A340 rather than as the one narrowbody every other type shared.
  */
-export function nearestModel(index: Catalogue, upper: string, category: string | null): string | null {
+function nearestModel(index: Catalogue, upper: string, category: string | null): string | null {
   const want = shapeFor(upper, category);
   let best: string | null = null;
   let bestCost = Infinity;

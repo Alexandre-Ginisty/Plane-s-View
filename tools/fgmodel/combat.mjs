@@ -73,13 +73,9 @@ export const COMBAT = [
     liveries: false,
   },
   { id: 'f15', path: 'F-15', model: 'Models/f15c.ac', types: ['F15'], lengthM: 19.43, credit: 'F-15 — FlightGear FGAddon, GPL-2.0', liveries: false },
-  { id: 'f14', path: 'f-14b', model: 'Models/f-14b.ac', types: ['F14'], lengthM: 19.1, credit: 'F-14B — FlightGear FGAddon, GPL-2.0', liveries: false },
   { id: 'f18', path: 'f18', model: 'Models/f18.ac', types: ['F18', 'F18H', 'F18S'], lengthM: 17.07, credit: 'F/A-18 — FlightGear FGAddon, GPL-2.0', liveries: false },
   { id: 'm2k', path: 'Mirage-2000', model: 'Models/m2000-5.ac', types: ['MIR2'], lengthM: 14.36, credit: 'Mirage 2000-5 — FlightGear FGAddon, GPL-2.0', liveries: false },
   { id: 'jas39', path: 'JAS39-Gripen', model: 'Models/gripen.ac', types: ['GRIF'], lengthM: 14.1, minSpan: 0.5, credit: 'JAS 39 Gripen — FlightGear FGAddon, GPL-2.0', liveries: false },
-  { id: 'mig29', path: 'Mig-29', model: 'Models/Mig-29.ac', types: ['MG29'], lengthM: 17.32, credit: 'MiG-29 — FlightGear FGAddon, GPL-2.0', liveries: false },
-  { id: 'su25', path: 'Su-25', model: 'Models/Su-25.ac', types: ['SU25'], lengthM: 15.33, credit: 'Su-25 — FlightGear FGAddon, GPL-2.0', liveries: false },
-  { id: 'mig21', path: 'MiG-21bis', model: 'Models/MiG-21bis.ac', types: ['MG21'], lengthM: 15.76, minSpan: 0.4, credit: 'MiG-21bis — FlightGear FGAddon, GPL-2.0', liveries: false },
   { id: 'p51', path: 'p51d', model: 'Models/P-51D-25NA.ac', types: ['P51'], lengthM: 9.83, credit: 'P-51D Mustang — FlightGear FGAddon, GPL-2.0', liveries: false },
 ];
 

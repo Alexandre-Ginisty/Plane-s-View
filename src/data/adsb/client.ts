@@ -62,6 +62,26 @@ interface ProviderRuntime {
 const MIN_POLL_MS = 1500;
 const MAX_POLL_MS = 30_000;
 
+/**
+ * After the view jumps, ask again this soon rather than waiting out the
+ * politeness floor. One request after a jump is not the sustained polling the
+ * floor guards against, and the floor is what made a move to a new city show
+ * nothing for ten seconds.
+ */
+const URGENT_FLOOR_MS = 800;
+
+/**
+ * Requests one provider may have in flight at once in a sweep.
+ *
+ * A provider's request is cheap (adsb.lol answers a 250 nm circle in under
+ * 200 ms) and a wide view needs several circles. Handing out one circle per
+ * cycle made a zoomed-out map fill at one circle every few seconds — which,
+ * with a single feed left, was several times slower than with four. The
+ * floor still sets how often a *cycle* may start.
+ */
+const SWEEP_PARALLEL = 2;
+const URGENT_PARALLEL = 4;
+
 export class TrafficClient {
   private readonly runtimes: ProviderRuntime[];
   /** Index of the provider that last worked — tried first next time. */
@@ -160,11 +180,11 @@ export class TrafficClient {
   }
 
   /** Enabled, breaker closed, and past its politeness floor. */
-  private isReady(rt: ProviderRuntime, now: number): boolean {
+  private isReady(rt: ProviderRuntime, now: number, urgent = false): boolean {
     return (
       rt.provider.enabled &&
       rt.breaker.allowsRequest(now) &&
-      now - rt.lastRequestAt >= rt.provider.minIntervalMs
+      now - rt.lastRequestAt >= (urgent ? Math.min(URGENT_FLOOR_MS, rt.provider.minIntervalMs) : rt.provider.minIntervalMs)
     );
   }
 
@@ -237,6 +257,11 @@ export class TrafficClient {
   }
 
   private baseIntervalMs = 3000;
+  /** The next cycle follows a jump of the view: floors are relaxed, circles fetched in parallel. */
+  private urgent = false;
+  /** Which tick is current. An older one that finishes late must not schedule a second timer. */
+  private tickGeneration = 0;
+  private lastUrgentAt = 0;
   private source: QuerySource = { next: () => null, cellCount: 1 };
 
   private handleVisibilityChange(): void {
@@ -253,7 +278,33 @@ export class TrafficClient {
     }
   }
 
+  /**
+   * Poll now, for the view as it is now.
+   *
+   * Called when the view jumps — a new city, a followed aircraft, a "take me
+   * somewhere else" — because the cadence is tuned for a view that stays put.
+   * Without it the first aircraft in a new place arrived after the pending
+   * timer, the politeness floor and one circle per cycle: about ten seconds,
+   * for a request that takes a fifth of one.
+   *
+   * Debounced, and still bounded by `URGENT_FLOOR_MS`, so a view being dragged
+   * cannot turn it into a stream of requests.
+   */
+  requestNow(): void {
+    if (!this.running || document.hidden) return;
+    const now = Date.now();
+    if (now - this.lastUrgentAt < URGENT_FLOOR_MS) return;
+    this.lastUrgentAt = now;
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.urgent = true;
+    void this.tick();
+  }
+
   private async tick(): Promise<void> {
+    const generation = ++this.tickGeneration;
     // Cleared first, always.
     //
     // `timer` means "a cycle is pending", and `handleVisibilityChange` only
@@ -267,8 +318,10 @@ export class TrafficClient {
     this.inFlight?.abort();
     const controller = new AbortController();
     this.inFlight = controller;
+    const urgent = this.urgent;
+    this.urgent = false;
     try {
-      await this.sweep(controller.signal);
+      await this.sweep(controller.signal, urgent);
     } catch {
       // Aborted by a newer cycle or by stop(); nothing to report.
     } finally {
@@ -279,6 +332,8 @@ export class TrafficClient {
     // next `visibilitychange` restarts polling at once instead of waiting out
     // a cycle that would only return early anyway.
     if (!this.running || document.hidden) return;
+    // A newer tick took over while this one was being aborted: it schedules.
+    if (generation !== this.tickGeneration) return;
     this.timer = self.setTimeout(() => void this.tick(), this.nextDelayMs());
   }
 
@@ -294,7 +349,7 @@ export class TrafficClient {
    * With several cells, each request takes the next cell, so the view is
    * swept and consecutive cycles hand every cell to a different network.
    */
-  private async sweep(signal: AbortSignal): Promise<void> {
+  private async sweep(signal: AbortSignal, urgent = false): Promise<void> {
     const now = Date.now();
     const primaries = [...this.chain()].filter(
       (rt) => rt.provider.enabled && !rt.provider.fallbackOnly && rt.breaker.allowsRequest(now),
@@ -309,20 +364,25 @@ export class TrafficClient {
       return;
     }
 
-    const ready = primaries.filter((rt) => this.isReady(rt, now));
+    const ready = primaries.filter((rt) => this.isReady(rt, now, urgent));
     if (ready.length === 0) return;
 
     const errors = new Map<ProviderId, string>();
     let attempted = 0;
     let succeeded = 0;
 
+    // Each ready provider takes several circles at once when the view needs
+    // them (see `SWEEP_PARALLEL`); a single-circle view is one request, as ever.
+    const perProvider = Math.min(Math.max(1, this.source.cellCount), urgent ? URGENT_PARALLEL : SWEEP_PARALLEL);
+    const tasks = ready.flatMap((rt) => Array.from({ length: perProvider }, () => rt));
+    for (const rt of ready) rt.lastRequestAt = Date.now();
+
     await Promise.all(
-      ready.map(async (rt) => {
+      tasks.map(async (rt) => {
         const query = this.source.next();
         if (!query) return;
         attempted++;
         const started = performance.now();
-        rt.lastRequestAt = Date.now();
         try {
           const snapshot = await this.request(rt, query, started, signal);
           succeeded++;

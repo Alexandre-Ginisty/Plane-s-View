@@ -1,7 +1,7 @@
 /**
  * The wind aloft and at the surface: measured, not invented.
  *
- * Two sources, each good where the other is not. Open-Meteo gives the wind ten
+ * Two sources, each good where the other is not. The weather forecast gives the wind ten
  * metres above the ground at the spawn — the wind a landing is flown in. The
  * traffic gives the wind aloft: ADS-B version 2 aircraft broadcast the wind
  * they measure (`wd`, `ws`) at their own altitude, so the airliners around the

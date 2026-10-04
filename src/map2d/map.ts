@@ -111,6 +111,8 @@ export class SelectionMap {
       center: [center.lon, center.lat],
       zoom,
       minZoom: 1,
+      // Tiles are asked for one or two levels deeper than this (see `tileSizeFor`), so
+      // this is the deepest the imagery goes: Esri's own maximum, level 19.
       maxZoom: 17,
       // No glyphs or sprite: nothing here needs them, and declaring URLs we do
       // not control would make the map fail offline for no benefit.
@@ -129,7 +131,7 @@ export class SelectionMap {
           basemap: {
             type: 'raster',
             tiles: [this.imagery.template],
-            tileSize: this.imagery.tileSize,
+            tileSize: this.tileSizeFor(this.imagery),
             maxzoom: this.imagery.maxZoom,
             attribution: this.imagery.attribution,
           },
@@ -381,8 +383,23 @@ export class SelectionMap {
 
     const src = map.getSource('basemap');
     if (src && 'setTiles' in src && typeof src.setTiles === 'function') {
+      // The new layer's own depth and tile size, or the map would stop at the
+      // old layer's maximum and draw 256 px pictures a different size.
+      Object.assign(src, { maxzoom: source.maxZoom, tileSize: this.tileSizeFor(source) });
       src.setTiles([source.template]);
     }
+  }
+
+  /**
+   * The tile size to declare, which is how the map chooses the zoom to fetch:
+   * a source declared at half its real size is drawn at half size, so on a
+   * screen with two device pixels to a CSS pixel every texel lands on exactly
+   * one, and the map asks for tiles one level deeper than it otherwise would.
+   * Declared at its real size on such a screen, the picture is enlarged to
+   * twice its resolution and looks soft at every zoom.
+   */
+  private tileSizeFor(source: ImagerySource): number {
+    return window.devicePixelRatio >= 1.5 ? source.tileSize / 2 : source.tileSize;
   }
 
   /** Show or hide borders and place names. */

@@ -17,7 +17,7 @@ import { Frustum, Sphere } from 'three';
 import type { Vec3 } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import { TERRARIUM } from '@/tiles/sources';
-import { MIN_OBLIQUITY } from './constants';
+import { ELEVATION_MAX_ZOOM, MIN_OBLIQUITY } from './constants';
 import type { TileNode } from './tileNode';
 
 /** The sub-rectangle of a heightmap a tile occupies, in [0,1] tile space. */
@@ -109,21 +109,23 @@ export function screenSpaceError(
 /**
  * Elevation request for a tile.
  *
- * Terrarium stops at zoom 15. Deeper tiles reuse their z15 ancestor's
- * heightmap and sample the sub-rectangle they occupy within it, which keeps
- * the terrain continuous across the boundary instead of flattening abruptly.
+ * Elevation is fetched no deeper than `ELEVATION_MAX_ZOOM` (and Terrarium
+ * stops at 15 in any case). Deeper tiles reuse that ancestor's heightmap and
+ * sample the sub-rectangle they occupy within it, which keeps the terrain
+ * continuous across the boundary instead of flattening abruptly.
  */
 export function elevationRequest(node: TileNode): ElevationRequest {
-  if (node.z <= TERRARIUM.maxZoom) {
+  const maxZoom = Math.min(ELEVATION_MAX_ZOOM, TERRARIUM.maxZoom);
+  if (node.z <= maxZoom) {
     return { z: node.z, x: node.x, y: node.y, rect: { x0: 0, y0: 0, x1: 1, y1: 1 } };
   }
 
-  const f = 1 << (node.z - TERRARIUM.maxZoom);
+  const f = 1 << (node.z - maxZoom);
   const ax = Math.floor(node.x / f);
   const ay = Math.floor(node.y / f);
   const scale = 1 / f;
   return {
-    z: TERRARIUM.maxZoom,
+    z: maxZoom,
     x: ax,
     y: ay,
     rect: {

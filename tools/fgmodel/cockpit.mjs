@@ -200,6 +200,35 @@ const COCKPITS = [
     // MRJ90-STD-set.xml, view 0.
     eye: { x: -15.2, y: -0.5, z: 1.59 },
   },
+  {
+    aircraft: 'b748',
+    types: ['B748', 'B744', 'B74F'],
+    root: '747-8i/Models/747-8i.xml',
+    within: /Models\/Cockpit\/cockpit\.xml$/,
+    skip: /Effects|Lights|Services|Pushback|Shadow|Service/,
+    // 747-8-main.xml, the default view.
+    eye: { x: -27.8, y: -0.53, z: 3.95 },
+  },
+  {
+    aircraft: 'b77w',
+    types: ['B77W', 'B77L', 'B773', 'B772', 'B77F'],
+    root: '777/Models/777-300ER.xml',
+    within: /flightdeck-300\.xml$/,
+    skip: /Effects|Lights|Ground|Autopush|Generic|Human|cargo-ramp|Services|Airport|Vehicle|Truck|Catering|EFB/,
+    // A very detailed deck: held to a lighter budget than the rest.
+    budget: 60_000,
+    // 777-set-common.xml's pilot view, 777-300ER-set.xml's distance from the nose.
+    eye: { x: -28.0781, y: -0.57, z: 0.8 },
+  },
+  {
+    aircraft: 'md80',
+    types: ['MD82', 'MD83', 'MD88', 'MD81', 'MD90', 'B712', 'MD95'],
+    root: 'MD-80/Models/MD-80-main.xml',
+    within: /MD-80-cockpit\.xml$/,
+    skip: /Effects|Lights|Services|Generic|Paintkit/,
+    // MD-80-main.xml, Captain View.
+    eye: { x: -19.58, y: -0.5, z: 1.31 },
+  },
   /*
    * The military aircraft. A fighter's cockpit is spread over its main
    * model and a dozen instrument files, and all of it is within arm's reach:
@@ -209,13 +238,9 @@ const COCKPITS = [
   ...[
     ['ah64', ['H64'], 'apache/Models/apachemodel/apache-model.xml', { x: 3.7, y: -0.23, z: 2.65 }],
     ['f15', ['F15'], 'F-15/Models/F-15C.xml', { x: -5, y: 0, z: 1.401951318 }],
-    ['f14', ['F14'], 'f-14b/Models/f-14b.xml', { x: -5.3, y: 0, z: 0.35 }],
     ['f18', ['F18', 'F18H', 'F18S'], 'f18/Models/f18.xml', { x: -3.4, y: 0, z: 0.97 }],
     ['m2k', ['MIR2'], 'Mirage-2000/Models/m2000-5.xml', { x: -2.9, y: 0, z: 0.0093 }],
     ['jas39', ['GRIF'], 'JAS39-Gripen/Models/gripen.xml', { x: -2.966, y: 0, z: 0.051 }],
-    ['mig29', ['MG29'], 'Mig-29/Models/Mig-29.xml', { x: 4.6, y: 0, z: 1.2 }],
-    ['su25', ['SU25'], 'Su-25/Models/Su-25.xml', { x: -3.45, y: 0, z: 2.7 }],
-    ['mig21', ['MG21'], 'MiG-21bis/Models/MiG-21bis.xml', { x: -3.3, y: 0, z: 1.08 }],
     ['p51', ['P51'], 'p51d/Models/P-51D-25-NA.xml', { x: 3.28972, y: 0, z: 0.675 }],
     ['a10', ['A10'], 'A-10/Models/A-10-model.xml', { x: 3.2, y: 0, z: 1.5 }],
     ['f4u', ['F4U'], 'F4U/Models/F4U-1.xml', { x: 5.1, y: 0, z: 1.0 }],
@@ -751,11 +776,12 @@ async function convertCockpit(spec) {
     meshes.set(group, spec.seat ? simplified(index(group.tris), 6000, 0.004) : simplified(index(group.tris)));
   }
   const total = [...meshes.values()].reduce((n, m) => n + m.indices.length / 3, 0);
-  if (total > BUDGET) {
-    const ratio = BUDGET / total;
+  const budget = spec.budget ?? BUDGET;
+  if (total > budget) {
+    const ratio = budget / total;
     for (const [group, m] of meshes) {
       const n = m.indices.length / 3;
-      if (n > 1500) meshes.set(group, simplified(m, Math.max(1500, Math.round(n * ratio)), 0.0025));
+      if (n > 1500) meshes.set(group, simplified(m, Math.max(1500, Math.round(n * ratio)), spec.budget ? 0.006 : 0.0025));
     }
   }
 

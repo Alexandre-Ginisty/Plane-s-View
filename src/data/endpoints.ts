@@ -1,37 +1,38 @@
 /**
  * Upstream endpoints and how requests reach them.
  *
- * ## Why this module exists
+ * ## Only services that may be used commercially
  *
- * The project brief assumes every free ADS-B feed can be called straight from
- * the browser. Measured against the live services, none of them can be:
+ * Every service here is free *and* allows a commercial product to use it. That
+ * excludes most of what an aircraft tracker normally leans on: OpenSky and
+ * adsb.fi are for personal or research use (adsb.fi is used anyway while the site is a demonstration), airplanes.live asks for approval,
+ * Open-Meteo's free tier is non-commercial, and Planespotters and
+ * airport-data.com photographs belong to their photographers. What is left:
  *
- * | Service          | `Access-Control-Allow-Origin` | Usable from a page? |
- * |------------------|-------------------------------|---------------------|
- * | adsb.lol         | *absent*                      | no                  |
- * | adsb.fi          | *absent*                      | no                  |
- * | OpenSky          | `https://opensky-network.org` | no                  |
- * | airplanes.live   | 403, approval required        | no                  |
- * | planespotters    | `*`, but demands a custom `User-Agent` — a header browsers forbid scripts from setting | no |
- * | adsbdb           | `*`                           | **yes**             |
- * | Open-Meteo       | `*`                           | **yes**             |
- * | Esri / EOX / AWS | `*`                           | **yes**             |
+ * | Service        | Licence                      | Reached how |
+ * |----------------|------------------------------|-------------|
+ * | adsb.lol       | ODbL                         | relay       |
+ * | MET Norway     | CC BY 4.0 / NLOD             | relay       |
+ * | Wikimedia Commons | per file, filtered to CC BY / CC BY-SA / CC0 / PD | direct |
+ * | EOX / NASA / AWS / OpenFreeMap | CC BY 4.0 / public domain / open data | direct |
  *
- * So imagery, terrain, airframe metadata and weather are genuinely
- * backend-free. The traffic feed and photos are not, and no amount of
- * client-side code changes that — CORS is enforced by the browser.
+ * Routes and airline names are not looked up at all: they ship with the app
+ * (`public/routes`, built from the CC0 Virtual Radar Server standing data).
  *
- * The resolution keeps every constraint that actually mattered (free, no API
- * key, no account, no card) by routing those two through a relay:
+ * ## Why a relay
+ *
+ * adsb.lol sends no `Access-Control-Allow-Origin`, and MET Norway requires a
+ * `User-Agent` that identifies the project — a header browsers forbid scripts
+ * from setting. Neither can be called from a page, and no client-side code
+ * changes that: CORS is enforced by the browser.
  *
  *  - **Development** — Vite's dev server proxies `/feeds/*`. No extra process.
  *  - **Production**  — `functions/feeds/[[path]].ts`, a Cloudflare Pages
- *    Function on the free tier. Deploy it beside the static build and the
- *    same paths keep working. `deploy/` has equivalents for other hosts.
+ *    Function. Deploy it beside the static build and the same paths keep
+ *    working.
  *
  * Set `VITE_DIRECT_FEEDS=1` to bypass the relay and call upstream directly —
- * useful inside a browser extension, an Electron shell, or if a provider ever
- * starts sending permissive CORS.
+ * useful inside a browser extension or an Electron shell.
  */
 
 import relayTargets from '../../relay-targets.json';
@@ -52,12 +53,7 @@ const FEED_PREFIX = 'feeds';
  * proxy and the deployed relay function all read the *same* list. Adding a
  * provider means editing one file.
  */
-export type RelayTarget =
-  | 'adsb-lol'
-  | 'adsb-fi'
-  | 'airplanes-live'
-  | 'opensky'
-  | 'planespotters';
+export type RelayTarget = 'adsb-lol' | 'adsb-fi' | 'metno';
 
 const UPSTREAM = relayTargets as Record<RelayTarget, string>;
 
@@ -72,9 +68,3 @@ export function relayUrl(target: RelayTarget, path: string): string {
   const base = new URL(import.meta.env.BASE_URL ?? '/', window.location.href);
   return new URL(`${FEED_PREFIX}/${target}${path}`, base).toString();
 }
-
-/** Services that speak CORS properly and are always called directly. */
-export const DIRECT = {
-  adsbdb: 'https://api.adsbdb.com',
-  openMeteo: 'https://api.open-meteo.com',
-} as const;

@@ -76,6 +76,19 @@ export const RELIEF: ReliefSettings = {
 };
 
 /**
+ * The deepest zoom elevation is fetched at. Terrarium goes to 15, but a
+ * heightmap tile is 120 to 160 KB however high the zoom — so a view at the
+ * ground, with its seventy-odd tiles at zoom 14 to 16, was asking for about
+ * nine megabytes of terrain to draw ground whose shape the 30 m source data
+ * cannot resolve any finer anyway. A tile deeper than this samples the
+ * sub-rectangle it occupies of its ancestor at this zoom (about 15 m a
+ * texel), so sixteen of them share one download and the terrain stays
+ * continuous across tile edges. Cutting the bytes this way is what makes the
+ * ground fill in quickly on an ordinary connection.
+ */
+export const ELEVATION_MAX_ZOOM = 13;
+
+/**
  * Quads along one side of a tile's mesh, from its zoom.
  *
  * ## The cliff this replaces
@@ -99,7 +112,7 @@ export const RELIEF: ReliefSettings = {
  */
 export function meshResolutionFor(z: number): number {
   // Real elevation samples across this tile, one side.
-  const real = z <= TERRARIUM.maxZoom ? TERRARIUM.tileSize : TERRARIUM.tileSize >> (z - TERRARIUM.maxZoom);
+  const real = z <= ELEVATION_MAX_ZOOM ? TERRARIUM.tileSize : TERRARIUM.tileSize >> (z - ELEVATION_MAX_ZOOM);
   // 32 -> 64 -> 128, doubling at z9 and z12.
   const ramp = 32 << Math.max(0, Math.min(2, Math.floor((z - 6) / 3)));
   return Math.max(8, Math.min(ramp, real));
@@ -191,7 +204,7 @@ export function skirtFloorFor(spanMetres: number): number {
 export interface GlobeOptions {
   /** Target screen-space error in pixels. Lower is sharper and costlier. */
   maxScreenSpaceError?: number;
-  /** Deepest zoom to refine to. Esri serves imagery to 19. */
+  /** Deepest zoom to refine to; the active imagery layer's own maximum also applies. */
   maxZoom?: number;
   /** Vertical exaggeration; 1 is true scale. */
   exaggeration?: number;

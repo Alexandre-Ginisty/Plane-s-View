@@ -60,6 +60,10 @@ export function publishTelemetry(input: TelemetryInput): void {
   // Refreshed every publish rather than only on a grade change, so the
   // diagnostics panel shows live latency and throughput instead of whatever
   // they happened to be at the last transition.
+  const regional = globeStats.regionalLayers;
+  if (regional.length !== app.regionalImagery.length || regional.some((id, i) => id !== app.regionalImagery[i])) {
+    app.regionalImagery = regional;
+  }
   app.network = networkMonitor.readout();
   app.networkProfile = networkMonitor.profile;
 }

@@ -53,6 +53,7 @@
 import { FrontSide, ShaderMaterial, Texture, Vector3, Vector4 } from 'three';
 import { ATMO_GLSL, ATMO_UNIFORMS } from './sky/shader';
 import { CLOUD_SHADOW_GLSL, cloudNoise, cloudShadowData } from './clouds';
+import { GROUND_GLSL, attachGroundDetail } from './groundDetail';
 import { NIGHT_GLSL, attachNightLights } from './nightLights';
 
 /** The grain repeats every this many Web Mercator metres: a multiple of every octave (2, 8 and 32 m). */
@@ -100,6 +101,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 sunDirection;
   ${ATMO_GLSL}
   ${NIGHT_GLSL}
+  ${GROUND_GLSL}
   ${CLOUD_SHADOW_GLSL}
   uniform float ambient;
   // xy: the tile's north-west corner in Web Mercator metres, wrapped to the
@@ -151,6 +153,8 @@ const fragmentShader = /* glsl */ `
     // Detail grain: see the header.
     vec2 q = detail.xy + vec2(vUv.x, 1.0 - vUv.y) * detail.z;
     float footprint = length(fwidth(q));
+    // Roads, runways and roofs from the map, over soft imagery: see @/render/groundDetail.
+    albedo = groundApply(albedo, vWorldPosition, footprint, texelM);
     float grain = grainOctave(q, footprint, 2.0) * 0.55 + grainOctave(q, footprint, 8.0) * 0.8 + grainOctave(q, footprint, 32.0);
     // Not on open water: a dark, blue surface stays as the imagery has it.
     float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
@@ -244,6 +248,7 @@ export class TerrainMaterial extends ShaderMaterial {
     // After construction: a texture in the constructor's uniforms is cloned.
     this.uniforms['cloudTex']!.value = cloudNoise;
     attachNightLights(this.uniforms);
+    attachGroundDetail(this.uniforms);
   }
 
   setTextures(a: Texture | null, uvA: Vector4, b: Texture | null, uvB: Vector4): void {
