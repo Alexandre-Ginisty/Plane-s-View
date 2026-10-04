@@ -13,8 +13,10 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t, type MessageKey } from '@/i18n/index.svelte';
   import { CAMERA_MODES } from '@/render/pov';
   import { TRAFFIC_LEGEND } from './palette';
+  import { cameraLabel } from './labels';
 
   /*
    * Built from `CAMERA_MODES`, not typed out.
@@ -26,85 +28,92 @@
    * is worse than no help panel, and the only way it stays right is by not
    * being written down twice.
    */
-  const cameraKeys = CAMERA_MODES.map((mode) => mode.label.toLowerCase()).join(', ');
+  const cameraNames = $derived(CAMERA_MODES.map((mode) => cameraLabel(mode.id).toLowerCase()).join(', '));
 
-  const KEYS: readonly { key: string; does: string }[] = [
-    { key: 'Click', does: 'Select an aircraft on the map' },
-    { key: 'Enter', does: 'Step inside the selected aircraft' },
-    { key: 'Esc', does: 'Leave the cockpit, or clear the selection' },
-    { key: 'Drag', does: 'Look around: the camera goes the way you drag' },
-    { key: 'Wheel', does: 'Zoom — nearer or further outside, a longer lens in the cockpit' },
-    { key: 'Click', does: 'A framed aircraft in 3D: fly across to it' },
-    { key: `1 – ${CAMERA_MODES.length}`, does: `Switch camera: ${cameraKeys}` },
-    { key: 'V', does: 'Inside or outside: the flight deck and a window seat, or the views of the aircraft' },
-    { key: 'C', does: 'Re-centre the view' },
-    { key: 'P', does: 'Pin mode: click the map to mark places you want to see from the air' },
-    { key: 'Right-click', does: 'Drop a pin on the map at any time' },
-    { key: 'L', does: 'Catch a landing: step into an aircraft on final approach' },
-    { key: 'T', does: 'Catch a takeoff: step into an aircraft on the runway or climbing out' },
-    { key: 'A', does: 'Auto camera: pick the view for takeoffs and landings' },
-    { key: 'F', does: 'Fullscreen, with nothing but the view' },
-    { key: 'D', does: 'Show the performance and connection counters' },
-    { key: 'H', does: 'Show or hide this panel' },
-  ];
+  /** A key (or gesture) and what it does: both are message keys, except the key name of a plain letter. */
+  type Entry = { key: string; does: string };
+  const entry = (key: MessageKey | string, does: MessageKey, params?: Record<string, string>): Entry => ({
+    key: key.startsWith('key.') ? t(key as MessageKey) : key,
+    does: t(does, params),
+  });
+
+  const keys = $derived<Entry[]>([
+    entry('key.click', 'ctl.select'),
+    entry('key.enter', 'ctl.stepInside'),
+    entry('key.esc', 'ctl.leave'),
+    entry('key.drag', 'ctl.look'),
+    entry('key.wheel', 'ctl.zoom'),
+    entry('key.click', 'ctl.framed'),
+    entry(`1 – ${CAMERA_MODES.length}`, 'ctl.camera', { cameras: cameraNames }),
+    entry('V', 'ctl.inOut'),
+    entry('C', 'ctl.recentre'),
+    entry('P', 'ctl.pinMode'),
+    entry('key.rightClick', 'ctl.rightClickPin'),
+    entry('L', 'ctl.catchLanding'),
+    entry('T', 'ctl.catchTakeoff'),
+    entry('A', 'ctl.autoCamera'),
+    entry('F', 'ctl.fullscreen'),
+    entry('D', 'ctl.diagnostics'),
+    entry('H', 'ctl.panel'),
+  ]);
 
   /* The same controls for a finger: every key above has a button somewhere. */
-  const TOUCH: readonly { key: string; does: string }[] = [
-    { key: 'Tap', does: 'Select an aircraft on the map, then “Step inside”' },
-    { key: 'Drag', does: 'Look around from inside or outside the aircraft' },
-    { key: 'Pinch', does: 'Zoom — nearer or further outside, a longer lens in the cockpit' },
-    { key: 'Tap', does: 'A framed aircraft in 3D: fly across to it' },
-    { key: 'Long press', does: 'Drop a pin on the map' },
-    { key: '←', does: 'Back to the map' },
-  ];
+  const taps = $derived<Entry[]>([
+    entry('key.tap', 'ctl.tapSelect'),
+    entry('key.drag', 'ctl.touchLook'),
+    entry('key.pinch', 'ctl.zoom'),
+    entry('key.tap', 'ctl.framed'),
+    entry('key.longPress', 'ctl.longPressPin'),
+    entry('←', 'ctl.back'),
+  ]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
-  const controls = touch ? TOUCH : KEYS;
+  const controls = $derived(touch ? taps : keys);
+
+  const LEGEND_KEYS: Record<string, MessageKey> = {
+    climbing: 'legend.climbing',
+    level: 'legend.level',
+    descending: 'legend.descending',
+    emergency: 'legend.emergency',
+    stale: 'legend.stale',
+  };
 </script>
 
 {#if app.showLegend}
-  <div class="panel legend" role="dialog" aria-label="Key and controls">
+  <div class="panel legend" role="dialog" aria-label={t('legend.title')}>
     <header>
-      <h2>Key &amp; controls</h2>
-      <button class="close" onclick={() => (app.showLegend = false)} aria-label="Close">×</button>
+      <h2>{t('legend.title')}</h2>
+      <button class="close" onclick={() => (app.showLegend = false)} aria-label={t('common.close')}>×</button>
     </header>
 
     <section>
-      <p class="label">Aircraft colour</p>
+      <p class="label">{t('legend.aircraftColour')}</p>
       <ul class="swatches">
-        {#each TRAFFIC_LEGEND as entry (entry.meaning)}
+        {#each TRAFFIC_LEGEND as item (item.id)}
           <li>
-            <span class="swatch" style="background: {entry.color}"></span>
-            <span>{entry.meaning}</span>
+            <span class="swatch" style="background: {item.color}"></span>
+            <span>{t(LEGEND_KEYS[item.id]!)}</span>
           </li>
         {/each}
       </ul>
-      <p class="note">
-        Helicopters are drawn with a rotor instead of wings — shape tells you
-        what it is, colour tells you what it is doing.
-      </p>
+      <p class="note">{t('legend.helicopters')}</p>
     </section>
 
     <section>
-      <p class="label">Controls</p>
+      <p class="label">{t('legend.controls')}</p>
       <dl class="keys">
-        {#each controls as entry, i (i)}
-          <div><dt>{entry.key}</dt><dd>{entry.does}</dd></div>
+        {#each controls as row, i (i)}
+          <div><dt>{row.key}</dt><dd>{row.does}</dd></div>
         {/each}
       </dl>
       <label class="toggle">
         <input type="checkbox" checked={app.invertY} onchange={(e) => app.setInvertY(e.currentTarget.checked)} />
-        <span>Invert vertical drag (drag down to look up)</span>
+        <span>{t('legend.invertY')}</span>
       </label>
     </section>
 
     <section>
-      <p class="label">If the ground looks soft</p>
-      <p class="note">
-        The terrain detail follows your connection. On a weak link the app
-        deliberately loads a coarser picture, because a complete blurry ground
-        looks better — and stays smoother — than a sharp one full of holes. The
-        status bar says which it has chosen.
-      </p>
+      <p class="label">{t('legend.soft')}</p>
+      <p class="note">{t('legend.softBody')}</p>
     </section>
   </div>
 {/if}

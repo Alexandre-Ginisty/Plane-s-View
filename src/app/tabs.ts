@@ -13,22 +13,21 @@
  */
 
 import { app } from '@/state/appStore.svelte';
-import { PHASE_LABELS } from '@/state/phase';
-import { CAMERA_MODES } from '@/render/pov';
+import { t as tr } from '@/i18n/index.svelte';
+import { cameraLabel, phaseLabel } from '@/ui/labels';
 
-const BASE_TITLE = 'PlanesView';
 const CHANNEL = 'planesview.tabs';
 
 /** The document title for what the app is showing now. */
 export function titleFor(): string {
   const s = app.selected;
-  if (!s) return `${BASE_TITLE} — live aircraft, from the cockpit`;
+  if (!s) return tr('meta.title');
   const name = s.latest.callsign?.trim() || app.dossier?.meta?.registration || s.hex.toUpperCase();
   const type = app.dossier?.meta?.icaoTypeCode;
-  if (app.view !== 'pov') return `${name}${type ? ` · ${type}` : ''} — ${BASE_TITLE}`;
-  const view = CAMERA_MODES.find((m) => m.id === app.cameraMode)?.label ?? 'Cockpit';
-  const phase = app.phase ? ` · ${PHASE_LABELS[app.phase]}` : '';
-  return `✈ ${name} · ${view}${phase} — ${BASE_TITLE}`;
+  if (app.view !== 'pov') return type ? tr('tab.titleType', { name, type }) : tr('tab.title', { name });
+  const view = cameraLabel(app.cameraMode);
+  const phase = app.phase ? ` · ${phaseLabel(app.phase)}` : '';
+  return tr('tab.titleFlying', { name, view, phase });
 }
 
 /** Start the tab housekeeping; returns the function that stops it. */
@@ -45,7 +44,7 @@ export function watchTab(onBackground: (hidden: boolean) => void): () => void {
       if (event.data === 'hello') channel?.postMessage('here');
       else if (event.data === 'here' && !told) {
         told = true;
-        app.notify('PlanesView is open in another tab too. Only the tab in front streams live traffic.', 'info', 6000);
+        app.notify(tr('notice.otherTab'), 'info', 6000);
       }
     };
     channel.postMessage('hello');

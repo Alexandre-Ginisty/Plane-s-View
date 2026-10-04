@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
   import type { Orchestrator } from '@/app/orchestrator';
   import type { SampledAircraft } from '@/state/traffic';
   import DossierBody from '../panel/DossierBody.svelte';
@@ -30,7 +31,7 @@
     class="chip"
     onclick={() => (app.showFlightCard = !app.showFlightCard)}
     aria-expanded={app.showFlightCard}
-  >{app.showFlightCard ? 'Hide details' : 'Details'}</button>
+  >{t(app.showFlightCard ? 'card.hideDetails' : 'card.details')}</button>
 
   {#if app.showFlightCard}
     <div class="panel card-body">
@@ -44,9 +45,9 @@
           disabled={app.shuffling}
           onclick={() => void orchestrator.shuffleAircraft()}
         >
-          {app.shuffling ? 'Finding one…' : 'Take me somewhere else'}
+          {t(app.shuffling ? 'card.finding' : 'card.somewhereElse')}
         </button>
-        <button class="chip back" onclick={() => orchestrator.exitPov()}>Back to map</button>
+        <button class="chip back" onclick={() => orchestrator.exitPov()}>{t('hud.backToMap')}</button>
       </div>
     </div>
   {/if}

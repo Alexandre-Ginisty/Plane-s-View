@@ -16,6 +16,7 @@
 <script lang="ts">
   import type { SampledAircraft } from '@/state/traffic';
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
   import {
     age,
     altitude,
@@ -68,11 +69,11 @@
   {/if}
 
   {#if photo}
-    <AircraftPhoto {photo} alt="{title} — {subtitle || 'aircraft'}" />
+    <AircraftPhoto {photo} alt={t('photo.alt', { name: subtitle ? `${title} — ${subtitle}` : title })} />
   {:else}
     <!-- The same frame either way, so the panel does not jump when the answer lands. -->
-    <div class="no-photo" role="img" aria-label={app.dossierLoading ? 'Looking up a photo' : 'No photo available'}>
-      <span>{app.dossierLoading ? 'Looking up a photo…' : 'No photo available for this aircraft'}</span>
+    <div class="no-photo" role="img" aria-label={app.dossierLoading ? t('dossier.lookingPhoto') : t('photo.none')}>
+      <span>{app.dossierLoading ? t('dossier.lookingPhoto') : t('dossier.noPhoto')}</span>
     </div>
   {/if}
 
@@ -90,79 +91,79 @@
     -->
     <p class="route-pending">
       {#if app.dossierLoading}
-        Looking up the route…
+        {t('dossier.lookingRoute')}
       {:else if latest.callsign}
-        No published route for {latest.callsign}
+        {t('dossier.noRoute', { callsign: latest.callsign })}
         <span class="why">
           {#if routelessReason(latest.callsign, meta?.registration ?? null) === 'registration'}
-            A private flight under its registration: there is no timetable to look up.
+            {t('dossier.routeRegistration')}
           {:else}
-            Military, charter and business flights file their routes with air traffic control, not publicly.
+            {t('dossier.routeUnpublished')}
           {/if}
         </span>
       {:else}
-        No callsign broadcast — nothing to look up
+        {t('dossier.noCallsign')}
       {/if}
     </p>
   {/if}
 
   <dl class="stats">
-    <div><dt>Altitude</dt><dd class="tabular">{altitude(sample.altFt, latest.onGround)}</dd></div>
+    <div><dt>{t('dossier.altitude')}</dt><dd class="tabular">{altitude(sample.altFt, latest.onGround)}</dd></div>
     {#if has(latest.altBaroFt)}
-      <div><dt>Baro alt</dt><dd class="tabular">{altitude(latest.altBaroFt, latest.onGround)}</dd></div>
+      <div><dt>{t('dossier.baroAlt')}</dt><dd class="tabular">{altitude(latest.altBaroFt, latest.onGround)}</dd></div>
     {/if}
-    <div><dt>Ground speed</dt><dd class="tabular">{speed(sample.groundSpeedKt)}</dd></div>
+    <div><dt>{t('dossier.groundSpeed')}</dt><dd class="tabular">{speed(sample.groundSpeedKt)}</dd></div>
     {#if has(latest.tasKt)}
-      <div><dt>True air</dt><dd class="tabular">{speed(latest.tasKt)}</dd></div>
+      <div><dt>{t('dossier.trueAir')}</dt><dd class="tabular">{speed(latest.tasKt)}</dd></div>
     {/if}
     {#if has(latest.iasKt)}
-      <div><dt>Indicated</dt><dd class="tabular">{speed(latest.iasKt)}</dd></div>
+      <div><dt>{t('dossier.indicated')}</dt><dd class="tabular">{speed(latest.iasKt)}</dd></div>
     {/if}
     {#if has(latest.mach)}
-      <div><dt>Mach</dt><dd class="tabular">{mach(latest.mach)}</dd></div>
+      <div><dt>{t('dossier.mach')}</dt><dd class="tabular">{mach(latest.mach)}</dd></div>
     {/if}
-    <div><dt>Track</dt><dd class="tabular">{heading(sample.trackDeg)}</dd></div>
-    <div><dt>Vertical</dt><dd class="tabular">{verticalRate(sample.verticalRateFpm)}</dd></div>
-    <div><dt>Bank</dt><dd class="tabular">{num(sample.rollDeg, 1)}°</dd></div>
+    <div><dt>{t('dossier.track')}</dt><dd class="tabular">{heading(sample.trackDeg)}</dd></div>
+    <div><dt>{t('dossier.vertical')}</dt><dd class="tabular">{verticalRate(sample.verticalRateFpm)}</dd></div>
+    <div><dt>{t('dossier.bank')}</dt><dd class="tabular">{num(sample.rollDeg, 1)}°</dd></div>
     {#if has(latest.windSpeedKt)}
-      <div><dt>Wind aloft</dt><dd class="tabular">{wind(latest.windDirectionDeg, latest.windSpeedKt)}</dd></div>
+      <div><dt>{t('dossier.windAloft')}</dt><dd class="tabular">{wind(latest.windDirectionDeg, latest.windSpeedKt)}</dd></div>
     {/if}
     {#if has(latest.oatC)}
-      <div><dt>Outside air</dt><dd class="tabular">{temperature(latest.oatC)}</dd></div>
+      <div><dt>{t('dossier.outsideAir')}</dt><dd class="tabular">{temperature(latest.oatC)}</dd></div>
     {/if}
     {#if has(latest.navQnhHpa)}
-      <div><dt>QNH</dt><dd class="tabular">{num(latest.navQnhHpa)} hPa</dd></div>
+      <div><dt>{t('dossier.qnh')}</dt><dd class="tabular">{num(latest.navQnhHpa)} hPa</dd></div>
     {/if}
 
-    <div><dt>Registration</dt><dd class="tabular">{meta?.registration ?? '—'}</dd></div>
-    <div><dt>Type</dt><dd class="tabular">{typeCode ?? latest.category ?? '—'}</dd></div>
-    <div><dt>Squawk</dt><dd class="tabular">{latest.squawk ?? '—'}</dd></div>
-    <div><dt>ICAO hex</dt><dd class="tabular">{sample.hex.toUpperCase()}</dd></div>
+    <div><dt>{t('dossier.registration')}</dt><dd class="tabular">{meta?.registration ?? '—'}</dd></div>
+    <div><dt>{t('dossier.type')}</dt><dd class="tabular">{typeCode ?? latest.category ?? '—'}</dd></div>
+    <div><dt>{t('dossier.squawk')}</dt><dd class="tabular">{latest.squawk ?? '—'}</dd></div>
+    <div><dt>{t('dossier.hex')}</dt><dd class="tabular">{sample.hex.toUpperCase()}</dd></div>
 
     {#if latest.navModes?.length}
-      <div class="wide"><dt>Autopilot</dt><dd>{latest.navModes.join(', ')}</dd></div>
+      <div class="wide"><dt>{t('dossier.autopilot')}</dt><dd>{latest.navModes.join(', ')}</dd></div>
     {/if}
     {#if meta?.owner}
-      <div class="wide"><dt>Operator</dt><dd>{meta.owner}</dd></div>
+      <div class="wide"><dt>{t('dossier.operator')}</dt><dd>{meta.owner}</dd></div>
     {/if}
   </dl>
 
   <p class="provenance">
     {#if sample.stale}
-      <span class="stale">No contact for {age(sample.ageSec)}</span>
+      <span class="stale">{t('dossier.noContact', { age: age(sample.ageSec) })}</span>
     {:else}
-      Position {age(sample.ageSec)} old
+      {t('dossier.positionAge', { age: age(sample.ageSec) })}
     {/if}
-    {#if latest.isMlat}· multilateration{/if}
-    {#if latest.isTisb}· TIS-B{/if}
+    {#if latest.isMlat}· {t('dossier.mlat')}{/if}
+    {#if latest.isTisb}· {t('dossier.tisb')}{/if}
     {#if has(latest.receiverDistanceNm)}
-      · {distanceNm(latest.receiverDistanceNm)} from receiver
+      · {t('dossier.fromReceiver', { distance: distanceNm(latest.receiverDistanceNm) })}
     {/if}
     {#if has(latest.rssi)}· {num(latest.rssi, 1)} dBFS{/if}
   </p>
 
   {#if app.dossierLoading}
-    <p class="loading">Looking up registry and photo…</p>
+    <p class="loading">{t('dossier.loading')}</p>
   {/if}
   {#if dossier?.warnings.length}
     <ul class="warnings">

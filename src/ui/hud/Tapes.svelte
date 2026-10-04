@@ -12,6 +12,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
   import type { SampledAircraft } from '@/state/traffic';
   import { altitude, heading, mach, num, temperature, verticalRate, wind } from '../format';
 
@@ -35,31 +36,31 @@
 </script>
 
 <div class="tape left">
-  <span class="label">Ground speed</span>
+  <span class="label">{t('tapes.groundSpeed')}</span>
   <span class="value tabular">{num(sample.groundSpeedKt)}</span>
-  <span class="unit">knots</span>
+  <span class="unit">{t('tapes.knots')}</span>
   {#if latest.iasKt != null}<span class="sub tabular">IAS {num(latest.iasKt)}</span>{/if}
   {#if latest.mach != null}<span class="sub tabular">{mach(latest.mach)}</span>{/if}
 </div>
 
 <div class="tape right">
-  <span class="label">Altitude</span>
+  <span class="label">{t('tapes.altitude')}</span>
   <span class="value tabular">{altitude(sample.altFt, latest.onGround)}</span>
   <span class="sub tabular">{verticalRate(sample.verticalRateFpm)}</span>
   {#if latest.navAltitudeMcpFt != null}
-    <span class="sub dim tabular">Selected {num(latest.navAltitudeMcpFt)}</span>
+    <span class="sub dim tabular">{t('tapes.selected', { altitude: num(latest.navAltitudeMcpFt) })}</span>
   {/if}
 </div>
 
 <div class="environment">
-  <div><span class="label">Heading</span><span class="tabular">{heading(sample.headingDeg)}</span></div>
-  <div><span class="label">Track</span><span class="tabular">{heading(sample.trackDeg)}</span></div>
+  <div><span class="label">{t('tapes.heading')}</span><span class="tabular">{heading(sample.headingDeg)}</span></div>
+  <div><span class="label">{t('tapes.track')}</span><span class="tabular">{heading(sample.trackDeg)}</span></div>
   <div>
-    <span class="label">Wind</span>
+    <span class="label">{t('tapes.wind')}</span>
     <span class="tabular">{windText}</span>
-    {#if !windFromAircraft}<span class="modelled" title="From a weather model, not measured by the aircraft">est</span>{/if}
+    {#if !windFromAircraft}<span class="modelled" title={t('tapes.estTitle')}>{t('tapes.est')}</span>{/if}
   </div>
-  <div><span class="label">Outside air</span><span class="tabular">{oatText}</span></div>
+  <div><span class="label">{t('tapes.outsideAir')}</span><span class="tabular">{oatText}</span></div>
 </div>
 
 <style>

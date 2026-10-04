@@ -17,7 +17,9 @@
   import { app } from '@/state/appStore.svelte';
   import { profileFor } from '@/net/quality';
   import { CAMERA_MODES, type CameraGroup } from '@/render/pov';
-  import { PHASE_LABELS, isLandingPhase, isTakeoffPhase } from '@/state/phase';
+  import { isLandingPhase, isTakeoffPhase } from '@/state/phase';
+  import { t } from '@/i18n/index.svelte';
+  import { cameraHint, cameraLabel, gradeAdvice, groupHint, groupLabel, phaseLabel } from './labels';
   import type { Orchestrator } from '@/app/orchestrator';
   import FlightCard from './hud/FlightCard.svelte';
   import Tapes from './hud/Tapes.svelte';
@@ -78,10 +80,7 @@
    * it the second, and each group remembers the last one picked, so going
    * outside and back in returns to the same seat.
    */
-  const GROUPS: { id: CameraGroup; label: string; hint: string }[] = [
-    { id: 'interior', label: 'Inside', hint: 'From inside the aircraft: the flight deck or a window seat' },
-    { id: 'exterior', label: 'Outside', hint: 'Looking at the aircraft from outside' },
-  ];
+  const GROUPS: { id: CameraGroup }[] = [{ id: 'interior' }, { id: 'exterior' }];
   const current = $derived(CAMERA_MODES.find((m) => m.id === app.cameraMode) ?? CAMERA_MODES[0]!);
   const groupModes = $derived(CAMERA_MODES.filter((m) => m.group === current.group));
   const modeIndex = $derived(Math.max(0, groupModes.findIndex((m) => m.id === app.cameraMode)));
@@ -133,13 +132,13 @@
 
     {#if phase}
       <p class="phase" class:moment role="status">
-        {PHASE_LABELS[phase]}{#if countdown}<span class="eta"> · touchdown in {countdown}</span>{/if}
+        {phaseLabel(phase)}{#if countdown}<span class="eta"> · {t('hud.touchdownIn', { time: countdown })}</span>{/if}
       </p>
     {/if}
 
     {#if event}
       {#key event.id}
-        <p class="caption" aria-live="polite">{event.kind === 'liftoff' ? 'Liftoff' : 'Touchdown'}</p>
+        <p class="caption" aria-live="polite">{t(event.kind === 'liftoff' ? 'hud.liftoff' : 'hud.touchdown')}</p>
       {/key}
     {/if}
 
@@ -148,10 +147,10 @@
          them sends the user looking for the wrong problem. -->
     {#if sample.stale}
       <p class="banner warn" role="status">
-        Signal lost — this position is estimated, not received
+        {t('hud.signalLost')}
       </p>
     {:else if degraded}
-      <p class="banner info" role="status">{degraded.advice}</p>
+      <p class="banner info" role="status">{gradeAdvice(degraded.grade)}</p>
     {/if}
 
     <FlightCard {sample} {orchestrator} />
@@ -160,38 +159,38 @@
       {#key toast.id}
         <div class="mode-toast" aria-live="polite">
           <Icon name={MODE_ICONS[toast.mode.id] ?? 'cockpit'} size={30} />
-          <span>{toast.mode.label}</span>
+          <span>{cameraLabel(toast.mode.id)}</span>
         </div>
       {/key}
     {/if}
 
     <div class="bottom" class:faded={app.lookingAround}>
       <div class="views">
-        <div class="groups" role="group" aria-label="Inside or outside">
+        <div class="groups" role="group" aria-label={t('hud.viewGroups')}>
           {#each GROUPS as group (group.id)}
             <button
               class="group"
               class:active={current.group === group.id}
               onclick={() => orchestrator.setCameraGroup(group.id)}
-              title={`${group.hint} (V)`}
+              title={`${groupHint(group.id)} (V)`}
               aria-pressed={current.group === group.id}
             >
-              {group.label}
+              {groupLabel(group.id)}
             </button>
           {/each}
         </div>
-        <nav class="modes" aria-label="Camera view" style="--index: {modeIndex}; --count: {groupModes.length}">
+        <nav class="modes" aria-label={t('hud.cameraView')} style="--index: {modeIndex}; --count: {groupModes.length}">
           <span class="slider" aria-hidden="true"></span>
           {#each groupModes as mode (mode.id)}
             <button
               class="mode"
               class:active={app.cameraMode === mode.id}
               onclick={() => orchestrator.setCameraMode(mode.id)}
-              title={`${mode.hint} (${CAMERA_MODES.indexOf(mode) + 1})`}
+              title={`${cameraHint(mode.id)} (${CAMERA_MODES.indexOf(mode) + 1})`}
               aria-pressed={app.cameraMode === mode.id}
             >
               <Icon name={MODE_ICONS[mode.id] ?? 'cockpit'} size={18} />
-              <span>{mode.label}</span>
+              <span>{cameraLabel(mode.id)}</span>
             </button>
           {/each}
         </nav>
@@ -207,30 +206,30 @@
           class="round"
           class:active={app.sound}
           onclick={() => void orchestrator.setSound(!app.sound)}
-          title={app.sound ? 'Mute the engines' : 'Hear the engines'}
-          aria-label={app.sound ? 'Mute the engines' : 'Hear the engines'}
+          title={t(app.sound ? 'hud.muteEngines' : 'hud.hearEngines')}
+          aria-label={t(app.sound ? 'hud.muteEngines' : 'hud.hearEngines')}
           aria-pressed={app.sound}
         ><Icon name={app.sound ? 'sound' : 'mute'} size={17} /></button>
         <button
           class="round"
           class:active={app.autoCamera}
           onclick={() => app.setAutoCamera(!app.autoCamera)}
-          title="Auto camera: pick the view for takeoffs and landings (A)"
-          aria-label="Auto camera"
+          title={t('hud.autoCameraTitle')}
+          aria-label={t('hud.autoCamera')}
           aria-pressed={app.autoCamera}
         ><Icon name="auto" size={17} /></button>
         <button
           class="round"
           onclick={() => (app.cinema = true)}
-          title="Fullscreen, nothing but the view (F)"
-          aria-label="Fullscreen"
+          title={t('hud.fullscreenTitle')}
+          aria-label={t('hud.fullscreen')}
         ><Icon name="fullscreen" size={17} /></button>
       </div>
     </div>
 
     <button class="exit" onclick={() => orchestrator.exitPov()}>
       <Icon name="back" size={15} />
-      <span>Back to map</span>
+      <span>{t('hud.backToMap')}</span>
       <span class="kbd">Esc</span>
     </button>
   </div>

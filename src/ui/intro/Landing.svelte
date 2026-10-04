@@ -23,12 +23,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import { SECTIONS } from './sections';
+  import { SECTIONS, sectionText, pointText } from './sections';
+  import { i18n, t, tAround } from '@/i18n/index.svelte';
+  import { SITE } from '@/config/site';
+  import LanguagePicker from '@/ui/LanguagePicker.svelte';
+  import Logo from '@/ui/Logo.svelte';
+  import Rich from '@/ui/Rich.svelte';
   import { mountHeroScene, type HeroScene } from './heroScene';
   import { app } from '@/state/appStore.svelte';
   import ThemeToggle from '@/ui/ThemeToggle.svelte';
 
   let { onEnter, ready = false }: { onEnter: () => void; ready?: boolean } = $props();
+
+  const madeBy = $derived(tAround('landing.madeBy', 'name'));
 
   /** Turns of heading across the whole page. Slightly over one, so it comes round. */
   const TOTAL_TURNS = 1.15;
@@ -174,6 +181,8 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    // Keys typed in the language list belong to the list, not to the page.
+    if ((event.target as HTMLElement | null)?.closest?.('.lang-picker')) return;
     if (event.key === 'Enter' || event.key === 'Escape') {
       event.preventDefault();
       enter();
@@ -189,23 +198,24 @@
   </div>
 
   <div class="corner">
+    <LanguagePicker />
     <ThemeToggle compact />
     <button class="enter-pill" onclick={enter}>
-      {ready ? 'Enter' : 'Loading the sky…'}
+      {ready ? t('landing.enter') : t('landing.loadingSky')}
       <span class="kbd">↵</span>
     </button>
   </div>
 
-  <nav aria-label="Sections">
+  <nav aria-label={t('landing.sections')}>
     {#each SECTIONS as section, index (section.id)}
       <button
         class="dot"
         class:active={active === index}
         onclick={() => goTo(index)}
-        aria-label={section.badge}
+        aria-label={sectionText(section, 'badge')}
         aria-current={active === index}
       >
-        <span class="dot-label">{section.badge}</span>
+        <span class="dot-label">{sectionText(section, 'badge')}</span>
       </button>
     {/each}
   </nav>
@@ -215,14 +225,14 @@
     aria-hidden="true"
     style="
       --top: {placement.topPct}%;
-      --left: {placement.leftPct}%;
+      --left: {i18n.dir === 'rtl' ? 100 - placement.leftPct : placement.leftPct}%;
       --scale: {placement.scale};
       --dim: {active === SECTIONS.length - 1 ? 0.5 : 0.95};
     "
   >
     <canvas bind:this={heroCanvas}></canvas>
     {#if webglFailed}
-      <p class="no-webgl">This browser cannot run WebGL, which PlanesView needs.</p>
+      <p class="no-webgl">{t('landing.noWebgl')}</p>
     {/if}
   </div>
 
@@ -238,22 +248,22 @@
              so it is set as a wordmark, split the way the toolbar splits it.
              Every other section keeps the small eyebrow label. -->
         {#if index === 0}
-          <p class="badge wordmark">Planes<span>View</span></p>
+          <p class="badge wordmark"><Logo size={26} /><span class="word">Planes<span>View</span></span></p>
         {:else}
-          <p class="badge">{section.badge}</p>
+          <p class="badge">{sectionText(section, 'badge')}</p>
         {/if}
         <h1 class:lead={index === 0}>
-          {section.title}
-          {#if section.subtitle}<span class="subtitle">{section.subtitle}</span>{/if}
+          {sectionText(section, 'title')}
+          {#if section.subtitle}<span class="subtitle">{sectionText(section, 'subtitle')}</span>{/if}
         </h1>
-        <p class="body">{section.body}</p>
+        <p class="body">{sectionText(section, 'body')}</p>
 
-        {#if section.points}
+        {#if section.points > 0}
           <ul class="points">
-            {#each section.points as point (point.title)}
+            {#each Array.from({ length: section.points }, (_, i) => i) as i (i)}
               <li>
-                <h2>{point.title}</h2>
-                <p>{point.body}</p>
+                <h2>{pointText(section, i, 'title')}</h2>
+                <p>{pointText(section, i, 'body')}</p>
               </li>
             {/each}
           </ul>
@@ -262,19 +272,23 @@
         {#if index === 0}
           <div class="actions">
             <button class="primary" onclick={enter} disabled={!ready}>
-              {ready ? 'Take me up' : 'Warming up…'}
+              {ready ? t('landing.takeMeUp') : t('landing.warmingUp')}
             </button>
-            <button class="secondary" onclick={() => goTo(1)}>What is this?</button>
+            <button class="secondary" onclick={() => goTo(1)}>{t('landing.whatIsThis')}</button>
           </div>
-          <p class="hint" data-keyboard-only>Scroll to read, or press <span class="kbd">↵</span> to skip straight in.</p>
+          <p class="hint" data-keyboard-only><Rich key="landing.hint" /></p>
         {/if}
 
         {#if index === SECTIONS.length - 1}
           <div class="actions">
             <button class="primary" onclick={enter} disabled={!ready}>
-              {ready ? 'Open PlanesView' : 'Warming up…'}
+              {ready ? t('landing.openApp') : t('landing.warmingUp')}
             </button>
           </div>
+          <p class="made-by">
+            {madeBy[0]}{#if SITE.author.portfolio}<a href={SITE.author.portfolio} target="_blank" rel="noopener noreferrer">{SITE.author.name}</a>{:else}{SITE.author.name}{/if}{madeBy[1]}
+            · <a href="./mentions-legales.html" rel="noopener">{t('landing.legal')}</a>
+          </p>
         {/if}
       </div>
     </section>
@@ -480,6 +494,10 @@
   }
   /* The half that is the product, picked out the way the toolbar does it. */
   .badge.wordmark span { color: var(--accent); }
+  .badge.wordmark { display: flex; align-items: center; gap: 12px; }
+  .made-by { margin: 28px 0 0; font-size: 0.82rem; color: var(--text-faint); }
+  .made-by a { color: var(--text-dim); text-underline-offset: 3px; }
+  .made-by a:hover { color: var(--accent); }
 
   h1 {
     margin: 0 0 22px;

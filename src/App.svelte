@@ -13,7 +13,10 @@
   import { app } from '@/state/appStore.svelte';
   import { resolveTheme, watchSystemTheme } from '@/ui/theme';
   import { CAMERA_MODES } from '@/render/pov';
-  import { CATCH_LABELS } from '@/app/catch';
+  import { t } from '@/i18n/index.svelte';
+  import Rich from '@/ui/Rich.svelte';
+  import LanguagePicker from '@/ui/LanguagePicker.svelte';
+  import Logo from '@/ui/Logo.svelte';
   import AircraftPanel from '@/ui/AircraftPanel.svelte';
   import Landing from '@/ui/intro/Landing.svelte';
   import ThemeToggle from '@/ui/ThemeToggle.svelte';
@@ -43,7 +46,38 @@
    * `?go` drops straight in, and anything sharing a specific view will want
    * that.
    */
-  let showLanding = $state(!new URLSearchParams(location.search).has('go'));
+  const ENTERED_KEY = 'pv.entered';
+  let showLanding = $state(!new URLSearchParams(location.search).has('go') && !hasEntered());
+
+  /*
+   * A reload — a tab the browser discarded under memory pressure, a crashed GPU
+   * process, a refresh — must not throw someone out of the app and back onto the
+   * front page. The visit remembers that the app was entered, for this tab only
+   * (session storage, so a new visit still opens on the front page).
+   */
+  function hasEntered(): boolean {
+    try {
+      return sessionStorage.getItem(ENTERED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  function rememberEntered(entered: boolean): void {
+    try {
+      if (entered) sessionStorage.setItem(ENTERED_KEY, '1');
+      else sessionStorage.removeItem(ENTERED_KEY);
+    } catch {
+      /* storage blocked: the front page simply shows again after a reload */
+    }
+  }
+
+  /** Back to the front page: out of the cockpit first, so the app waits on the map behind it. */
+  function goHome(): void {
+    if (app.view === 'pov') orchestrator?.exitPov();
+    app.pinMode = false;
+    rememberEntered(false);
+    showLanding = true;
+  }
 
   /*
    * Cinema: nothing on screen but the view.
@@ -212,7 +246,7 @@
       case 'a':
       case 'A':
         app.setAutoCamera(!app.autoCamera);
-        app.notify(app.autoCamera ? 'Auto camera on for takeoffs and landings.' : 'Auto camera off.', 'info', 2500);
+        app.notify(t(app.autoCamera ? 'app.autoCameraOn' : 'app.autoCameraOff'), 'info', 2500);
         break;
       case 'l':
       case 'L':
@@ -371,63 +405,74 @@
   </div>
 
   {#if showLanding && !bootError}
-    <Landing ready={!booting} onEnter={() => (showLanding = false)} />
+    <Landing ready={!booting} onEnter={() => {
+        rememberEntered(true);
+        showLanding = false;
+      }} />
   {/if}
 
   {#if booting}
     <div class="boot" class:hidden={showLanding}>
       <div class="spinner" aria-hidden="true"></div>
-      <p>Finding aircraft near you…</p>
+      <p>{t('app.finding')}</p>
     </div>
   {:else if bootError}
     <div class="boot error">
-      <h1>PlanesView could not start</h1>
+      <h1>{t('app.startFailed')}</h1>
       <p>{bootError}</p>
-      <p class="hint">A WebGL2-capable browser is required.</p>
+      <p class="hint">{t('app.needsWebgl2')}</p>
     </div>
   {:else if orchestrator}
     {#if app.view === 'map'}
       <header class="toolbar">
-        <h1 class="brand" style="--i: 0">Planes<span>View</span></h1>
+        <h1 class="brand" style="--i: 0">
+          <button class="brand-home" onclick={goHome} title={t('app.homeTitle')} aria-label={t('app.homeTitle')}>
+            <Logo size={22} /><span class="word">Planes<span>View</span></span>
+          </button>
+        </h1>
 
-        <div class="dock" style="--i: 1" role="toolbar" aria-label="Map">
+        <div class="dock" style="--i: 1" role="toolbar" aria-label={t('app.mapToolbar')}>
+          <button class="tool" onclick={goHome} title={t('app.homeTitle')}>
+            <Icon name="home" /><span class="text">{t('app.home')}</span>
+          </button>
           <button
             class="tool"
             class:on={app.pinMode}
             aria-pressed={app.pinMode}
             onclick={() => (app.pinMode = !app.pinMode)}
-            title="Drop pins on places to find them from the air (P) — right-click also drops one"
+            title={t('app.pinTitle')}
           >
-            <Icon name="pin" /><span class="text">Pin</span>
+            <Icon name="pin" /><span class="text">{t('app.pin')}</span>
             {#if app.pins.length > 0}<span class="count">{app.pins.length}</span>{/if}
           </button>
-          <button class="tool" class:on={app.showLegend} onclick={() => (app.showLegend = !app.showLegend)} title="Key and controls (H)">
-            <Icon name="key" /><span class="text">Key</span>
+          <button class="tool" class:on={app.showLegend} onclick={() => (app.showLegend = !app.showLegend)} title={t('app.keyTitle')}>
+            <Icon name="key" /><span class="text">{t('app.key')}</span>
           </button>
+          <LanguagePicker tool />
           <ThemeToggle compact tool />
         </div>
 
-        <div class="dock actions" style="--i: 2" role="toolbar" aria-label="Go flying">
+        <div class="dock actions" style="--i: 2" role="toolbar" aria-label={t('app.goFlying')}>
           <button
             class="tool"
             disabled={app.shuffling}
             onclick={() => void orchestrator?.catchAircraft('landing')}
-            title="Step into an aircraft on final approach (L)"
-          ><Icon name="landing" /><span class="text">{CATCH_LABELS.landing.verb}</span><span class="kbd">L</span></button>
+            title={t('app.catchLandingTitle')}
+          ><Icon name="landing" /><span class="text">{t('app.catchLanding')}</span><span class="kbd">L</span></button>
           <button
             class="tool"
             disabled={app.shuffling}
             onclick={() => void orchestrator?.catchAircraft('takeoff')}
-            title="Step into an aircraft taking off (T)"
-          ><Icon name="takeoff" /><span class="text">{CATCH_LABELS.takeoff.verb}</span><span class="kbd">T</span></button>
+            title={t('app.catchTakeoffTitle')}
+          ><Icon name="takeoff" /><span class="text">{t('app.catchTakeoff')}</span><span class="kbd">T</span></button>
         </div>
       </header>
       {#if app.pinMode && !app.cinema}
         <p class="pin-hint" role="status">
           <Icon name="pin" size={14} />
-          Click the map to drop a pin · double-click a name to rename it · <span class="kbd">Esc</span> when done
+          <Rich key="app.pinHint" />
           {#if app.pins.length > 0}
-            <button class="chip" onclick={() => app.clearPins()}>Remove all</button>
+            <button class="chip" onclick={() => app.clearPins()}>{t('app.removeAll')}</button>
           {/if}
         </p>
       {/if}
@@ -442,7 +487,7 @@
       <Notices />
       <StatusBar />
     {:else if cinemaHint}
-      <p class="cinema-hint" role="status">Press <span class="kbd">F</span> or <span class="kbd">Esc</span> to leave fullscreen</p>
+      <p class="cinema-hint" role="status"><Rich key="app.cinemaHint" /></p>
     {/if}
   {/if}
 </main>
@@ -603,6 +648,23 @@
     box-shadow: var(--shadow), var(--glow);
   }
   .brand span { color: var(--text); font-weight: 400; }
+  .brand { padding: 0; }
+  .brand-home {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 8px 16px 8px 12px;
+    border: 0;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .brand-home:hover .word { filter: brightness(1.2); }
+  .brand-home:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   .dock {
     display: flex;

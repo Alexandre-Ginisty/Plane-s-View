@@ -4,6 +4,7 @@
     "src/workers/**/*.worker.ts",
     "functions/**/*.ts",
     "tools/fgmodel/{convert,cockpit,combat,tidy,pvmpack}.mjs",
+    "tools/brand/*.mjs",
     "tools/cabin/*.mjs",
     "tools/map/*.mjs",
     "tools/routes/*.mjs",

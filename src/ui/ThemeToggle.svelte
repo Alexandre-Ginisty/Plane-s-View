@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
 
   let { compact = false, tool = false }: { compact?: boolean; tool?: boolean } = $props();
 
@@ -20,8 +21,8 @@
   class:compact
   class:tool
   onclick={(event) => app.setTheme(next, event.altKey)}
-  aria-label={`Switch to ${next} theme`}
-  title={`Switch to ${next} theme — alt-click to follow the system`}
+  aria-label={t(next === 'light' ? 'theme.toLight' : 'theme.toDark')}
+  title={t(next === 'light' ? 'theme.toLightTitle' : 'theme.toDarkTitle')}
 >
   {#if app.theme === 'dark'}
     <!-- Sun: what the button will give you, not what you have. A control
@@ -37,7 +38,7 @@
       <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4 8.6 8.6 0 1 0 20 14.2Z" />
     </svg>
   {/if}
-  {#if !compact}<span>{app.theme === 'dark' ? 'Light' : 'Dark'}</span>{/if}
+  {#if !compact}<span>{t(app.theme === 'dark' ? 'theme.light' : 'theme.dark')}</span>{/if}
 </button>
 
 <style>

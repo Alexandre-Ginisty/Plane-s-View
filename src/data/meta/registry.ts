@@ -17,6 +17,7 @@
  * failed photograph lookup must not cost the user the route.
  */
 
+import { t as translate, type MessageKey } from '@/i18n/index.svelte';
 import { LruCache } from '@/core/lru';
 import type { AircraftDossier, AircraftMeta, AircraftPhoto, FlightRoute } from '@/data/types';
 import type { InlineAirframeHint } from '@/data/adsb/normalize';
@@ -124,15 +125,20 @@ class MetadataRegistry {
       registration ? this.photo(registration, signal) : Promise.resolve(null),
     ]);
 
-    const unwrap = <T>(r: PromiseSettledResult<T | null>, label: string): T | null => {
+    const unwrap = <T>(r: PromiseSettledResult<T | null>, what: MessageKey): T | null => {
       if (r.status === 'fulfilled') return r.value;
-      warnings.push(`${label} unavailable: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
+      warnings.push(
+        translate('dossier.unavailable', {
+          what: translate(what),
+          reason: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        }),
+      );
       return null;
     };
 
-    const route = unwrap(routeR, 'Route lookup');
-    const airline = unwrap(airlineR, 'Airline lookup');
-    const photo = unwrap(photoR, 'Photo');
+    const route = unwrap(routeR, 'dossier.whatRoute');
+    const airline = unwrap(airlineR, 'dossier.whatAirline');
+    const photo = unwrap(photoR, 'dossier.whatPhoto');
 
     const typeCode = hint?.typeCode ?? null;
     const meta: AircraftMeta | null =

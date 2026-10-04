@@ -152,6 +152,10 @@ the camera and every mesh is positioned relative to it; tile geometry is built
 in the tile's own local frame in the worker. Nothing in the render path ever
 holds a raw ECEF coordinate in a float32 buffer.
 
+## Internationalisation
+
+`src/i18n/` holds a small reactive translator (`t(key, params)`, a Svelte 5 `$state`), the locale list and matcher, and one lazily imported file per language. Components never hold literal strings: they call `t` or render `<Rich>` for key-cap markup. Switching language re-renders the interface and sets `lang`/`dir` on `<html>`. The test suite checks every locale against English.
+
 ## Data flow
 
 ```

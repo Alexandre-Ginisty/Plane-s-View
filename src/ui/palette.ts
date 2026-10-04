@@ -55,10 +55,10 @@ export const HERO = {
 } as const;
 
 /** What a traffic colour means, for the on-screen legend. */
-export const TRAFFIC_LEGEND: readonly { color: string; meaning: string }[] = [
-  { color: PALETTE.green, meaning: 'Climbing' },
-  { color: PALETTE.ice, meaning: 'Level' },
-  { color: PALETTE.amber, meaning: 'Descending' },
-  { color: PALETTE.red, meaning: 'Emergency' },
-  { color: PALETTE.slate, meaning: 'Signal lost — position estimated' },
+export const TRAFFIC_LEGEND: readonly { id: string; color: string; meaning: string }[] = [
+  { id: 'climbing', color: PALETTE.green, meaning: 'Climbing' },
+  { id: 'level', color: PALETTE.ice, meaning: 'Level' },
+  { id: 'descending', color: PALETTE.amber, meaning: 'Descending' },
+  { id: 'emergency', color: PALETTE.red, meaning: 'Emergency' },
+  { id: 'stale', color: PALETTE.slate, meaning: 'Signal lost — position estimated' },
 ];

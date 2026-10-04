@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
   import type { Orchestrator } from '@/app/orchestrator';
   import DossierBody from './panel/DossierBody.svelte';
 
@@ -26,15 +27,15 @@
 </script>
 
 {#if sample}
-  <aside class="panel dossier" aria-label="Aircraft details">
-    <button class="close" onclick={close} aria-label="Close details">×</button>
+  <aside class="panel dossier" aria-label={t('panel.aria')}>
+    <button class="close" onclick={close} aria-label={t('panel.close')}>×</button>
 
     <div class="scroller">
       <DossierBody {sample} />
     </div>
 
     <button class="chip primary enter" onclick={() => orchestrator.enterPov()}>
-      Step inside this aircraft
+      {t('panel.stepInside')}
       <span class="kbd">↵</span>
     </button>
   </aside>

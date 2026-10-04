@@ -18,6 +18,9 @@
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
   import { profileFor } from '@/net/quality';
+  import { t, tAround, type MessageKey } from '@/i18n/index.svelte';
+  import { SITE } from '@/config/site';
+  import { gradeAdvice, gradeLabel } from './labels';
   import { REGIONAL_LAYERS } from '@/tiles/regional';
   import { imageryById, TERRARIUM } from '@/tiles/sources';
   import { age } from './format';
@@ -28,8 +31,8 @@
 
   let now = $state(Date.now());
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 1000);
-    return () => clearInterval(t);
+    const tick = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(tick);
   });
 
   let open = $state(false);
@@ -44,13 +47,14 @@
     disabled: 'var(--text-faint)',
     untried: 'var(--text-faint)',
   };
-  const STATUS_TEXT: Record<string, string> = {
-    ok: 'Answering',
-    degraded: 'Slow or rate-limited',
-    down: 'Not answering',
-    disabled: 'Off',
-    untried: 'Standing by',
+  const STATUS_TEXT: Record<string, MessageKey> = {
+    ok: 'status.ok',
+    degraded: 'status.degraded',
+    down: 'status.down',
+    disabled: 'status.disabled',
+    untried: 'status.untried',
   };
+  const madeBy = $derived(tAround('landing.madeBy', 'name'));
 
   const net = $derived(app.network);
   /*
@@ -78,7 +82,7 @@
       ? [
           net.pingMs !== null ? `${Math.round(net.pingMs)} ms` : null,
           net.throughputBps > 0 ? `${Math.round(net.throughputBps / 1000)} kB/s` : null,
-          net.failureRatio > 0 ? `${Math.round(net.failureRatio * 100)}% failing` : null,
+          net.failureRatio > 0 ? t('status.failing', { percent: Math.round(net.failureRatio * 100) }) : null,
         ]
           .filter(Boolean)
           .join(' · ')
@@ -98,31 +102,31 @@
 {#if app.view === 'map'}
   <div class="status" class:open class:behind={app.selectedHex !== null}>
     {#if open}
-      <div class="panel sheet" role="dialog" aria-label="Data status">
+      <div class="panel sheet" role="dialog" aria-label={t('status.dialog')}>
         <header>
-          <h2>Status</h2>
-          <button class="close" onclick={() => (open = false)} aria-label="Close">×</button>
+          <h2>{t('status.title')}</h2>
+          <button class="close" onclick={() => (open = false)} aria-label={t('common.close')}>×</button>
         </header>
 
         <section>
-          <p class="label">Live traffic</p>
+          <p class="label">{t('status.liveTraffic')}</p>
           <p class="big">
-            <span class="tabular">{app.aircraftCount.toLocaleString('en')}</span> aircraft
+            <span class="tabular">{t('status.aircraftCount', { n: app.aircraftCount })}</span>
             {#if feedAge !== null}
-              <span class="dim">· updated <span class:stale={feedStale}>{age(feedAge)} ago</span></span>
+              <span class="dim">· <span class:stale={feedStale}>{t('status.updated', { age: age(feedAge) })}</span></span>
             {/if}
           </p>
         </section>
 
         <section>
-          <p class="label">Feeds</p>
+          <p class="label">{t('status.feeds')}</p>
           <ul class="feeds">
             {#each app.providers as provider (provider.id)}
               <li class:active={app.feedSource === provider.id}>
                 <span class="dot" style="background: {STATUS_COLOR[provider.status]}"></span>
                 <a href={provider.homepage} target="_blank" rel="noopener noreferrer">{provider.label}</a>
                 <span class="state">
-                  {app.feedSource === provider.id ? 'In use' : STATUS_TEXT[provider.status] ?? provider.status}
+                  {app.feedSource === provider.id ? t('status.inUse') : STATUS_TEXT[provider.status] ? t(STATUS_TEXT[provider.status]!) : provider.status}
                 </span>
               </li>
               {#if provider.disabledReason}<li class="why">{provider.disabledReason}</li>{/if}
@@ -131,26 +135,27 @@
         </section>
 
         <section>
-          <p class="label">Connection</p>
+          <p class="label">{t('status.connection')}</p>
           <p class="row">
             <span class="dot" style="background: {linkBad ? 'var(--error)' : linkSlow ? 'var(--warn)' : 'var(--ok)'}"></span>
-            <span>{measured?.label ?? 'Measuring…'}</span>
+            <span>{measured ? gradeLabel(measured.grade) : t('status.measuring')}</span>
             {#if linkDetail}<span class="dim">· {linkDetail}</span>{/if}
           </p>
-          {#if app.networkProfile}<p class="note">{app.networkProfile.advice}</p>{/if}
+          {#if app.networkProfile}<p class="note">{gradeAdvice(app.networkProfile.grade)}</p>{/if}
         </section>
 
         <section>
-          <p class="label">Sources</p>
+          <p class="label">{t('status.sources')}</p>
           <p class="note credits">
             {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a><br />{/if}
-            Close-up aerial imagery, where open data exists: {#each REGIONAL_LAYERS as layer, i}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer" title={layer.attribution}>{layer.label}</a> ({layer.licence}){i < REGIONAL_LAYERS.length - 1 ? ' · ' : ''}{/each}<br />
+            {t('status.closeUp')} {#each REGIONAL_LAYERS as layer, i}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer" title={layer.attribution}>{layer.label}</a> ({layer.licence}){i < REGIONAL_LAYERS.length - 1 ? ' · ' : ''}{/each}<br />
             <a href={TERRARIUM.attributionUrl} target="_blank" rel="noopener noreferrer">{TERRARIUM.attribution}</a><br />
-            Roads, runways and footprints © OpenStreetMap contributors (ODbL), OpenMapTiles, OpenFreeMap<br />
-            Night lights NASA Black Marble (public domain) · 3D aircraft <a href="./models/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear community (GPL-2.0)</a><br />
-            Places © Natural Earth, GeoNames (CC BY 4.0) · Traffic <a href="https://adsb.fi" target="_blank" rel="noopener noreferrer">adsb.fi</a>, <a href="https://adsb.lol" target="_blank" rel="noopener noreferrer">adsb.lol</a> (ODbL)<br />
-            Weather: data from <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a> (CC BY 4.0) · Routes Virtual Radar Server community (CC0) · Photos Wikimedia Commons, credited on each<br />
-            <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">Mentions légales</a>
+            {t('status.osm')}<br />
+            {t('status.night')} · {t('status.models')} <a href="./models/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear community (GPL-2.0)</a><br />
+            {t('status.places')} · {t('status.traffic')} <a href="https://adsb.fi" target="_blank" rel="noopener noreferrer">adsb.fi</a>, <a href="https://adsb.lol" target="_blank" rel="noopener noreferrer">adsb.lol</a> (ODbL)<br />
+            {t('status.weather')} <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a> (CC BY 4.0) · {t('status.routes')} · {t('status.photos')}<br />
+            {madeBy[0]}{#if SITE.author.portfolio}<a href={SITE.author.portfolio} target="_blank" rel="noopener noreferrer">{SITE.author.name}</a>{:else}{SITE.author.name}{/if}{madeBy[1]}
+            · <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">{t('landing.legal')}</a>
           </p>
         </section>
       </div>
@@ -160,11 +165,10 @@
       class="pill"
       onclick={() => (open = !open)}
       aria-expanded={open}
-      title="Feeds, connection and data sources"
+      title={t('status.pillTitle')}
     >
       <span class="dot pulse" style="background: {health}"></span>
-      <span class="tabular">{app.aircraftCount.toLocaleString('en')}</span>
-      <span class="unit">aircraft</span>
+      <span class="tabular">{t('status.aircraftCount', { n: app.aircraftCount })}</span>
       {#if feedAge !== null}
         <span class="sep">·</span>
         <span class="tabular" class:stale={feedStale}>{age(feedAge)}</span>
@@ -177,7 +181,7 @@
     {#if imagery}<a href={imagery.attributionUrl} target="_blank" rel="noopener noreferrer">{imagery.attribution}</a> · {/if}{#each national as layer}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer">{layer.attribution}</a> · {/each}<a
       href={TERRARIUM.attributionUrl}
       target="_blank"
-      rel="noopener noreferrer">{TERRARIUM.attribution}</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a> · <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">Mentions légales</a>
+      rel="noopener noreferrer">{TERRARIUM.attribution}</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a> · <a href="./mentions-legales.html" target="_blank" rel="noopener noreferrer">{t('landing.legal')}</a>
   </p>
 {/if}
 
@@ -216,7 +220,6 @@
     transition: border-color 0.2s, color 0.2s;
   }
   .pill:hover, .open .pill { color: var(--text); border-color: var(--accent); }
-  .unit { color: var(--text-faint); }
   .sep { opacity: 0.4; }
   .stale { color: var(--error); }
 

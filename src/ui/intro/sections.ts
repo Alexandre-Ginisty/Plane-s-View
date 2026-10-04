@@ -12,6 +12,8 @@
  * bracing for.
  */
 
+import { t, type MessageKey } from '@/i18n/index.svelte';
+
 interface HeroPlacement {
   /** Centre of the aeroplane, as a percentage of the viewport. */
   topPct: number;
@@ -28,64 +30,33 @@ interface HeroPlacement {
 }
 
 export interface IntroSection {
-  id: string;
-  badge: string;
-  title: string;
-  subtitle?: string;
-  body: string;
+  id: 'hero' | 'map' | 'cockpit' | 'free';
+  /** Whether the section has a second line under its title. */
+  subtitle: boolean;
+  /** How many titled points it has (`landing.<id>.p1.title`, …). */
+  points: number;
   align: 'left' | 'center';
-  points?: { title: string; body: string }[];
   hero: HeroPlacement;
 }
 
+/**
+ * The words are in `i18n/en.ts` under `landing.<id>.*`, and in every other
+ * language beside it; what stays here is the structure and where the
+ * aeroplane sits.
+ */
 export const SECTIONS: readonly IntroSection[] = [
-  {
-    id: 'hero',
-    badge: 'PlanesView',
-    title: 'Every aircraft',
-    subtitle: 'in the sky, right now',
-    body: 'Live ADS-B traffic on a photoreal globe. Pick any aircraft and step inside it — the view from the flight deck, over real terrain, streaming as you fly.',
-    align: 'left',
-    hero: { topPct: 52, leftPct: 68, scale: 1.05 },
-  },
-  {
-    id: 'map',
-    badge: 'The map',
-    title: 'Thousands of aircraft,',
-    subtitle: 'drawn as one',
-    body: 'Positions arrive once or twice a second and are filtered and extrapolated between reports, so aircraft move rather than jump. Each one is drawn with the silhouette of its actual type.',
-    align: 'center',
-    hero: { topPct: 26, leftPct: 50, scale: 0.72 },
-  },
-  {
-    id: 'cockpit',
-    badge: 'The cockpit',
-    title: 'Step inside',
-    subtitle: 'any of them',
-    body: 'Four camera positions around an aircraft that is genuinely where the feed says it is, at true scale, over terrain built from real elevation data.',
-    align: 'left',
-    points: [
-      {
-        title: 'Never loading',
-        body: 'The ground ahead is requested before you reach it, and no tile is ever blank — it borrows detail from the level above until its own arrives.',
-      },
-      {
-        title: 'Real relief',
-        body: 'Elevation is meshed per tile and exaggerated consistently, so an aircraft on the ground stands on the terrain you can see.',
-      },
-      {
-        title: 'Honest instruments',
-        body: 'Speed, altitude, attitude and heading come from the aircraft, not from an animation. The compass follows where you are looking.',
-      },
-    ],
-    hero: { topPct: 34, leftPct: 70, scale: 1.2 },
-  },
-  {
-    id: 'free',
-    badge: 'The catch',
-    title: 'There isn’t one',
-    body: 'No account, no API key, no card. Every feed, tile source and airframe in this project is free to use, and the whole thing runs in your browser — there is no backend to sign up to.',
-    align: 'center',
-    hero: { topPct: 50, leftPct: 50, scale: 1.75 },
-  },
+  { id: 'hero', subtitle: true, points: 0, align: 'left', hero: { topPct: 52, leftPct: 68, scale: 1.05 } },
+  { id: 'map', subtitle: true, points: 0, align: 'center', hero: { topPct: 26, leftPct: 50, scale: 0.72 } },
+  { id: 'cockpit', subtitle: true, points: 3, align: 'left', hero: { topPct: 34, leftPct: 70, scale: 1.2 } },
+  { id: 'free', subtitle: false, points: 0, align: 'center', hero: { topPct: 50, leftPct: 50, scale: 1.75 } },
 ];
+
+type Field = 'badge' | 'title' | 'subtitle' | 'body';
+
+export function sectionText(section: IntroSection, field: Field): string {
+  return t(`landing.${section.id}.${field}` as MessageKey);
+}
+
+export function pointText(section: IntroSection, index: number, field: 'title' | 'body'): string {
+  return t(`landing.${section.id}.p${index + 1}.${field}` as MessageKey);
+}

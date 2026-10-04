@@ -12,6 +12,7 @@ import App from './App.svelte';
 import './ui/theme.css';
 import { applyTheme, resolveTheme } from './ui/theme';
 import { preloadHero } from './ui/intro/heroScene';
+import { initI18n, t } from './i18n/index.svelte';
 
 /*
  * Before anything renders.
@@ -39,18 +40,27 @@ function webgl2Available(): boolean {
 const target = document.getElementById('app');
 if (!target) throw new Error('#app mount point missing from index.html');
 
-if (!webgl2Available()) {
-  target.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-                height:100%;gap:12px;padding:24px;text-align:center;font-family:system-ui;
-                color:#e8eef5;background:#05070d">
-      <h1 style="margin:0;font-size:18px">WebGL2 is not available</h1>
-      <p style="margin:0;color:#9aa9bd;max-width:44ch">
-        PlanesView renders the globe with WebGL2. It is available in every current
-        browser, but may be disabled by a flag, a driver blocklist, or hardware
-        acceleration being switched off.
-      </p>
-    </div>`;
-} else {
-  mount(App, { target });
-}
+/*
+ * The language first, so the very first thing drawn is already in it: English
+ * is built in and costs nothing, any other is one small file, and a failed
+ * download falls back to English rather than holding the page up.
+ */
+void initI18n().finally(() => {
+  if (!webgl2Available()) {
+    const box = document.createElement('div');
+    box.setAttribute(
+      'style',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:24px;text-align:center;font-family:system-ui;color:#e8eef5;background:#05070d',
+    );
+    const title = document.createElement('h1');
+    title.setAttribute('style', 'margin:0;font-size:18px');
+    title.textContent = t('webgl.title');
+    const body = document.createElement('p');
+    body.setAttribute('style', 'margin:0;color:#9aa9bd;max-width:44ch');
+    body.textContent = t('webgl.body');
+    box.append(title, body);
+    target.replaceChildren(box);
+  } else {
+    mount(App, { target });
+  }
+});

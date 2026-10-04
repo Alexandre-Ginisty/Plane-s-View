@@ -26,11 +26,6 @@ const RANK: Record<CatchKind, Partial<Record<FlightPhase, number>>> = {
   takeoff: { takeoff: 0, departure: 1 },
 };
 
-export const CATCH_LABELS: Record<CatchKind, { verb: string; noun: string }> = {
-  landing: { verb: 'Catch a landing', noun: 'landing' },
-  takeoff: { verb: 'Catch a takeoff', noun: 'takeoff' },
-};
-
 /** Rank of a phase for a kind of catch, or null when it does not qualify. */
 function catchRank(kind: CatchKind, phase: FlightPhase): number | null {
   return RANK[kind][phase] ?? null;

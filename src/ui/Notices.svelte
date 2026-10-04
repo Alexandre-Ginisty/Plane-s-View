@@ -2,13 +2,14 @@
      lookup misses) so they are reported quietly and never block the view. -->
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
+  import { t } from '@/i18n/index.svelte';
 </script>
 
 <div class="notices" role="log" aria-live="polite">
   {#each app.notices as notice (notice.id)}
     <div class="notice {notice.level}">
       <span>{notice.text}</span>
-      <button onclick={() => app.dismiss(notice.id)} aria-label="Dismiss">×</button>
+      <button onclick={() => app.dismiss(notice.id)} aria-label={t('common.dismiss')}>×</button>
     </div>
   {/each}
 </div>

@@ -262,6 +262,15 @@ assets, but it *is* a reading. If you would rather not rely on it, delete
 `public/models`: the app works exactly as before with the procedural models,
 which is what it does today for every type the library does not cover.
 
+## Languages
+
+The interface is translated into 44 languages, chosen from the globe button on the front page (and in the app's dock). The language is picked from the browser's on a first visit, remembered afterwards, and can be forced with `?lang=fr`. Right-to-left languages (Arabic, Hebrew, Persian, Urdu) flip the layout.
+
+- English is built in; the others load on demand from `src/i18n/locales/`.
+- `src/i18n/en.ts` is the source of truth. `src/i18n/i18n.test.ts` fails if a language lacks a key, has an extra one, or changes a placeholder, key-cap or plural form.
+- Messages use `{param}`, `{n, plural, one {…} other {…}}` and `<k>Esc</k>` for key caps. Numbers are always written with Latin digits.
+- The author's name and portfolio link are set in `src/config/site.ts`.
+
 ## Security
 
 Worth being exact about what is and is not achievable. **The code cannot be

@@ -34,6 +34,7 @@ import {
   haversineMetres,
 } from '@/core/math/geo';
 import { TrafficClient, type QuerySource } from '@/data/adsb/client';
+import { t as tr } from '@/i18n/index.svelte';
 import { viewJumped } from './viewJump';
 import { Coverage, type ViewBounds, type ViewWindow } from '@/data/adsb/coverage';
 import { registry } from '@/data/meta/registry';
@@ -52,7 +53,7 @@ import { ConnectionSupervisor } from './connection';
 import { FALLBACK_VIEW, initialView } from './geolocate';
 import { PovSession } from './povSession';
 import { findRandomAircraft, type ShuffleResult } from './shuffle';
-import { CATCH_LABELS, acceptsForCatch, pickNearby, type CatchKind } from './catch';
+import { acceptsForCatch, pickNearby, type CatchKind } from './catch';
 import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
@@ -109,10 +110,10 @@ const FEED_FAILURES_BEFORE_NOTICE = 3;
  * no response arrived at all. Naming that is more useful than the raw text.
  */
 function describeFeedError(message: string): string {
-  if (/failed to fetch|load failed|networkerror/i.test(message)) return 'no response';
-  if (/exceeded \d+ ms|timed out/i.test(message)) return 'timed out';
+  if (/failed to fetch|load failed|networkerror/i.test(message)) return tr('feed.noResponse');
+  if (/exceeded \d+ ms|timed out/i.test(message)) return tr('feed.timedOut');
   const status = /HTTP (\d{3})/.exec(message)?.[1];
-  if (status === '429') return 'rate limited';
+  if (status === '429') return tr('feed.rateLimited');
   if (status) return `HTTP ${status}`;
   return message;
 }
@@ -243,13 +244,13 @@ export class Orchestrator {
         // individual timeouts is noise dressed up as diagnostics — the user
         // already has an offline notice and none of those four is the problem.
         if (networkMonitor.profile.grade === 'offline') {
-          app.notify('Live traffic is paused until the connection returns.', 'warn', 8000);
+          app.notify(tr('notice.trafficPaused'), 'warn', 8000);
           return;
         }
         const detail = [...errors.entries()]
           .map(([id, e]) => `${id}: ${describeFeedError(e)}`)
           .join(' | ');
-        app.notify(`No traffic feed reachable — retrying. ${detail}`, 'error', 10_000);
+        app.notify(tr('notice.noFeed', { detail }), 'error', 10_000);
       },
     });
   }
@@ -276,7 +277,7 @@ export class Orchestrator {
       onMoveEnd: (center, radiusNm, bounds: ViewBounds) => {
         this.query = { lat: center.lat, lon: center.lon, radiusNm, bounds };
       },
-      onError: (message) => app.notify(`Map: ${message}`, 'warn'),
+      onError: (message) => app.notify(tr('notice.mapError', { message }), 'warn'),
       onPlacePin: (lat, lon, name) => app.addPin(lat, lon, name),
       onRemovePin: (id) => app.removePin(id),
       onRenamePin: (id, name) => app.renamePin(id, name),
@@ -311,11 +312,11 @@ export class Orchestrator {
     this.globe.onImageryChanged = (source) => {
       this.map?.setImagery(source);
       app.imageryId = source.id;
-      app.notify(`Imagery: switched to ${source.label} — the previous layer stopped responding.`, 'warn');
+      app.notify(tr('notice.imagerySwitched', { layer: source.label }), 'warn');
     };
 
     if (!this.engine.webgl2) {
-      app.notify('WebGL2 unavailable — the 3D globe needs it.', 'error', 0);
+      app.notify(tr('notice.noWebgl2'), 'error', 0);
     }
     this.connection.start();
 
@@ -383,14 +384,14 @@ export class Orchestrator {
       flying = step.flying;
 
       if (step.action === 'exit') {
-        app.notify('Lost contact with that aircraft — returning to the map.', 'warn');
+        app.notify(tr('notice.lostContact'), 'warn');
         this.exitPov();
         return;
       }
       if (!flying) return; // unreachable once 'exit' is handled; narrows the type
 
       if (step.warn) {
-        app.notify('Signal lost — holding position while we re-acquire it.', 'warn', 4000);
+        app.notify(tr('notice.signalLost'), 'warn', 4000);
       }
 
       // Drag gain follows the live camera, so the same drag means the same
@@ -790,7 +791,7 @@ export class Orchestrator {
 
     const sample = this.traffic.sampleOne(hex);
     if (!sample) {
-      app.notify('That aircraft is no longer being received.', 'warn');
+      app.notify(tr('notice.notReceived'), 'warn');
       return;
     }
 
@@ -847,7 +848,7 @@ export class Orchestrator {
       if (token !== this.shuffleToken) return;
 
       if (!found) {
-        app.notify('Could not reach the feed just now — try again in a moment.', 'warn');
+        app.notify(tr('notice.feedUnreachable'), 'warn');
         return;
       }
 
@@ -868,7 +869,7 @@ export class Orchestrator {
       if (token !== this.shuffleToken) return;
 
       this.enterPov();
-      app.notify(`Now over ${found.region.name}.`, 'info', 4500);
+      app.notify(tr('notice.nowOver', { place: found.region.name }), 'info', 4500);
     } finally {
       // Unconditionally: only one search can be in flight (the guard above),
       // so this is always *our* flag. Clearing it only on a token match left
@@ -1032,7 +1033,7 @@ export class Orchestrator {
    */
   async catchAircraft(kind: CatchKind): Promise<void> {
     if (app.shuffling) return;
-    const label = CATCH_LABELS[kind].noun;
+    const label = tr(kind === 'landing' ? 'catch.landing' : 'catch.takeoff');
 
     const near = app.selected ?? this.map?.center ?? FALLBACK_VIEW;
     const local = pickNearby(kind, this.lastSamples, near, app.view === 'pov' ? app.selectedHex : null);
@@ -1057,7 +1058,7 @@ export class Orchestrator {
       });
       if (token !== this.shuffleToken) return;
       if (!found) {
-        app.notify(`No ${label} found in the busy airspaces right now — try again in a minute.`, 'warn');
+        app.notify(tr('notice.noneFound', { what: label }), 'warn');
         return;
       }
       this.traffic.ingestOne(found.aircraft);
@@ -1065,7 +1066,7 @@ export class Orchestrator {
       await this.select(found.aircraft.hex);
       if (token !== this.shuffleToken) return;
       this.enterPov();
-      app.notify(`Caught a ${label} over ${found.region.name}.`, 'info', 4500);
+      app.notify(tr('notice.caught', { what: label, place: found.region.name }), 'info', 4500);
     } finally {
       app.shuffling = false;
     }

@@ -39,19 +39,7 @@ export type FlightPhase =
   | 'final'
   | 'rollout';
 
-export const PHASE_LABELS: Record<FlightPhase, string> = {
-  parked: 'Parked',
-  taxi: 'Taxiing',
-  takeoff: 'Takeoff roll',
-  departure: 'Initial climb',
-  climb: 'Climbing',
-  cruise: 'Cruise',
-  level: 'Level flight',
-  descent: 'Descending',
-  approach: 'Approach',
-  final: 'Final approach',
-  rollout: 'Landing rollout',
-};
+/** What each phase is called on screen is in `i18n/en.ts`, under `phase.<name>`. */
 
 /** The phases worth making a moment of. */
 export function isTakeoffPhase(p: FlightPhase | null): boolean {

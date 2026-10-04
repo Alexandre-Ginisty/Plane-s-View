@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
   import type { AircraftPhoto } from '@/data/types';
+  import { t } from '@/i18n/index.svelte';
 
   let { photo, alt }: { photo: AircraftPhoto; alt: string } = $props();
 
@@ -20,8 +21,8 @@
 </script>
 
 {#if failed}
-  <div class="no-photo" role="img" aria-label="No photo available">
-    <span>No photo available for this aircraft</span>
+  <div class="no-photo" role="img" aria-label={t('photo.none')}>
+    <span>{t('dossier.noPhoto')}</span>
   </div>
 {:else}
 <figure>

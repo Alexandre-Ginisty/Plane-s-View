@@ -12,6 +12,7 @@
  * to live that was not "wherever there was room".
  */
 
+import { t as translate, type MessageKey } from '@/i18n/index.svelte';
 import {
   gradeRank,
   networkMonitor,
@@ -85,22 +86,13 @@ const FEED_MAX_CELLS: Record<NetworkGrade, number> = {
  */
 const ANNOUNCE_HOLD_SEC = 12;
 
-/** Plain-language explanation of each connection grade, for the user. */
-const GRADE_MESSAGE: Record<NetworkGrade, { text: string; level: 'info' | 'warn' | 'error' }> = {
-  fast: { text: 'Connection is strong — streaming terrain at full detail.', level: 'info' },
-  good: { text: 'Connection recovered — back to full detail.', level: 'info' },
-  slow: {
-    text: 'Slow connection — reducing terrain detail so the ground keeps up.',
-    level: 'warn',
-  },
-  poor: {
-    text: 'Weak connection — the ground will be soft, but it will stay smooth and complete.',
-    level: 'warn',
-  },
-  offline: {
-    text: 'No connection. Showing terrain already stored on this device; live traffic is paused.',
-    level: 'error',
-  },
+/** Plain-language explanation of each connection grade, for the user (the words are in `i18n/en.ts`). */
+const GRADE_MESSAGE: Record<NetworkGrade, { key: MessageKey; level: 'info' | 'warn' | 'error' }> = {
+  fast: { key: 'conn.fast', level: 'info' },
+  good: { key: 'conn.good', level: 'info' },
+  slow: { key: 'conn.slow', level: 'warn' },
+  poor: { key: 'conn.poor', level: 'warn' },
+  offline: { key: 'conn.offline', level: 'error' },
 };
 
 /**
@@ -250,7 +242,7 @@ export class ConnectionSupervisor {
   private announce(grade: NetworkGrade | null): void {
     if (grade === null) return;
     const message = GRADE_MESSAGE[grade];
-    app.notify(message.text, message.level, grade === 'offline' ? 0 : 8000);
+    app.notify(translate(message.key), message.level, grade === 'offline' ? 0 : 8000);
   }
 
   private handleConnectivityChange(): void {
