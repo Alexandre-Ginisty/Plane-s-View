@@ -65,6 +65,20 @@ describe('the allowlist', () => {
     }
   });
 
+  it('ignores the `path` parameter the rewrite adds when the public path is kept', async () => {
+    // What Vercel actually sends: the original /feeds/... path *and* ?path=...
+    const res = await GET(
+      new Request('https://planesview.example/feeds/adsb-lol/v2/hex/4ca7b5?path=adsb-lol%2Fv2%2Fhex%2F4ca7b5'),
+    );
+    expect(res.status).toBe(200);
+    expect(captured[0]!.url).toBe('https://api.adsb.lol/v2/hex/4ca7b5');
+  });
+
+  it('relays the trailing slash the adsb.fi client sends', async () => {
+    const res = await GET(contextFor(['adsb-fi', 'api', 'v2', 'lat', '51.47', 'lon', '-0.454', 'dist', '70', '']));
+    expect(res.status).toBe(200);
+  });
+
   it('reads the path vercel.json passes in the `path` parameter', async () => {
     const res = await GET(
       new Request('https://planesview.example/api/feeds?path=adsb-fi%2Fapi%2Fv2%2Flat%2F51.47%2Flon%2F-0.454%2Fdist%2F70%2F'),

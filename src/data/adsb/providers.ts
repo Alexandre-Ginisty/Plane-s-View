@@ -143,7 +143,7 @@ const adsbFi = readsbProvider({
   // Measured: answers every request, one a second, in about 60 ms.
   minIntervalMs: 2000,
   // Not `/v2/point/...`: adsb.fi spells the query out.
-  pointPath: (lat, lon, r) => `/api/v2/lat/${lat}/lon/${lon}/dist/${r}/`,
+  pointPath: (lat, lon, r) => `/api/v2/lat/${lat}/lon/${lon}/dist/${r}`,
   hexPath: (hex) => `/api/v2/hex/${hex}/`,
 });
 

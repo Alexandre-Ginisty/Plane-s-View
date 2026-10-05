@@ -156,14 +156,16 @@ export const DELETE = methodNotAllowed;
  * `vercel.json` rewrites `/feeds/:path*` to `/api/feeds?path=:path*`, so the
  * path normally arrives as the `path` query parameter. A request that reaches
  * the function under its public `/feeds/...` path is read from the path
- * instead, so either way of being called works. The `path` parameter belongs
- * to the rewrite, never to the upstream, and is not forwarded.
+ * instead, so either way of being called works. Vercel adds the `path`
+ * parameter to the request even when the public path is kept, so it is dropped
+ * in both cases: it belongs to the rewrite, never to the upstream, and no
+ * route takes a parameter of that name.
  */
 function relaySegments(incoming: URL): { segments: string[]; params: URLSearchParams } {
   const params = new URLSearchParams(incoming.search);
   const fromPath = /^\/feeds\/(.*)$/.exec(incoming.pathname);
   const joined = fromPath ? fromPath[1]! : (params.get('path') ?? '');
-  if (!fromPath) params.delete('path');
+  params.delete('path');
   return { segments: joined.split('/').filter(Boolean), params };
 }
 
