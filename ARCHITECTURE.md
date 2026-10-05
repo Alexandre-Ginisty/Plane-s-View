@@ -3,7 +3,7 @@
 A map of the code, written so that a change can be located before it is made.
 
 The project is a browser-only app: no backend, no API key, no account. The one
-server-side file is a relay allowlist (`functions/feeds/`), and it exists only
+server-side file is a relay allowlist (`api/feeds.ts`), and it exists only
 because adsb.lol sends no CORS headers and MET Norway requires a `User-Agent`
 that a page cannot set.
 

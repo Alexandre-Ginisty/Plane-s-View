@@ -44,6 +44,7 @@ import { enuBasis, geodeticToEcef } from '@/core/math/geo';
 import type { FloatingOrigin } from '@/core/frame';
 import type { Pin } from '@/state/appStore.svelte';
 import type { OverlayFrame } from './overlay';
+import { projectAhead } from './projection';
 
 /** Beacon colour. Warm, so it never reads as sky, sea or a cockpit instrument. */
 const COLOR = 0xffb347;
@@ -216,9 +217,9 @@ export class Pins3D {
 
     for (const b of this.beacons.values()) {
       if (!b.visible) continue;
-      _p.copy(b.anchor).project(camera);
       // Behind the camera, or outside the frame.
-      if (_p.z > 1 || _p.x < -1.2 || _p.x > 1.2 || _p.y < -1.2 || _p.y > 1.2) continue;
+      if (!projectAhead(_p.copy(b.anchor), camera)) continue;
+      if (_p.x < -1.2 || _p.x > 1.2 || _p.y < -1.2 || _p.y > 1.2) continue;
       frame.drew = true;
       const x = (_p.x * 0.5 + 0.5) * w + 10;
       const y = (-_p.y * 0.5 + 0.5) * h;

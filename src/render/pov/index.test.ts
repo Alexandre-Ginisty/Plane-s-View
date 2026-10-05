@@ -444,3 +444,90 @@ describe('the camera goes where the hand goes', () => {
     expect(oneFrame).toBeLessThan(arrived * 0.1);
   });
 });
+
+describe('no limit on turning the view', () => {
+  const forwardOf = (camera: PerspectiveCamera): Vector3 =>
+    new Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const upOf = (camera: PerspectiveCamera): Vector3 => new Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+
+  it('turns the cockpit view right round, again and again', () => {
+    const { pov, camera } = rig();
+    const s = aircraft();
+    pov.setMode('cockpit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+    const ahead = forwardOf(camera);
+
+    // Behind: further than the old half turn, without stopping at it.
+    let seen = 0;
+    for (let i = 0; i < 60; i++) {
+      pov.applyDrag(-30, 0);
+      pov.update(camera, s, 1 / 60);
+      seen = Math.max(seen, forwardOf(camera).angleTo(ahead));
+    }
+    expect(seen).toBeGreaterThan(Math.PI - 0.2);
+    expect(Math.abs(pov.state.lookYaw)).toBeLessThanOrEqual(Math.PI);
+  });
+
+  it('goes over the top in the cockpit without the picture flipping', () => {
+    const { pov, camera } = rig();
+    const s = aircraft({ pitchDeg: 0 });
+    pov.setMode('cockpit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+
+    let steepest = 0;
+    let previousUp = upOf(camera);
+    let biggestJump = 0;
+    for (let i = 0; i < 80; i++) {
+      pov.applyDrag(0, -20);
+      pov.update(camera, s, 1 / 60);
+      steepest = Math.max(steepest, forwardOf(camera).dot(new Vector3(...geodeticToEcef(s.lat, s.lon, 0)).normalize()));
+      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
+      previousUp = upOf(camera);
+    }
+    // Looked straight up and well past it, in steps no bigger than the drag.
+    expect(steepest).toBeGreaterThan(0.99);
+    expect(biggestJump).toBeLessThan(0.6);
+  });
+
+  it('keeps the aircraft framed while the chase camera goes over the top', () => {
+    const { pov, camera, origin } = rig();
+    const s = parked();
+    pov.setMode('chase');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+
+    let previousUp = upOf(camera);
+    let biggestJump = 0;
+    for (let i = 0; i < 60; i++) {
+      pov.applyDrag(0, -25);
+      pov.update(camera, s, 1 / 60);
+      expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
+      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
+      previousUp = upOf(camera);
+    }
+    expect(Math.abs(pov.state.lookPitch)).toBeLessThanOrEqual(Math.PI);
+    expect(biggestJump).toBeLessThan(0.6);
+  });
+
+  it('goes over the top in the orbit view too', () => {
+    const { pov, camera, origin } = rig();
+    const s = parked();
+    pov.setMode('orbit');
+    for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
+
+    let highest = -Infinity;
+    let previousUp = upOf(camera);
+    let biggestJump = 0;
+    for (let i = 0; i < 60; i++) {
+      pov.applyDrag(0, -25);
+      pov.update(camera, s, 1 / 60);
+      expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
+      const height = camera.position.clone().add(new Vector3(...origin.current)).length();
+      highest = Math.max(highest, height);
+      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
+      previousUp = upOf(camera);
+    }
+    expect(Math.abs(pov.state.orbitPitch)).toBeLessThanOrEqual(Math.PI);
+    expect(biggestJump).toBeLessThan(0.6);
+    expect(highest).toBeGreaterThan(0);
+  });
+});

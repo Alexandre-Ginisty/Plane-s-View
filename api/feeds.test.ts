@@ -15,7 +15,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { onRequestGet, onRequestOptions, onRequestPost } from './[[path]]';
+import relayTargets from '../relay-targets.json';
+import { GET, OPTIONS, POST } from './feeds';
 
 interface Captured {
   url: string;
@@ -24,13 +25,9 @@ interface Captured {
 
 let captured: Captured[] = [];
 
-/** A context shaped like the one Cloudflare Pages hands the function. */
-function contextFor(path: string[], search = '', headers: Record<string, string> = {}): Parameters<typeof onRequestGet>[0] {
-  return {
-    request: new Request(`https://planesview.example/feeds/${path.join('/')}${search}`, { headers }),
-    params: { path },
-    waitUntil: () => undefined,
-  };
+/** A request as the public URL carries it: `/feeds/<target>/<upstream path>`. */
+function contextFor(path: string[], search = '', headers: Record<string, string> = {}): Request {
+  return new Request(`https://planesview.example/feeds/${path.join('/')}${search}`, { headers });
 }
 
 beforeEach(() => {
@@ -51,14 +48,40 @@ afterEach(() => {
 });
 
 describe('the allowlist', () => {
+  it('lists the same origins as relay-targets.json', () => {
+    // The app and the dev proxy read the JSON; the function carries its own copy.
+    return GET(contextFor(['nope'])).then(async (res) => {
+      const body = (await res.json()) as { allowed: string[] };
+      expect([...body.allowed].sort()).toEqual(Object.keys(relayTargets).sort());
+    });
+  });
+
+  it('sends each target to the origin listed in relay-targets.json', async () => {
+    for (const [target, origin] of Object.entries(relayTargets)) {
+      captured = [];
+      const path = target === 'metno' ? ['weatherapi', 'locationforecast', '2.0', 'complete'] : target === 'adsb-fi' ? ['api', 'v2', 'hex', '4ca7b5'] : ['v2', 'hex', '4ca7b5'];
+      await GET(contextFor([target, ...path]));
+      expect(captured[0]!.url.startsWith(`${origin}/`), target).toBe(true);
+    }
+  });
+
+  it('reads the path vercel.json passes in the `path` parameter', async () => {
+    const res = await GET(
+      new Request('https://planesview.example/api/feeds?path=adsb-fi%2Fapi%2Fv2%2Flat%2F51.47%2Flon%2F-0.454%2Fdist%2F70%2F'),
+    );
+    expect(res.status).toBe(200);
+    expect(captured[0]!.url).toBe('https://opendata.adsb.fi/api/v2/lat/51.47/lon/-0.454/dist/70');
+    expect(captured[0]!.url).not.toContain('path=');
+  });
+
   it('refuses a target that is not in the map', async () => {
-    const res = await onRequestGet(contextFor(['not-a-feed', 'v2', 'all']));
+    const res = await GET(contextFor(['not-a-feed', 'v2', 'all']));
     expect(res.status).toBe(404);
     expect(captured).toHaveLength(0);
   });
 
   it('refuses a request with no target at all', async () => {
-    const res = await onRequestGet(contextFor([]));
+    const res = await GET(contextFor([]));
     expect(res.status).toBe(404);
     expect(captured).toHaveLength(0);
   });
@@ -73,7 +96,7 @@ describe('the allowlist', () => {
       'http://169.254.169.254',
       'localhost:8080',
     ]) {
-      const res = await onRequestGet(contextFor([hostile, 'x']));
+      const res = await GET(contextFor([hostile, 'x']));
       expect(res.status).toBe(404);
     }
     expect(captured).toHaveLength(0);
@@ -87,7 +110,7 @@ describe('the allowlist', () => {
     };
     for (const [target, [origin, path]] of Object.entries(expected)) {
       captured = [];
-      await onRequestGet(contextFor([target, ...path]));
+      await GET(contextFor([target, ...path]));
       expect(captured[0]!.url.startsWith(origin)).toBe(true);
     }
   });
@@ -101,10 +124,10 @@ describe('path handling', () => {
       ['adsb-fi', 'api', 'v2', 'lat', '48.85341', 'lon', '2.34880', 'dist', '120'],
       ['adsb-fi', 'api', 'v2', 'hex', '4ca7b5'],
     ]) {
-      const res = await onRequestGet(contextFor(path));
+      const res = await GET(contextFor(path));
       expect(res.status, path.join('/')).toBe(200);
     }
-    await onRequestGet(contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=48.8534&lon=2.3488'));
+    await GET(contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=48.8534&lon=2.3488'));
     expect(new URL(captured.at(-1)!.url).search).toBe('?lat=48.8534&lon=2.3488');
   });
 
@@ -121,16 +144,16 @@ describe('path handling', () => {
       ['adsb-fi', 'v2', 'hex', '4ca7b5'],
       ['adsb-fi', 'api', 'v2', 'all'],
     ]) {
-      const res = await onRequestGet(contextFor(path));
+      const res = await GET(contextFor(path));
       expect(res.status, path.join('/')).toBe(404);
     }
     expect(captured).toHaveLength(0);
   });
 
   it('refuses query parameters the route does not take', async () => {
-    const lol = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '?limit=200'));
+    const lol = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '?limit=200'));
     expect(lol.status).toBe(404);
-    const met = await onRequestGet(
+    const met = await GET(
       contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=1&lon=2&altitude=9000'),
     );
     expect(met.status).toBe(404);
@@ -138,7 +161,7 @@ describe('path handling', () => {
   });
 
   it('refuses another website calling it from its visitors\' browsers', async () => {
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '', { 'Sec-Fetch-Site': 'cross-site' }));
+    const res = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5'], '', { 'Sec-Fetch-Site': 'cross-site' }));
     expect(res.status).toBe(403);
     expect(captured).toHaveLength(0);
   });
@@ -148,7 +171,7 @@ describe('path handling', () => {
       expect(init.redirect).toBe('manual');
       return Promise.resolve(new Response(null, { status: 302, headers: { Location: 'https://evil.example/' } }));
     });
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    const res = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.status).toBe(502);
     expect(res.headers.get('Location')).toBeNull();
   });
@@ -156,7 +179,7 @@ describe('path handling', () => {
 
 describe('what comes back', () => {
   it('identifies the project upstream, as the feeds ask', async () => {
-    await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     const headers = captured[0]!.init.headers as Record<string, string>;
     expect(headers['User-Agent']).toContain('PlanesView');
   });
@@ -164,7 +187,7 @@ describe('what comes back', () => {
   it('is not readable by another website', async () => {
     // It used to answer `Access-Control-Allow-Origin: *`, which let any site
     // on the internet spend this deployment's request budget.
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    const res = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 
@@ -177,7 +200,7 @@ describe('what comes back', () => {
         }),
       ),
     );
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    const res = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.headers.get('Content-Type')).toContain('application/json');
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
@@ -187,7 +210,7 @@ describe('what comes back', () => {
     vi.stubGlobal('fetch', () =>
       Promise.reject(new Error('connect ECONNREFUSED 10.0.3.4:443 via relay-edge-7')),
     );
-    const res = await onRequestGet(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    const res = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
     expect(res.status).toBe(502);
 
     const body = (await res.json()) as Record<string, unknown>;
@@ -197,7 +220,7 @@ describe('what comes back', () => {
   });
 
   it('answers only GET', async () => {
-    expect(onRequestOptions().status).toBe(405);
-    expect(onRequestPost().status).toBe(405);
+    expect(OPTIONS().status).toBe(405);
+    expect(POST().status).toBe(405);
   });
 });

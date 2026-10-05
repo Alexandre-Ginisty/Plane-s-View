@@ -60,6 +60,8 @@ import {
   type WebGLRenderer,
 } from 'three';
 
+import { projectAhead } from '../projection';
+
 /**
  * Levels in the bloom chain, from a quarter of the resolution down. A glow is
  * soft by nature: starting at half resolution cost four times the pixels for
@@ -350,8 +352,8 @@ export class PostPipeline {
     }
 
     // The sun: where it is on screen, and whether it is seen.
-    _sun.copy(sunDirection).multiplyScalar(1e6).add(camera.position).project(camera);
-    const ahead = _sun.z < 1 && _sun.z > -1 && sunStrength > 0.01;
+    _sun.copy(sunDirection).multiplyScalar(1e6).add(camera.position);
+    const ahead = projectAhead(_sun, camera) && sunStrength > 0.01;
     const sx = _sun.x * 0.5 + 0.5;
     const sy = _sun.y * 0.5 + 0.5;
     const onScreen = ahead && sx > -0.02 && sx < 1.02 && sy > -0.02 && sy < 1.02 ? 1 : 0;

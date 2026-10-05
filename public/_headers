@@ -1,4 +1,5 @@
-# Security headers, applied by Cloudflare Pages to everything it serves.
+# Security headers for `vite preview`. On Vercel the same list lives in `vercel.json`
+# (Vercel does not read this file): change one, change the other.
 #
 # What these can and cannot do is worth being exact about. They do not hide the
 # code: a browser has to receive a script in order to run it, so anyone can read

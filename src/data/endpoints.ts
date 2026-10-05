@@ -27,9 +27,9 @@
  * changes that: CORS is enforced by the browser.
  *
  *  - **Development** — Vite's dev server proxies `/feeds/*`. No extra process.
- *  - **Production**  — `functions/feeds/[[path]].ts`, a Cloudflare Pages
- *    Function. Deploy it beside the static build and the same paths keep
- *    working.
+ *  - **Production**  — `api/feeds.ts`, a Vercel Function reached through
+ *    the rewrite in `vercel.json`. Deploy it beside the static build and the
+ *    same paths keep working.
  *
  * Set `VITE_DIRECT_FEEDS=1` to bypass the relay and call upstream directly —
  * useful inside a browser extension or an Electron shell.

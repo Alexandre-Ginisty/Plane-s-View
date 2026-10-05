@@ -1,10 +1,10 @@
 /**
- * Feed relay — Cloudflare Pages Function (free tier, no account upgrade, no card).
+ * Feed relay — Vercel Function (free Hobby plan).
  *
- * Deployed automatically by Cloudflare Pages: any file under `functions/`
- * becomes a route, and `[[path]]` is a catch-all. With the static build this
- * serves `/feeds/<target>/<upstream path>` on the same origin as the app, so
- * the browser never makes a cross-origin request and CORS stops mattering.
+ * Deployed automatically by Vercel: any file under `api/` becomes a function.
+ * `vercel.json` rewrites `/feeds/<target>/<upstream path>` to this one, so it
+ * is served on the same origin as the app, the browser never makes a
+ * cross-origin request and CORS stops mattering.
  *
  * It exists for exactly two reasons the browser cannot solve on its own:
  *   1. adsb.lol sends no usable `Access-Control-Allow-Origin`.
@@ -42,9 +42,17 @@
  * on the understanding that this project is the one using them.
  */
 
-import relayTargets from '../../relay-targets.json';
-
-const UPSTREAM: Record<string, string> = relayTargets;
+/**
+ * Upstream origins. The same list as `relay-targets.json`, which the app and
+ * the Vite dev proxy read; a test fails if the two drift apart. It is written
+ * out here rather than imported because a function is bundled on its own and a
+ * JSON import is not portable across the runtimes it may be built for.
+ */
+const UPSTREAM: Record<string, string> = {
+  'adsb-lol': 'https://api.adsb.lol',
+  'adsb-fi': 'https://opendata.adsb.fi',
+  metno: 'https://api.met.no',
+};
 
 /** Identifies the project to upstream operators, as their terms ask. */
 const USER_AGENT = 'PlanesView/1.0 (+https://github.com/Alexandre-Ginisty/Plane-s-View)';
@@ -84,12 +92,6 @@ const MAX_URL_LENGTH = 512;
 
 /** Largest body relayed: a dense 250 nm circle is a few megabytes. */
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
-
-interface PagesContext {
-  request: Request;
-  params: { path?: string | string[] };
-  waitUntil(promise: Promise<unknown>): void;
-}
 
 /**
  * Content types the relay will pass on.
@@ -137,22 +139,37 @@ function json(body: unknown, status: number): Response {
  *
  * A same-origin relay has no preflight to answer, so an OPTIONS here is either
  * a scanner or a misconfiguration; either way the honest reply is that only GET
- * exists. Cloudflare routes every method to the catch-all, so without this a
- * POST would fall through to the platform's own handling rather than being
- * refused by the code that owns the route.
+ * exists, said by the code that owns the route.
  */
 const methodNotAllowed = (): Response =>
   new Response(null, { status: 405, headers: baseHeaders({ Allow: 'GET' }) });
 
-export const onRequestOptions = methodNotAllowed;
-export const onRequestPost = methodNotAllowed;
-export const onRequestPut = methodNotAllowed;
-export const onRequestPatch = methodNotAllowed;
-export const onRequestDelete = methodNotAllowed;
+export const OPTIONS = methodNotAllowed;
+export const POST = methodNotAllowed;
+export const PUT = methodNotAllowed;
+export const PATCH = methodNotAllowed;
+export const DELETE = methodNotAllowed;
 
-export async function onRequestGet(context: PagesContext): Promise<Response> {
-  const raw = context.params.path;
-  const segments = Array.isArray(raw) ? raw : raw ? [raw] : [];
+/**
+ * The path after `/feeds/`, split into segments.
+ *
+ * `vercel.json` rewrites `/feeds/:path*` to `/api/feeds?path=:path*`, so the
+ * path normally arrives as the `path` query parameter. A request that reaches
+ * the function under its public `/feeds/...` path is read from the path
+ * instead, so either way of being called works. The `path` parameter belongs
+ * to the rewrite, never to the upstream, and is not forwarded.
+ */
+function relaySegments(incoming: URL): { segments: string[]; params: URLSearchParams } {
+  const params = new URLSearchParams(incoming.search);
+  const fromPath = /^\/feeds\/(.*)$/.exec(incoming.pathname);
+  const joined = fromPath ? fromPath[1]! : (params.get('path') ?? '');
+  if (!fromPath) params.delete('path');
+  return { segments: joined.split('/').filter(Boolean), params };
+}
+
+export async function GET(request: Request): Promise<Response> {
+  const incoming = new URL(request.url);
+  const { segments, params } = relaySegments(incoming);
 
   const target = segments[0];
   if (!target || !Object.hasOwn(UPSTREAM, target)) {
@@ -165,16 +182,15 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   // Another website's page calling this deployment from its visitors'
   // browsers. Browsers say so; scripts elsewhere can lie, but then they spend
   // their own requests, not borrowed visitors'.
-  const site = context.request.headers.get('Sec-Fetch-Site');
+  const site = request.headers.get('Sec-Fetch-Site');
   if (site === 'cross-site') return json({ error: 'Forbidden' }, 403);
 
-  const incoming = new URL(context.request.url);
   const route = ROUTES[target];
   const rest = segments.slice(1).join('/');
   if (!route || !route.path.test(rest) || incoming.href.length > MAX_URL_LENGTH) {
     return json({ error: 'Unknown relay path' }, 404);
   }
-  for (const key of incoming.searchParams.keys()) {
+  for (const key of params.keys()) {
     if (!route.query.includes(key)) return json({ error: 'Unknown relay path' }, 404);
   }
 
@@ -184,7 +200,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   // Rebuilt from parts, never concatenated from user input, so the origin is
   // fixed by the allowlist and the path cannot escape it.
   const url = new URL(`/${upstreamPath}`, origin);
-  url.search = incoming.search;
+  url.search = params.toString() ? `?${params.toString()}` : '';
 
   const ttl = CACHE_SECONDS[target] ?? 5;
 
@@ -195,12 +211,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         Accept: 'application/json',
         'User-Agent': USER_AGENT,
       },
-      // Collapses concurrent identical requests across all visitors.
-      cf: { cacheTtl: ttl, cacheEverything: true },
       // A redirect would be the upstream choosing where the relay goes next.
       redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
-    } as RequestInit);
+    });
 
     if (upstream.status >= 300 && upstream.status < 400) {
       return json({ error: 'Upstream redirected', target }, 502);
@@ -210,7 +224,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const headers = baseHeaders({
       'Content-Type': safeContentType(upstream.headers.get('Content-Type')),
-      'Cache-Control': `public, max-age=${ttl}`,
+      // `s-maxage` is the CDN's: concurrent identical requests from every
+      // visitor collapse into one upstream call.
+      'Cache-Control': `public, max-age=${ttl}, s-maxage=${ttl}`,
     });
 
     return new Response(upstream.body, { status: upstream.status, headers });

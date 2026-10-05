@@ -80,6 +80,7 @@ import { lightAnchorsFor, type LightAnchors } from './aircraft/lightAnchors';
 import { GROUND_CHECK_CEILING_M, clearanceFor, surfaceAltitudeM } from './ground';
 import { aircraftFrame } from './pov';
 import type { OverlayFrame, OverlayPalette } from './overlay';
+import { projectAhead } from './projection';
 
 /**
  * How close an aircraft has to be to be drawn at all, metres.
@@ -812,8 +813,9 @@ export class Traffic3D {
     width: number,
     height: number,
   ): { x: number; y: number } | null {
-    const v = this.projected.copy(position).project(camera);
-    if (v.z > 1 || v.x < -1.02 || v.x > 1.02 || v.y < -1.02 || v.y > 1.02) return null;
+    const v = this.projected.copy(position);
+    if (!projectAhead(v, camera)) return null;
+    if (v.x < -1.02 || v.x > 1.02 || v.y < -1.02 || v.y > 1.02) return null;
     return { x: (v.x * 0.5 + 0.5) * width, y: (-v.y * 0.5 + 0.5) * height };
   }
 

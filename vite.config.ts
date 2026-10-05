@@ -6,7 +6,8 @@ import relayTargets from './relay-targets.json' with { type: 'json' };
 
 /**
  * The site-wide headers from `public/_headers` (the `/*` block), so the
- * preview server answers with the very policy Cloudflare will apply.
+ * preview server answers with the very policy Vercel will apply (`vercel.json`
+ * repeats them: keep the two in step).
  */
 function siteHeaders(drop: readonly string[] = []): Record<string, string> {
   const lines = readFileSync(new URL('./public/_headers', import.meta.url), 'utf8').split('\n');
@@ -29,7 +30,7 @@ function siteHeaders(drop: readonly string[] = []): Record<string, string> {
  * The free ADS-B feeds send no CORS headers, so a page cannot call them
  * directly. In development Vite forwards `/feeds/<target>/*` to the upstream
  * origin; in production the identical paths are served by
- * `functions/feeds/[[path]].ts`. See `src/data/endpoints.ts`.
+ * `api/feeds.ts`. See `src/data/endpoints.ts`.
  */
 const feedProxy = Object.fromEntries(
   Object.entries(relayTargets).map(([target, origin]) => [
@@ -111,9 +112,9 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     environment: 'node',
-    // `functions/` too: the relay is the only code in this project exposed
+    // `api/` too: the relay is the only code in this project exposed
     // directly to the internet, and it was the only code with no tests.
-    include: ['src/**/*.test.ts', 'functions/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'api/**/*.test.ts'],
   },
   server: {
     port: 5173,

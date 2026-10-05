@@ -94,16 +94,27 @@ export function placeCamera(
 
     case 'orbit': {
       const { orbitYaw, orbitPitch, orbitDistance } = state;
+      const cp = Math.cos(orbitPitch);
+      const sp = Math.sin(orbitPitch);
+      const cy = Math.cos(orbitYaw);
+      const sy = Math.sin(orbitYaw);
       const offset = offsetScratch
         .set(0, 0, 0)
-        .addScaledVector(axes.forward, Math.cos(orbitPitch) * Math.cos(orbitYaw))
-        .addScaledVector(axes.right, Math.cos(orbitPitch) * Math.sin(orbitYaw))
-        .addScaledVector(frame.localUp, Math.sin(orbitPitch))
+        .addScaledVector(axes.forward, cp * cy)
+        .addScaledVector(axes.right, cp * sy)
+        .addScaledVector(frame.localUp, sp)
         .normalize()
         .multiplyScalar(orbitDistance);
 
       out.position.copy(anchor).add(offset);
-      out.up.copy(frame.localUp);
+      // The vertical is tipped along with the camera. Held at the local up it
+      // would flip the picture the moment the camera went over the top; tipped
+      // with it, the orbit simply carries on, upside down and round again.
+      out.up
+        .set(0, 0, 0)
+        .addScaledVector(frame.localUp, cp)
+        .addScaledVector(axes.forward, -sp * cy)
+        .addScaledVector(axes.right, -sp * sy);
       return;
     }
   }

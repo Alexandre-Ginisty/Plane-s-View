@@ -78,9 +78,15 @@ const LOOK_DRAG_GAIN = 2.2;
  * what dragging over the subject of the shot is for.
  */
 
-/** How far below and above its home position an outside view may swing, radians. */
-const SWING_PITCH_MIN = -1.25;
-const SWING_PITCH_MAX = 0.45;
+/**
+ * No view has a limit on how far it turns: the head goes round as often as the
+ * hand does, and over the top and upside down. The angles are kept in
+ * (-π, π] so that "back to centre" always takes the short way round rather than
+ * unwinding every turn that was made.
+ */
+function wrapAngle(a: number): number {
+  return a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+}
 
 /** Cockpit zoom: the narrowest field of view the wheel reaches, degrees. */
 const MIN_FOV_DEG = 16;
@@ -443,8 +449,8 @@ export class PovController {
     switch (this.state.mode) {
       case 'orbit': {
         const k = this.radPerPx * ORBIT_DRAG_GAIN;
-        this.state.orbitYaw -= dx * k;
-        this.state.orbitPitch = clamp(this.state.orbitPitch - vy * k, -1.3, 1.4);
+        this.state.orbitYaw = wrapAngle(this.state.orbitYaw - dx * k);
+        this.state.orbitPitch = wrapAngle(this.state.orbitPitch - vy * k);
         return;
       }
       case 'cockpit':
@@ -452,14 +458,14 @@ export class PovController {
         // Zoomed in, the same drag covers less of the world: keep the point
         // under the cursor under the cursor.
         const k = this.radPerPx * LOOK_DRAG_GAIN * this.zoomScale;
-        this.state.lookYaw = clamp(this.state.lookYaw - dx * k, -Math.PI, Math.PI);
-        this.state.lookPitch = clamp(this.state.lookPitch - vy * k, -1.2, 1.2);
+        this.state.lookYaw = wrapAngle(this.state.lookYaw - dx * k);
+        this.state.lookPitch = wrapAngle(this.state.lookPitch - vy * k);
         return;
       }
       default: {
         const k = this.radPerPx * ORBIT_DRAG_GAIN * 1.4;
-        this.state.lookYaw += dx * k;
-        this.state.lookPitch = clamp(this.state.lookPitch + vy * k, SWING_PITCH_MIN, SWING_PITCH_MAX);
+        this.state.lookYaw = wrapAngle(this.state.lookYaw + dx * k);
+        this.state.lookPitch = wrapAngle(this.state.lookPitch + vy * k);
       }
     }
   }
@@ -650,7 +656,7 @@ export class PovController {
     // Chase and wing: the drag swings the camera round the aircraft and the
     // wheel moves it nearer or further, about the aircraft rather than the eye.
     if (this.state.mode === 'chase' || this.state.mode === 'wing') {
-      this.swingAround(position, anchor, frame.localUp);
+      this.swingAround(position, up, anchor, frame.localUp);
     }
 
     // Terrain clearance for the external views. The cockpit deliberately does
@@ -674,12 +680,20 @@ export class PovController {
 
     // Free look, applied about the view's own axes, at full rate. Cockpit
     // only: every other view swings the camera instead (see `swingAround`).
+    //
+    // Yaw about the vertical, then pitch about the *turned* right-hand axis,
+    // and `up` goes through the same pitch. Both matter without a limit: the
+    // right axis left over from before the yaw tilted the pitch sideways
+    // whenever the head was turned, and a vertical that stayed put flipped the
+    // picture over at straight up instead of letting the head go on over.
     if (!subjectLocked && (this.state.lookYaw !== 0 || this.state.lookPitch !== 0)) {
       _right.crossVectors(forward, up).normalize();
       _quat.setFromAxisAngle(up, this.state.lookYaw);
       forward.applyQuaternion(_quat);
+      _right.applyQuaternion(_quat);
       _quat.setFromAxisAngle(_right, this.state.lookPitch);
       forward.applyQuaternion(_quat).normalize();
+      up.applyQuaternion(_quat).normalize();
     }
 
     // Keep the floating origin under the camera before writing render-space
@@ -747,17 +761,26 @@ export class PovController {
    *
    * Positive yaw moves the camera to its right and positive pitch moves it
    * down, which is what makes "the camera goes where the hand goes" true.
+   *
+   * `up` turns with the camera, so a swing over the top carries on round
+   * instead of the picture flipping at the pole.
    */
-  private swingAround(position: Vector3, anchor: Vector3, localUp: Vector3): void {
+  private swingAround(position: Vector3, up: Vector3, anchor: Vector3, localUp: Vector3): void {
     const { lookYaw, lookPitch } = this.state;
     if (lookYaw === 0 && lookPitch === 0 && this.swingZoom === 1) return;
     const offset = _swing.copy(position).sub(anchor);
-    if (lookYaw !== 0) offset.applyQuaternion(_quat.setFromAxisAngle(localUp, lookYaw));
+    if (lookYaw !== 0) {
+      _quat.setFromAxisAngle(localUp, lookYaw);
+      offset.applyQuaternion(_quat);
+      up.applyQuaternion(_quat);
+    }
     if (lookPitch !== 0) {
       // The camera's right: forward (towards the anchor) crossed with up.
       _swingAxis.copy(offset).negate().cross(localUp);
       if (_swingAxis.lengthSq() > 1e-9) {
-        offset.applyQuaternion(_quat.setFromAxisAngle(_swingAxis.normalize(), lookPitch));
+        _quat.setFromAxisAngle(_swingAxis.normalize(), lookPitch);
+        offset.applyQuaternion(_quat);
+        up.applyQuaternion(_quat);
       }
     }
     position.copy(anchor).addScaledVector(offset, this.swingZoom);

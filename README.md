@@ -39,7 +39,7 @@ weather need a relay, which keeps every constraint that actually mattered —
 free, no key, no account, no card:
 
 - **Development** — Vite's dev server proxies `/feeds/*`. No extra process.
-- **Production** — `functions/feeds/[[path]].ts`, a Cloudflare Pages Function.
+- **Production** — `api/feeds.ts`, a Vercel Function (the `/feeds/*` rewrite is in `vercel.json`).
   Deploy it beside the static build. Mind the platform's free allowance
   (100,000 function requests a day): a visitor polls traffic every few seconds,
   so a busy site outgrows it — see "Going live" in `THIRD_PARTY_NOTICES.md`.
@@ -160,7 +160,7 @@ user is told about it, and the frame-by-frame continuity of a drawn aircraft
 across a position update. Each of those was a real complaint first, and each
 test fails against the code that caused it.
 
-The relay is covered too (`functions/feeds/relay.test.ts`): it is the only code
+The relay is covered too (`api/feeds.test.ts`): it is the only code
 in this project a stranger can reach, so its allowlist is proved rather than
 asserted — path traversal, host smuggling, link-local addresses, and error
 messages that describe the infrastructure.

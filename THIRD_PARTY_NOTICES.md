@@ -33,7 +33,7 @@ The application code is MIT (`LICENSE`). Everything below is somebody else's.
 | [Wikimedia Commons](https://commons.wikimedia.org) API | aircraft photos | per file; the app keeps only CC BY, CC BY-SA, CC0, public domain | ✅ for those | author + licence + link shown on every photo (`AircraftPhoto.svelte`) |
 
 All of it is reached keyless. Only adsb.lol and MET Norway go through the
-project's relay (`functions/feeds`); the rest is called from the visitor's
+project's relay (`api/feeds.ts`); the rest is called from the visitor's
 browser.
 
 ## 2. Data shipped inside the app
@@ -106,12 +106,13 @@ No fonts are loaded: the interface uses the visitor's system fonts.
 Nothing here is a licence problem; these are the places where "free" has a
 limit, so they should not come as a surprise.
 
-1. **The relay is the scaling limit.** Cloudflare Pages Functions on the free
-   plan allow 100,000 invocations a day. One visitor polls traffic every ~3 s,
-   so a few busy visitors use that up. Options, in order of effort: raise
-   `minIntervalMs` in `src/data/adsb/providers.ts`; self-host the relay on a
-   free VM; or move to a paid plan once the site earns money. The static site
-   itself is unmetered.
+1. **The relay is the scaling limit.** Vercel Functions on the free (Hobby)
+   plan have a monthly quota of invocations and of bandwidth. One visitor
+   polls traffic every ~3 s, so a few busy visitors use it up. Options, in
+   order of effort: raise `minIntervalMs` in `src/data/adsb/providers.ts`;
+   self-host the relay on a free VM; or move to a paid plan. The Hobby plan is
+   also reserved by Vercel for personal, non-commercial use: once the site
+   earns money it has to move to Pro (or another host).
 2. **adsb.lol is one volunteer-run service, with no SLA**, and it is the only
    traffic feed left: OpenSky, adsb.fi and airplanes.live are non-commercial.
    If it throttles or changes terms the map empties. Mitigation worth doing
