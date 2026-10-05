@@ -228,7 +228,9 @@ export async function GET(request: Request): Promise<Response> {
       'Content-Type': safeContentType(upstream.headers.get('Content-Type')),
       // `s-maxage` is the CDN's: concurrent identical requests from every
       // visitor collapse into one upstream call.
-      'Cache-Control': `public, max-age=${ttl}, s-maxage=${ttl}`,
+      // Only a success is cached: a 429 or 503 stored for ten minutes would
+      // keep an outage alive long after the upstream recovered.
+      'Cache-Control': upstream.ok ? `public, max-age=${ttl}, s-maxage=${ttl}` : 'no-store',
     });
 
     return new Response(upstream.body, { status: upstream.status, headers });

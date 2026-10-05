@@ -237,6 +237,16 @@ describe('what comes back', () => {
     expect(JSON.stringify(body)).not.toContain('relay-edge');
   });
 
+  it('caches a success but never an upstream error', async () => {
+    const ok = await GET(contextFor(['adsb-lol', 'v2', 'hex', '4ca7b5']));
+    expect(ok.headers.get('Cache-Control')).toContain('s-maxage');
+
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('{}', { status: 429 })));
+    const limited = await GET(contextFor(['metno', 'weatherapi', 'locationforecast', '2.0', 'complete'], '?lat=1&lon=2'));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Cache-Control')).toBe('no-store');
+  });
+
   it('answers only GET', async () => {
     expect(OPTIONS().status).toBe(405);
     expect(POST().status).toBe(405);
