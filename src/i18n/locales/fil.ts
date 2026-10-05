@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Wika',
   'lang.title': 'Palitan ang wika',
   'lang.search': 'Maghanap ng wika',
+  'search.label': 'Maghanap',
+  'search.city': 'Lungsod',
+  'search.model': 'Eroplano',
+  'search.cityHint': 'Lungsod o paliparan…',
+  'search.modelHint': 'Modelo: A380, 737…',
+  'search.none': 'Walang tugma',
   'lang.none': 'Walang tugmang wika',
 
   'landing.sections': 'Mga seksyon',

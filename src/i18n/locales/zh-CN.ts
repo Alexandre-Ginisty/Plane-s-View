@@ -14,6 +14,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': '语言',
   'lang.title': '切换语言',
   'lang.search': '搜索语言',
+  'search.label': '搜索',
+  'search.city': '城市',
+  'search.model': '机型',
+  'search.cityHint': '城市或机场…',
+  'search.modelHint': '机型：A380、737…',
+  'search.none': '无匹配项',
   'lang.none': '没有匹配的语言',
 
   'landing.sections': '章节',

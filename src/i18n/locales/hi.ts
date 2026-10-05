@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'भाषा',
   'lang.title': 'भाषा बदलें',
   'lang.search': 'भाषा खोजें',
+  'search.label': 'खोजें',
+  'search.city': 'शहर',
+  'search.model': 'विमान',
+  'search.cityHint': 'शहर या हवाई अड्डा…',
+  'search.modelHint': 'मॉडल: A380, 737…',
+  'search.none': 'कोई परिणाम नहीं',
   'lang.none': 'कोई भाषा नहीं मिली',
 
   'landing.sections': 'खंड',

@@ -77,7 +77,7 @@ const CACHE_SECONDS: Record<string, number> = {
  */
 const NUM = String.raw`-?\d{1,3}(?:\.\d{1,6})?`;
 const HEX = '~?[0-9a-f]{6}';
-const READSB = new RegExp(`^v2/(?:point/${NUM}/${NUM}/\\d{1,3}|hex/${HEX})$`, 'i');
+const READSB = new RegExp(`^v2/(?:point/${NUM}/${NUM}/\\d{1,3}|hex/${HEX}|type/[0-9a-z]{2,4})$`, 'i');
 const ROUTES: Record<string, { path: RegExp; query: readonly string[] }> = {
   'adsb-lol': { path: READSB, query: [] },
   'adsb-fi': { path: new RegExp(`^api/v2/(?:lat/${NUM}/lon/${NUM}/dist/\\d{1,3}|hex/${HEX})/?$`, 'i'), query: [] },

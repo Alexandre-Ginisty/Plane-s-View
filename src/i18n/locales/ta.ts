@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'மொழி',
   'lang.title': 'மொழியை மாற்று',
   'lang.search': 'மொழியைத் தேடு',
+  'search.label': 'தேடல்',
+  'search.city': 'நகரம்',
+  'search.model': 'விமானம்',
+  'search.cityHint': 'நகரம் அல்லது விமான நிலையம்…',
+  'search.modelHint': 'மாடல்: A380, 737…',
+  'search.none': 'முடிவுகள் இல்லை',
   'lang.none': 'பொருந்தும் மொழி இல்லை',
 
   'landing.sections': 'பிரிவுகள்',

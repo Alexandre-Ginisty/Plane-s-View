@@ -38,6 +38,12 @@ export default {
   'lang.label': 'Language',
   'lang.title': 'Change the language',
   'lang.search': 'Search a language',
+  'search.label': 'Search',
+  'search.city': 'City',
+  'search.model': 'Aircraft',
+  'search.cityHint': 'City or airport…',
+  'search.modelHint': 'Model: A380, 737…',
+  'search.none': 'No match',
   'lang.none': 'No language matches',
 
   // -- Home page (landing) ---------------------------------------------------

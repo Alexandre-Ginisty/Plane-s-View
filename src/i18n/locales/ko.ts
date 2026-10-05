@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': '언어',
   'lang.title': '언어 변경',
   'lang.search': '언어 검색',
+  'search.label': '검색',
+  'search.city': '도시',
+  'search.model': '항공기',
+  'search.cityHint': '도시 또는 공항…',
+  'search.modelHint': '기종: A380, 737…',
+  'search.none': '결과 없음',
   'lang.none': '일치하는 언어가 없습니다',
 
   'landing.sections': '섹션',

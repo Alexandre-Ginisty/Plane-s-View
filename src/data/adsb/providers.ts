@@ -46,6 +46,8 @@ export interface AdsbProvider {
   fetchTraffic(query: TrafficQuery, signal?: AbortSignal): Promise<ProviderResult>;
   /** Track one aircraft worldwide, outside the current viewport query. */
   fetchByHex?(hex: string, signal?: AbortSignal): Promise<ProviderResult>;
+  /** Every aircraft of one ICAO type designator, worldwide. */
+  fetchByType?(typeCode: string, signal?: AbortSignal): Promise<ProviderResult>;
 }
 
 const TIMEOUT_MS = 9000;
@@ -64,6 +66,7 @@ function readsbProvider(opts: {
   minIntervalMs?: number;
   pointPath(lat: string, lon: string, radius: number): string;
   hexPath?(hex: string): string;
+  typePath?(typeCode: string): string;
 }): AdsbProvider {
   const maxRadiusNm = opts.maxRadiusNm ?? 250;
 
@@ -118,6 +121,10 @@ function readsbProvider(opts: {
     const hexPath = opts.hexPath;
     provider.fetchByHex = (hex, signal) => run(hexPath(hex), signal);
   }
+  if (opts.typePath) {
+    const typePath = opts.typePath;
+    provider.fetchByType = (typeCode, signal) => run(typePath(typeCode), signal);
+  }
 
   return provider;
 }
@@ -133,6 +140,8 @@ const adsbLol = readsbProvider({
   minIntervalMs: 3000,
   pointPath: (lat, lon, r) => `/v2/point/${lat}/${lon}/${r}`,
   hexPath: (hex) => `/v2/hex/${hex}`,
+  // Only adsb.lol answers this one: every aircraft of a type, anywhere.
+  typePath: (typeCode) => `/v2/type/${encodeURIComponent(typeCode.toUpperCase())}`,
 });
 
 const adsbFi = readsbProvider({

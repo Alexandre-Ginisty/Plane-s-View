@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Bahasa',
   'lang.title': 'Tukar bahasa',
   'lang.search': 'Cari bahasa',
+  'search.label': 'Cari',
+  'search.city': 'Bandar',
+  'search.model': 'Pesawat',
+  'search.cityHint': 'Bandar atau lapangan terbang…',
+  'search.modelHint': 'Model: A380, 737…',
+  'search.none': 'Tiada padanan',
   'lang.none': 'Tiada bahasa yang sepadan',
 
   'landing.sections': 'Bahagian',

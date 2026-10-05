@@ -84,3 +84,39 @@ export function typeName(code: string | null | undefined): string | null {
   if (!code) return null;
   return NAMES[code.trim().toUpperCase()] ?? null;
 }
+
+export interface TypeChoice {
+  /** ICAO type designator, the way the feed spells it. */
+  code: string;
+  name: string;
+}
+
+const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * The models that match what has been typed, best first: by designator
+ * ("A388"), or by any part of the name people say ("a380", "737", "king air").
+ * Whole designator, then start of designator, then start of the name, then
+ * start of a later word; between equals the table's own order, which lists the
+ * airliners first.
+ */
+export function searchTypes(query: string, limit = 8): TypeChoice[] {
+  const q = fold(query).trim();
+  if (q.length < 1) return [];
+  const scored: { choice: TypeChoice; score: number; at: number }[] = [];
+  let at = 0;
+  for (const [code, name] of Object.entries(NAMES)) {
+    at++;
+    const c = code.toLowerCase();
+    const n = fold(name);
+    let score = 0;
+    if (c === q) score = 100;
+    else if (c.startsWith(q)) score = 80;
+    else if (n.startsWith(q)) score = 70;
+    else if (new RegExp(`(^|[\\s\\-/(])${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(n)) score = 55;
+    else if (q.length >= 3 && n.includes(q)) score = 30;
+    if (score > 0) scored.push({ choice: { code, name }, score, at });
+  }
+  scored.sort((a, b) => b.score - a.score || a.at - b.at);
+  return scored.slice(0, limit).map((s) => s.choice);
+}

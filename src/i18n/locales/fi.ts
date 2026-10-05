@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Kieli',
   'lang.title': 'Vaihda kieltä',
   'lang.search': 'Hae kieltä',
+  'search.label': 'Haku',
+  'search.city': 'Kaupunki',
+  'search.model': 'Lentokone',
+  'search.cityHint': 'Kaupunki tai lentokenttä…',
+  'search.modelHint': 'Malli: A380, 737…',
+  'search.none': 'Ei tuloksia',
   'lang.none': 'Ei vastaavaa kieltä',
 
   'landing.sections': 'Osiot',

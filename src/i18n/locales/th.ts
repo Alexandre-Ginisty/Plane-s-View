@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'ภาษา',
   'lang.title': 'เปลี่ยนภาษา',
   'lang.search': 'ค้นหาภาษา',
+  'search.label': 'ค้นหา',
+  'search.city': 'เมือง',
+  'search.model': 'เครื่องบิน',
+  'search.cityHint': 'เมืองหรือสนามบิน…',
+  'search.modelHint': 'รุ่น: A380, 737…',
+  'search.none': 'ไม่พบผลลัพธ์',
   'lang.none': 'ไม่พบภาษาที่ตรงกัน',
 
   'landing.sections': 'ส่วนต่าง ๆ',

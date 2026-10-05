@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Γλώσσα',
   'lang.title': 'Αλλαγή γλώσσας',
   'lang.search': 'Αναζήτηση γλώσσας',
+  'search.label': 'Αναζήτηση',
+  'search.city': 'Πόλη',
+  'search.model': 'Αεροσκάφος',
+  'search.cityHint': 'Πόλη ή αεροδρόμιο…',
+  'search.modelHint': 'Μοντέλο: A380, 737…',
+  'search.none': 'Κανένα αποτέλεσμα',
   'lang.none': 'Καμία γλώσσα δεν ταιριάζει',
 
   'landing.sections': 'Ενότητες',

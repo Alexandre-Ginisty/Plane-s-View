@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Dil',
   'lang.title': 'Dili değiştir',
   'lang.search': 'Dil ara',
+  'search.label': 'Ara',
+  'search.city': 'Şehir',
+  'search.model': 'Uçak',
+  'search.cityHint': 'Şehir veya havalimanı…',
+  'search.modelHint': 'Model: A380, 737…',
+  'search.none': 'Sonuç yok',
   'lang.none': 'Eşleşen dil yok',
 
   'landing.sections': 'Bölümler',

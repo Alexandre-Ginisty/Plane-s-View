@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Ngôn ngữ',
   'lang.title': 'Đổi ngôn ngữ',
   'lang.search': 'Tìm ngôn ngữ',
+  'search.label': 'Tìm kiếm',
+  'search.city': 'Thành phố',
+  'search.model': 'Máy bay',
+  'search.cityHint': 'Thành phố hoặc sân bay…',
+  'search.modelHint': 'Mẫu: A380, 737…',
+  'search.none': 'Không có kết quả',
   'lang.none': 'Không có ngôn ngữ phù hợp',
 
   'landing.sections': 'Các phần',

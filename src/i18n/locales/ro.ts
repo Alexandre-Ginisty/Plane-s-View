@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Limbă',
   'lang.title': 'Schimbă limba',
   'lang.search': 'Caută o limbă',
+  'search.label': 'Căutare',
+  'search.city': 'Oraș',
+  'search.model': 'Avion',
+  'search.cityHint': 'Oraș sau aeroport…',
+  'search.modelHint': 'Model: A380, 737…',
+  'search.none': 'Niciun rezultat',
   'lang.none': 'Nicio limbă nu se potrivește',
 
   'landing.sections': 'Secțiuni',

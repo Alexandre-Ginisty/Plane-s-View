@@ -452,6 +452,36 @@ export class TrafficClient {
   }
 
   /**
+   * Every aircraft of one ICAO type designator the feeds can see, anywhere in
+   * the world. User-initiated and rare, so it waits out the politeness floor
+   * rather than skipping a provider for being asked a moment ago. Null when no
+   * provider could answer.
+   */
+  async fetchByType(typeCode: string, signal?: AbortSignal): Promise<AircraftState[] | null> {
+    for (const rt of this.chain()) {
+      const { provider, breaker } = rt;
+      if (!provider.enabled || !provider.fetchByType) continue;
+      if (!breaker.allowsRequest(Date.now())) continue;
+      const wait = rt.lastRequestAt + provider.minIntervalMs - Date.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (signal?.aborted) return null;
+      rt.lastRequestAt = Date.now();
+
+      try {
+        const result = await provider.fetchByType(typeCode, signal);
+        breaker.recordSuccess();
+        if (result.hints.length > 0) this.events.onHints?.(result.hints);
+        return result.states;
+      } catch (err) {
+        if (signal?.aborted) return null;
+        if (err instanceof HttpError && err.isRateLimit) breaker.recordRateLimit(err.retryAfterMs);
+        else breaker.recordFailure();
+      }
+    }
+    return null;
+  }
+
+  /**
    * Fetch a single aircraft by ICAO hex, anywhere in the world. Used by POV
    * mode so the followed aircraft keeps updating after it leaves the viewport
    * query circle.

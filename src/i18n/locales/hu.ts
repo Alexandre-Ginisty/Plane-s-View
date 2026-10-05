@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Nyelv',
   'lang.title': 'Nyelv módosítása',
   'lang.search': 'Nyelv keresése',
+  'search.label': 'Keresés',
+  'search.city': 'Város',
+  'search.model': 'Repülő',
+  'search.cityHint': 'Város vagy repülőtér…',
+  'search.modelHint': 'Típus: A380, 737…',
+  'search.none': 'Nincs találat',
   'lang.none': 'Nincs egyező nyelv',
 
   'landing.sections': 'Szakaszok',

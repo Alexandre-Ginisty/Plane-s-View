@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Jezik',
   'lang.title': 'Spremeni jezik',
   'lang.search': 'Poišči jezik',
+  'search.label': 'Iskanje',
+  'search.city': 'Mesto',
+  'search.model': 'Letalo',
+  'search.cityHint': 'Mesto ali letališče…',
+  'search.modelHint': 'Model: A380, 737…',
+  'search.none': 'Ni zadetkov',
   'lang.none': 'Noben jezik ne ustreza',
 
   'landing.sections': 'Razdelki',

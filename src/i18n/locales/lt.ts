@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Kalba',
   'lang.title': 'Keisti kalbą',
   'lang.search': 'Ieškoti kalbos',
+  'search.label': 'Paieška',
+  'search.city': 'Miestas',
+  'search.model': 'Lėktuvas',
+  'search.cityHint': 'Miestas ar oro uostas…',
+  'search.modelHint': 'Modelis: A380, 737…',
+  'search.none': 'Nieko nerasta',
   'lang.none': 'Nė viena kalba neatitinka',
 
   'landing.sections': 'Skyriai',

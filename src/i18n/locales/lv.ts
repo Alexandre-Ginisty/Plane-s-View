@@ -16,6 +16,12 @@ const messages: Record<keyof typeof en, string> = {
   'lang.label': 'Valoda',
   'lang.title': 'Mainīt valodu',
   'lang.search': 'Meklēt valodu',
+  'search.label': 'Meklēšana',
+  'search.city': 'Pilsēta',
+  'search.model': 'Lidmašīna',
+  'search.cityHint': 'Pilsēta vai lidosta…',
+  'search.modelHint': 'Modelis: A380, 737…',
+  'search.none': 'Nekas nav atrasts',
   'lang.none': 'Neviena valoda neatbilst',
 
   'landing.sections': 'Sadaļas',

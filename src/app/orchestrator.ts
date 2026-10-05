@@ -54,6 +54,9 @@ import { FALLBACK_VIEW, initialView } from './geolocate';
 import { PovSession } from './povSession';
 import { findRandomAircraft, type ShuffleResult } from './shuffle';
 import { acceptsForCatch, pickNearby, type CatchKind } from './catch';
+import { pickOfType } from './typeSearch';
+import { typeName } from '@/data/meta/typeNames';
+import type { PlaceResult } from '@/data/places/search';
 import { clearSelection, loadSelection } from './selection';
 import { createSurfaces } from './surfaces';
 import { updateSunlight } from './sunlight';
@@ -875,6 +878,53 @@ export class Orchestrator {
       // so this is always *our* flag. Clearing it only on a token match left
       // the button disabled for the rest of the session whenever the user
       // pressed Escape while the search was running.
+      app.shuffling = false;
+    }
+  }
+
+  /**
+   * Put the map over a place the user asked for.
+   *
+   * The traffic query is moved with it, so the aircraft over that city start
+   * loading at once instead of when the map's own move settles.
+   */
+  goToPlace(place: PlaceResult): void {
+    this.query = { lat: place.lat, lon: place.lon, radiusNm: this.query.radiusNm };
+    this.map?.flyTo(place.lat, place.lon, place.zoom);
+  }
+
+  /**
+   * Step into a random aircraft of exactly this model, wherever it is.
+   *
+   * Same guard as `shuffleAircraft`: the lookup takes a moment, and whichever
+   * of "somewhere else", "catch a landing" and this was asked for last wins.
+   */
+  async flyToType(code: string): Promise<void> {
+    if (app.shuffling) return;
+    app.shuffling = true;
+    const token = ++this.shuffleToken;
+    const what = typeName(code) ?? code;
+
+    try {
+      const found = await this.client.fetchByType(code);
+      if (token !== this.shuffleToken) return;
+      if (found === null) {
+        app.notify(tr('notice.feedUnreachable'), 'warn');
+        return;
+      }
+      const pick = pickOfType(found, { excludeHex: app.selectedHex });
+      if (!pick) {
+        app.notify(tr('notice.noneFound', { what }), 'warn');
+        return;
+      }
+      // As in `shuffleAircraft`: into the track first, the feed pointed at the
+      // new place before anything is selected.
+      this.traffic.ingestOne(pick);
+      this.query = { lat: pick.lat, lon: pick.lon, radiusNm: 80 };
+      void this.select(pick.hex);
+      if (token !== this.shuffleToken) return;
+      this.enterPov();
+    } finally {
       app.shuffling = false;
     }
   }

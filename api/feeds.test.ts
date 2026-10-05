@@ -135,6 +135,7 @@ describe('path handling', () => {
     for (const path of [
       ['adsb-lol', 'v2', 'point', '48.85341', '2.34880', '120'],
       ['adsb-lol', 'v2', 'hex', '~a1b2c3'],
+      ['adsb-lol', 'v2', 'type', 'A388'],
       ['adsb-fi', 'api', 'v2', 'lat', '48.85341', 'lon', '2.34880', 'dist', '120'],
       ['adsb-fi', 'api', 'v2', 'hex', '4ca7b5'],
     ]) {
@@ -148,6 +149,9 @@ describe('path handling', () => {
   it('refuses any other path on an allowed origin', async () => {
     for (const path of [
       ['adsb-lol', 'v2', 'all'],
+      ['adsb-lol', 'v2', 'type', 'a380-800'],
+      ['adsb-lol', 'v2', 'type', 'A388', 'extra'],
+      ['adsb-fi', 'api', 'v2', 'type', 'A388'],
       ['adsb-lol', '..', '..', 'admin'],
       ['adsb-lol', 'https://evil.example/x'],
       ['adsb-lol', 'v2', 'hex', '4ca7b5', 'extra'],

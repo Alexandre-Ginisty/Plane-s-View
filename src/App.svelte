@@ -26,6 +26,7 @@
   import Notices from '@/ui/Notices.svelte';
   import StatusBar from '@/ui/StatusBar.svelte';
   import Icon from '@/ui/Icon.svelte';
+  import SearchBox from '@/ui/SearchBox.svelte';
 
   let mapContainer: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -243,6 +244,13 @@
       case 'F':
         app.cinema = !app.cinema;
         break;
+      case '/':
+        // The search box, from anywhere on the map.
+        if (app.view === 'map') {
+          event.preventDefault();
+          document.getElementById('search-input')?.focus();
+        }
+        break;
       case 'a':
       case 'A':
         app.setAutoCamera(!app.autoCamera);
@@ -452,7 +460,9 @@
           <ThemeToggle compact tool />
         </div>
 
-        <div class="dock actions" style="--i: 2" role="toolbar" aria-label={t('app.goFlying')}>
+        <div class="search-slot" style="--i: 2"><SearchBox {orchestrator} /></div>
+
+        <div class="dock actions" style="--i: 3" role="toolbar" aria-label={t('app.goFlying')}>
           <button
             class="tool"
             disabled={app.shuffling}
@@ -729,6 +739,7 @@
     border-radius: 9px;
   }
 
+  .search-slot { display: contents; }
   .actions { margin-left: auto; }
 
   @media (max-width: 1180px) {
