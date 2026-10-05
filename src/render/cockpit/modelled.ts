@@ -105,20 +105,19 @@ const BY_MODEL: Record<string, Entry> = {
 
 /*
  * Cabins. A stand-in's cabin, like its flight deck, comes with its own
- * airframe about it — and the regional jet's, the one complete, textured
- * cabin FlightGear has, is also seated over the wing of the ATR, the 737-800,
- * the A320 and the MD-11 (see `cockpit.mjs`), so those and their relatives
- * see their own kind of wing and engine out of the window.
+ * airframe about it. The regional 2-2 cabin is drawn in the regional jet's
+ * and in the ATR's, so those and their relatives see their own kind of wing
+ * and engine out of the window.
  * Freighters, whatever the type, get the MD-11F's main deck: rollers, rails
  * and the cargo net, empty between loads.
  */
 const cabin = (file: string, aircraft: string): Entry => ({ file, aircraft, kind: 'airliner', fit: { hud: null, screens: [] } });
-const RJ_CABIN = cabin('crj7-cabin', 'crj7');
-const RJ_IN_ATR = cabin('crj7-cabin', 'at72');
+const RJ_CABIN = cabin('r22-cabin', 'crj7');
+const RJ_IN_ATR = cabin('r22-cabin', 'at72');
 /*
  * Generated cabins (`tools/cabin`), by what the passenger sits in: the
- * single-aisle 3-3, the twin-aisle 2-4-2 and the 3-4-3 of the big twins and
- * the jumbo. Each is drawn in an airframe of its own family, its eye over the
+ * regional 2-2, the single-aisle 3-3, the twin-aisle 2-4-2 and the 3-4-3 of
+ * the big twins and the jumbo. Each is drawn in an airframe of its own family, its eye over the
  * wing there.
  */
 const SINGLE_AISLE_A320 = cabin('n33-cabin', 'a320');

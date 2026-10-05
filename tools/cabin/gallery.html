@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Cabin people gallery</title>
+<style>html,body{margin:0;background:#8aa;overflow:hidden}canvas{display:block}#t{position:fixed;left:8px;top:8px;font:12px monospace;color:#000;background:#fff8;padding:4px}</style>
+</head>
+<body>
+<div id="t"></div>
+<script type="module">
+// Dev viewer: builds the people straight from the generator's modules and shows them with an orbit camera.
+//   /tools/cabin/gallery.html?only=sleeper,kid&yaw=0&pitch=0.1&dist=1.2&detail=2
+import * as THREE from 'three';
+import { MeshSet } from './geometry.mjs';
+import { figure, CHARACTERS, FUNNY, ordinary } from './people.mjs';
+
+const q = new URLSearchParams(location.search);
+const only = q.get('only')?.split(',') ?? [...FUNNY, 'attendant'];
+const detail = Number(q.get('detail') ?? 2);
+const set = new MeshSet();
+const palette = new Map();
+const paint = (rgb, opts = {}) => {
+  const key = rgb.map((c) => Math.round(c * 255)).join(',') + (opts.emissive ? 'e' + opts.emissive.join(',') : '');
+  if (!palette.has(key)) palette.set(key, { rgb, ...opts });
+  return key;
+};
+let seed = Number(q.get('seed') ?? 7);
+const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+
+const spacing = Number(q.get('gap') ?? 0.8);
+only.forEach((name, i) => {
+  const s = name === 'ordinary' ? ordinary(rand) : CHARACTERS[name](rand);
+  if (!s.skin) s.skin = ordinary(rand).skin;
+  const x = (i - (only.length - 1) / 2) * spacing;
+  // A seat to judge them against.
+  const seat = set.get(paint([0.15, 0.3, 0.6]));
+  seat.pillow(x, -0.05, 0, 0.45, 0.1, 0.46, 0.3);
+  seat.pillow(x, 0.38, 0.25, 0.45, 0.8, 0.1, 0.3);
+  figure(set, paint, s, [x, 0, 0], detail, { standing: false });
+});
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfd0d8);
+const group = new THREE.Group();
+for (const [key, mesh] of Object.entries(set.meshes)) {
+  const info = palette.get(key) ?? { rgb: [0.15, 0.3, 0.6] };
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(mesh.pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(mesh.nrm, 3));
+  g.setIndex(mesh.idx);
+  const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(...info.rgb), emissive: new THREE.Color(...(info.emissive ?? [0, 0, 0])) });
+  group.add(new THREE.Mesh(g, m));
+}
+scene.add(group);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x998877, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(-1, 2, -2);
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshLambertMaterial({ color: 0x556070 }));
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.49;
+scene.add(floor);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(Number(q.get('fov') ?? 35), innerWidth / innerHeight, 0.02, 50);
+let yaw = Number(q.get('yaw') ?? 0), pitch = Number(q.get('pitch') ?? 0.1), dist = Number(q.get('dist') ?? 3);
+const target = new THREE.Vector3(Number(q.get('tx') ?? 0), Number(q.get('ty') ?? 0.4), Number(q.get('tz') ?? 0));
+function place() {
+  // yaw 0: in front of the people (on their +Z... no: they face -Z, so the camera sits at -Z to see faces).
+  camera.position.set(target.x + Math.sin(yaw) * Math.cos(pitch) * dist, target.y + Math.sin(pitch) * dist, target.z - Math.cos(yaw) * Math.cos(pitch) * dist);
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+  document.getElementById('t').textContent = `${only.join(' ')} | yaw ${yaw.toFixed(2)} pitch ${pitch.toFixed(2)} dist ${dist.toFixed(2)}`;
+}
+addEventListener('pointermove', (e) => {
+  if (e.buttons) { yaw -= e.movementX * 0.01; pitch = Math.max(-1.4, Math.min(1.4, pitch + e.movementY * 0.01)); place(); }
+});
+addEventListener('wheel', (e) => { dist *= Math.exp(e.deltaY * 0.001); place(); });
+place();
+window.__ready = true;
+let tris = 0; for (const m of Object.values(set.meshes)) tris += m.idx.length / 3;
+window.__stats = { tris, materials: Object.keys(set.meshes).length };
+</script>
+</body>
+</html>
