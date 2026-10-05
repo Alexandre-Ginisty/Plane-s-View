@@ -29,7 +29,7 @@ export const SEAT_W = 0.45;
 export const SEAT_DEPTH = 0.46;
 export const WINDOW_PITCH = 0.508;
 /** Rows drawn ahead of and behind the eye's own. */
-export const ROWS_EACH_WAY = 9;
+export const ROWS_EACH_WAY = 7;
 
 export function rng(seed) {
   let s = seed >>> 0;

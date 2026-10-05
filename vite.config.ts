@@ -1,7 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath, URL } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import type { Plugin } from 'vite';
 import relayTargets from './relay-targets.json' with { type: 'json' };
 
 /**
@@ -49,11 +51,48 @@ const feedProxy = Object.fromEntries(
   ]),
 );
 
+
+/**
+ * The model files, gzipped once at build time.
+ *
+ * Left alone, a host compresses a `.pvm` the first time each edge location is
+ * asked for it — Brotli at a high level, on a few megabytes — and that first
+ * visitor waits several seconds for a cockpit that is already a few hundred
+ * milliseconds of transfer. A file that is already a `.gz` is served as it is,
+ * the browser unpacks it itself (see `fetchModel`), and the raw copies, which
+ * were more than half of what a deployment uploaded, are not shipped at all.
+ * Development serves the raw files.
+ */
+function packModels(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'planesview-pack-models',
+    apply: 'build',
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    closeBundle() {
+      const dir = new URL(`./${outDir}/models/`, import.meta.url);
+      let names: string[] = [];
+      try {
+        names = readdirSync(dir).filter((n) => n.endsWith('.pvm'));
+      } catch {
+        return;
+      }
+      for (const name of names) {
+        const file = new URL(name, dir);
+        writeFileSync(new URL(`${name}.gz`, dir), gzipSync(readFileSync(file), { level: 9 }));
+        rmSync(file);
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   // Relative base so the build works unchanged on GitHub Pages project sites,
   // Cloudflare Pages and Vercel without env-specific configuration.
   base: './',
-  plugins: [svelte()],
+  plugins: [svelte(), packModels()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

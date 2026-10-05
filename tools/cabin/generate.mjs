@@ -247,7 +247,7 @@ function packModel(id, cls, meshes) {
     shellEye: Object.values(shellEyes)[0],
     displays: [],
     // Out of the window and a little down, at the wing and the ground.
-    look: { yaw: 1.68, pitch: -0.26 },
+    look: { yaw: 0.5, pitch: -0.06 },
     shellEyes,
     parts,
   };

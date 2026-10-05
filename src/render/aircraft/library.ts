@@ -178,11 +178,32 @@ function loadTexture(name: string): Promise<Texture | null> {
   });
 }
 
+/**
+ * A model's bytes. The build ships each `.pvm` gzipped as `.pvm.gz` (see
+ * `packModels` in `vite.config.ts`) so that no host has to compress several
+ * megabytes while a visitor waits; the browser unpacks it here. Development
+ * serves the raw file. A browser without `DecompressionStream` keeps the
+ * procedural model, as it does for any model that will not load.
+ */
+async function fetchPacked(id: string): Promise<ArrayBuffer | null> {
+  if (import.meta.env.PROD) {
+    const response = await fetch(`${BASE}/${id}.pvm.gz`);
+    if (!response.ok) return null;
+    const bytes = await response.arrayBuffer();
+    // Some hosts label a `.gz` as `Content-Encoding: gzip`, and the browser has
+    // then unpacked it already: what is in hand says which.
+    const packed = new Uint8Array(bytes, 0, 2);
+    if (packed[0] !== 0x1f || packed[1] !== 0x8b) return bytes;
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  const response = await fetch(`${BASE}/${id}.pvm`);
+  return response.ok ? response.arrayBuffer() : null;
+}
+
 async function fetchModel(id: string): Promise<LoadedModel | null> {
   try {
-    const response = await fetch(`${BASE}/${id}.pvm`);
-    if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
+    const buffer = await fetchPacked(id);
+    if (!buffer) return null;
 
     // Textures first: handing `parsePvm` a null map and patching it later
     // means a frame or two of untextured white, which reads as a bug.

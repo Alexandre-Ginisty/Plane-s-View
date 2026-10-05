@@ -114,7 +114,7 @@ function torso(S, M, s, shirt, skin, build, detail, seg) {
   for (const side of [-1, 1]) body.ellipsoid(side * 0.2 * w, 0.5, 0.11, 0.065, 0.065, 0.075, 7);
   if (build > 1.1) body.ellipsoid(0, 0.2, -0.015, 0.18 * w, 0.14, 0.12, seg); // belly
   // Neck skin and a collar.
-  M(skin).ellipsoid(0, 0.595, 0.11, 0.045, 0.06, 0.045, 7);
+  M(skin).ellipsoid(0, 0.615, 0.105, 0.058, 0.085, 0.058, 9);
   // Patterns are on the front, behind the seat for most of the cabin.
   switch (detail >= 1 ? (s.shirt?.kind ?? 'tee') : 'tee') {
     case 'hawaii': {
@@ -145,7 +145,7 @@ function torso(S, M, s, shirt, skin, build, detail, seg) {
       for (let i = 0; i < 5; i++) {
         const y = 0.13 + i * 0.1;
         const k = slice(y) * 1.02;
-        M(WHITE).ellipsoid(0, y, 0.1, 0.2 * w * k, 0.024, rz * k, 9);
+        M(s.shirt.band ?? shade(shirt, 0.78)).ellipsoid(0, y, 0.1, 0.2 * w * k * 1.012, 0.042, rz * k * 1.012, 12);
       }
       break;
     }
@@ -264,15 +264,20 @@ function legs(S, M, s, pants, build, standing) {
 function neckAndHead(S, M, s, skin, hairRgb, detail, seg) {
   S.within(() => {
     const h = s.head ?? {};
-    S.xf.translate(0, 0.7 + (h.dy ?? 0), 0.1 + (h.dz ?? 0));
+    S.xf.translate(0, 0.725 + (h.dy ?? 0), 0.1 + (h.dz ?? 0));
     S.xf.rotateY(h.yaw ?? 0);
     S.xf.rotateX(h.pitch ?? 0);
     S.xf.rotateZ(h.roll ?? 0);
-    const size = s.headSize ?? 1.08;
+    const size = s.headSize ?? 1.3;
     S.xf.scale(size, size, size);
+    // A head is what the eye goes to, and from the window seat it is mostly the
+    // back of one, a metre away: finer than the body under it at every distance.
+    const quality = S.xf.quality;
+    S.xf.quality = Math.max(quality, detail >= 2 ? 1.7 : detail >= 1 ? 1.4 : 1.15);
     headShape(S, M, s, skin, detail, seg);
     hair(S, M, s, hairRgb, skin);
     gear(S, M, s, hairRgb, skin, detail);
+    S.xf.quality = quality;
   });
 }
 
@@ -282,7 +287,10 @@ function headShape(S, M, s, skin, detail, seg) {
   // From behind, a skull is all there is: no jaw, no ears to add up over a cabin of them.
   if (detail < 0.5) return;
   k.ellipsoid(0, -0.04, -0.012, 0.084, 0.07, 0.088, seg);
-  for (const side of [-1, 1]) k.ellipsoid(side * 0.097, -0.004, 0.012, 0.011, 0.03, 0.02, 6);
+  for (const side of [-1, 1]) {
+    k.ellipsoid(side * 0.099, -0.004, 0.014, 0.013, 0.034, 0.024, 8);
+    M(shade(skin, 0.86)).ellipsoid(side * 0.104, -0.004, 0.012, 0.006, 0.02, 0.014, 6);
+  }
   if (s.faceHidden) return;
   face(S, M, s, skin, detail);
 }
@@ -318,6 +326,10 @@ function face(S, M, s, skin, detail) {
     const gy = gaze[1] * 0.007 * eyeScale;
     iris.ellipsoid(side * ex + gx + (f.eyes === 'cross' ? -side * 0.009 : 0), ey + gy, ez - 0.0125, 0.0125 * eyeScale, 0.0145 * eyeScale, 0.006, es - 2);
     pupil.ellipsoid(side * ex + gx + (f.eyes === 'cross' ? -side * 0.009 : 0), ey + gy, ez - 0.0165, 0.0068 * eyeScale, 0.0078 * eyeScale, 0.004, es - 4);
+    // A catch-light: the difference between a doll and somebody home.
+    if (detail >= 1 && f.eyes !== 'cross') {
+      white.ellipsoid(side * ex + gx + 0.0045 * eyeScale, ey + gy + 0.0055 * eyeScale, ez - 0.0185, 0.0036 * eyeScale, 0.0036 * eyeScale, 0.003, 6);
+    }
     if (half) {
       // A heavy lid over the top half.
       M(shade(skin, 0.94)).ellipsoid(side * ex, ey + 0.012 * eyeScale, ez - 0.004, 0.0245, 0.016, 0.015, 7);
@@ -424,15 +436,15 @@ function face(S, M, s, skin, detail) {
     d.ellipsoid(-0.075, 0.03, -0.06, 0.008, 0.015, 0.008, 6);
   }
   if (f.freckles) {
-    const fr = M(shade(skin, 0.7));
-    for (let i = 0; i < 8; i++) fr.ellipsoid((i % 2 ? 1 : -1) * (0.03 + (i % 3) * 0.012), -0.012 + (i % 4) * 0.005, -0.094, 0.0045, 0.0045, 0.003, 4);
+    const fr = M(shade(skin, 0.84));
+    for (let i = 0; i < 8; i++) fr.ellipsoid((i % 2 ? 1 : -1) * (0.034 + (i % 3) * 0.013), -0.032 + (i % 4) * 0.004, -0.091 + (i % 3) * 0.003, 0.0042, 0.0042, 0.003, 4);
   }
 }
 
 function hair(S, M, s, rgb, skin) {
   const style = s.hair?.style ?? 'short';
   const h = M(rgb);
-  const cap = (dy = 0.04, dz = 0.03, k = 1) => h.ellipsoid(0, dy, dz, 0.103 * k, 0.093 * k, 0.1 * k, 10);
+  const cap = (dy = 0.04, dz = 0.03, k = 1) => h.ellipsoid(0, dy, dz, 0.103 * k, 0.093 * k, 0.1 * k, 12);
   switch (style) {
     case 'bald':
       for (const side of [-1, 1]) h.ellipsoid(side * 0.088, 0.0, 0.04, 0.016, 0.045, 0.05, 6);
