@@ -107,9 +107,9 @@ export function placeCamera(
         .multiplyScalar(orbitDistance);
 
       out.position.copy(anchor).add(offset);
-      // The vertical is tipped along with the camera. Held at the local up it
-      // would flip the picture the moment the camera went over the top; tipped
-      // with it, the orbit simply carries on, upside down and round again.
+      // The vertical is tipped along with the camera, so the picture stays
+      // upright and steady right up to the elevation limit (see `wrapAngle`
+      // in `./index`), where the local up would be nearly along the view.
       out.up
         .set(0, 0, 0)
         .addScaledVector(frame.localUp, cp)

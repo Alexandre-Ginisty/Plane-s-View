@@ -468,66 +468,87 @@ describe('no limit on turning the view', () => {
     expect(Math.abs(pov.state.lookYaw)).toBeLessThanOrEqual(Math.PI);
   });
 
-  it('goes over the top in the cockpit without the picture flipping', () => {
+  const localUpOf = (s: SampledAircraft): Vector3 => new Vector3(...geodeticToEcef(s.lat, s.lon, 0)).normalize();
+  const position = (camera: PerspectiveCamera, origin: { current: readonly number[] }): Vector3 =>
+    camera.position.clone().add(new Vector3(origin.current[0], origin.current[1], origin.current[2]));
+
+  /*
+   * Over the top used to carry on, upside down — and from there every sideways
+   * drag went the wrong way. The view now stops just short of overhead and
+   * underneath, upright all the way, and the hand keeps its meaning.
+   */
+  it('looks almost straight up in the cockpit, never upside down', () => {
     const { pov, camera } = rig();
     const s = aircraft({ pitchDeg: 0 });
     pov.setMode('cockpit');
     for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
 
     let steepest = 0;
-    let previousUp = upOf(camera);
-    let biggestJump = 0;
     for (let i = 0; i < 80; i++) {
       pov.applyDrag(0, -20);
       pov.update(camera, s, 1 / 60);
-      steepest = Math.max(steepest, forwardOf(camera).dot(new Vector3(...geodeticToEcef(s.lat, s.lon, 0)).normalize()));
-      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
-      previousUp = upOf(camera);
+      steepest = Math.max(steepest, forwardOf(camera).dot(localUpOf(s)));
+      expect(upOf(camera).dot(localUpOf(s))).toBeGreaterThan(0);
     }
-    // Looked straight up and well past it, in steps no bigger than the drag.
     expect(steepest).toBeGreaterThan(0.99);
-    expect(biggestJump).toBeLessThan(0.6);
+
+    // Still the right way round: a drag to the right turns the view right.
+    const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const before = forwardOf(camera);
+    pov.applyDrag(60, 0);
+    pov.update(camera, s, 1 / 60);
+    expect(forwardOf(camera).sub(before).dot(right)).toBeGreaterThan(0);
   });
 
-  it('keeps the aircraft framed while the chase camera goes over the top', () => {
+  it('takes the chase camera over the aircraft and back without a dead zone', () => {
     const { pov, camera, origin } = rig();
     const s = parked();
     pov.setMode('chase');
     for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
 
-    let previousUp = upOf(camera);
-    let biggestJump = 0;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 120; i++) {
       pov.applyDrag(0, -25);
       pov.update(camera, s, 1 / 60);
       expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
-      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
-      previousUp = upOf(camera);
+      expect(upOf(camera).dot(localUpOf(s))).toBeGreaterThan(-1e-6);
     }
-    expect(Math.abs(pov.state.lookPitch)).toBeLessThanOrEqual(Math.PI);
-    expect(biggestJump).toBeLessThan(0.6);
+    // Looking almost straight down on it.
+    expect(forwardOf(camera).dot(localUpOf(s))).toBeLessThan(-0.99);
+
+    // Pushed far past the limit, the way back starts with the first pixel.
+    const top = position(camera, origin);
+    pov.applyDrag(0, 10);
+    pov.update(camera, s, 1 / 60);
+    expect(position(camera, origin).distanceTo(top)).toBeGreaterThan(0.1);
+
+    // And sideways is still sideways, towards the camera's own right.
+    const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const before = position(camera, origin);
+    pov.applyDrag(80, 0);
+    pov.update(camera, s, 1 / 60);
+    expect(position(camera, origin).sub(before).dot(right)).toBeGreaterThan(0);
   });
 
-  it('goes over the top in the orbit view too', () => {
+  it('sees the orbit from overhead, from underneath and from behind, upright throughout', () => {
     const { pov, camera, origin } = rig();
     const s = parked();
     pov.setMode('orbit');
     for (let i = 0; i < 5; i++) pov.update(camera, s, 1 / 60);
-
-    let highest = -Infinity;
-    let previousUp = upOf(camera);
-    let biggestJump = 0;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 120; i++) {
       pov.applyDrag(0, -25);
       pov.update(camera, s, 1 / 60);
-      expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
-      const height = camera.position.clone().add(new Vector3(...origin.current)).length();
-      highest = Math.max(highest, height);
-      biggestJump = Math.max(biggestJump, upOf(camera).angleTo(previousUp));
-      previousUp = upOf(camera);
+      expect(upOf(camera).dot(localUpOf(s))).toBeGreaterThan(-1e-6);
     }
-    expect(Math.abs(pov.state.orbitPitch)).toBeLessThanOrEqual(Math.PI);
-    expect(biggestJump).toBeLessThan(0.6);
-    expect(highest).toBeGreaterThan(0);
+    expect(forwardOf(camera).dot(localUpOf(s))).toBeLessThan(-0.99);
+
+    for (let i = 0; i < 240; i++) {
+      pov.applyDrag(0, 25);
+      pov.update(camera, s, 1 / 60);
+      expect(subjectOffset(camera, origin, s)).toBeLessThan(0.02);
+      expect(upOf(camera).dot(localUpOf(s))).toBeGreaterThan(-1e-6);
+    }
+    // Underneath: looking almost straight up at it.
+    expect(forwardOf(camera).dot(localUpOf(s))).toBeGreaterThan(0.99);
+    expect(Math.abs(pov.state.orbitPitch)).toBeLessThan(Math.PI / 2);
   });
 });

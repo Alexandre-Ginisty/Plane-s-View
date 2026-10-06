@@ -79,14 +79,26 @@ const LOOK_DRAG_GAIN = 2.2;
  */
 
 /**
- * No view has a limit on how far it turns: the head goes round as often as the
- * hand does, and over the top and upside down. The angles are kept in
- * (-π, π] so that "back to centre" always takes the short way round rather than
- * unwinding every turn that was made.
+ * Round and round, but never upside down.
+ *
+ * Sideways there is no limit: the head and the outside cameras go round as
+ * often as the hand does, kept in (-π, π] so that "back to centre" takes the
+ * short way round. Up and down stop just short of straight overhead and
+ * straight underneath. Letting the camera carry on over the top turned the
+ * picture upside down, and from there every sideways drag went the wrong way
+ * — the aircraft could be seen from anywhere, but only by working out which
+ * way to move the hand. Short of the pole, it can still be seen from directly
+ * above, directly below and from behind, and the hand always means the same
+ * thing.
  */
 function wrapAngle(a: number): number {
   return a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 }
+
+/** How far above or below the horizon an outside camera may go, radians (88°). */
+const ELEVATION_LIMIT = 1.536;
+/** How far up or down the head turns inside, radians (86°). */
+const LOOK_PITCH_LIMIT = 1.5;
 
 /** Cockpit zoom: the narrowest field of view the wheel reaches, degrees. */
 const MIN_FOV_DEG = 16;
@@ -450,7 +462,7 @@ export class PovController {
       case 'orbit': {
         const k = this.radPerPx * ORBIT_DRAG_GAIN;
         this.state.orbitYaw = wrapAngle(this.state.orbitYaw - dx * k);
-        this.state.orbitPitch = wrapAngle(this.state.orbitPitch - vy * k);
+        this.state.orbitPitch = clamp(this.state.orbitPitch - vy * k, -ELEVATION_LIMIT, ELEVATION_LIMIT);
         return;
       }
       case 'cockpit':
@@ -459,13 +471,15 @@ export class PovController {
         // under the cursor under the cursor.
         const k = this.radPerPx * LOOK_DRAG_GAIN * this.zoomScale;
         this.state.lookYaw = wrapAngle(this.state.lookYaw - dx * k);
-        this.state.lookPitch = wrapAngle(this.state.lookPitch - vy * k);
+        this.state.lookPitch = clamp(this.state.lookPitch - vy * k, -LOOK_PITCH_LIMIT, LOOK_PITCH_LIMIT);
         return;
       }
       default: {
         const k = this.radPerPx * ORBIT_DRAG_GAIN * 1.4;
         this.state.lookYaw = wrapAngle(this.state.lookYaw + dx * k);
-        this.state.lookPitch = wrapAngle(this.state.lookPitch + vy * k);
+        // Held short of overhead and underneath in `swingAround`, which knows
+        // where the camera starts from.
+        this.state.lookPitch = clamp(this.state.lookPitch + vy * k, -Math.PI, Math.PI);
       }
     }
   }
@@ -478,11 +492,11 @@ export class PovController {
     this.recentring = false;
     if (this.state.mode === 'orbit') {
       this.state.orbitYaw = wrapAngle(this.state.orbitYaw + dYaw);
-      this.state.orbitPitch = wrapAngle(this.state.orbitPitch + dPitch);
+      this.state.orbitPitch = clamp(this.state.orbitPitch + dPitch, -ELEVATION_LIMIT, ELEVATION_LIMIT);
       return;
     }
     this.state.lookYaw = wrapAngle(this.state.lookYaw + dYaw);
-    this.state.lookPitch = Math.max(-1.45, Math.min(1.45, this.state.lookPitch + dPitch));
+    this.state.lookPitch = clamp(this.state.lookPitch + dPitch, -LOOK_PITCH_LIMIT, LOOK_PITCH_LIMIT);
   }
 
   /**
@@ -697,10 +711,8 @@ export class PovController {
     // only: every other view swings the camera instead (see `swingAround`).
     //
     // Yaw about the vertical, then pitch about the *turned* right-hand axis,
-    // and `up` goes through the same pitch. Both matter without a limit: the
-    // right axis left over from before the yaw tilted the pitch sideways
-    // whenever the head was turned, and a vertical that stayed put flipped the
-    // picture over at straight up instead of letting the head go on over.
+    // and `up` goes through the same pitch: the right axis left over from
+    // before the yaw tilted the pitch sideways whenever the head was turned.
     if (!subjectLocked && (this.state.lookYaw !== 0 || this.state.lookPitch !== 0)) {
       _right.crossVectors(forward, up).normalize();
       _quat.setFromAxisAngle(up, this.state.lookYaw);
@@ -777,8 +789,10 @@ export class PovController {
    * Positive yaw moves the camera to its right and positive pitch moves it
    * down, which is what makes "the camera goes where the hand goes" true.
    *
-   * `up` turns with the camera, so a swing over the top carries on round
-   * instead of the picture flipping at the pole.
+   * The swing stops short of straight above and straight below the aircraft
+   * (see `wrapAngle`): the limit is on where the camera ends up, so the pitch
+   * is held against the height the view starts from, and written back so a
+   * drag pushed past the limit comes straight back off it.
    */
   private swingAround(position: Vector3, up: Vector3, anchor: Vector3, localUp: Vector3): void {
     const { lookYaw, lookPitch } = this.state;
@@ -790,10 +804,15 @@ export class PovController {
       up.applyQuaternion(_quat);
     }
     if (lookPitch !== 0) {
+      const length = offset.length();
+      const elevation = length > 0 ? Math.asin(clamp(offset.dot(localUp) / length, -1, 1)) : 0;
+      // Positive pitch lowers the camera: it ends at `elevation - pitch`.
+      const pitch = clamp(lookPitch, elevation - ELEVATION_LIMIT, elevation + ELEVATION_LIMIT);
+      this.state.lookPitch = pitch;
       // The camera's right: forward (towards the anchor) crossed with up.
       _swingAxis.copy(offset).negate().cross(localUp);
       if (_swingAxis.lengthSq() > 1e-9) {
-        _quat.setFromAxisAngle(_swingAxis.normalize(), lookPitch);
+        _quat.setFromAxisAngle(_swingAxis.normalize(), pitch);
         offset.applyQuaternion(_quat);
         up.applyQuaternion(_quat);
       }
