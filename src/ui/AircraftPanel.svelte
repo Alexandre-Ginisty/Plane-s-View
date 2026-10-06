@@ -39,7 +39,6 @@
     <div class="actions">
       <button class="chip primary enter" onclick={() => orchestrator.enterPov()}>
         {t('panel.stepInside')}
-        <span class="kbd">↵</span>
       </button>
       <button class="chip share" onclick={() => void shareView()} title={t('share.title')} aria-label={t('share.button')}>
         <Icon name="share" size={15} />
@@ -106,7 +105,6 @@
   }
   .enter:hover { filter: brightness(1.15); }
 
-  .enter .kbd { font-size: 11px; padding: 1px 6px; color: inherit; border-color: currentColor; }
 
   /*
    * A phone: a sheet along the bottom, so the aircraft stays visible on the

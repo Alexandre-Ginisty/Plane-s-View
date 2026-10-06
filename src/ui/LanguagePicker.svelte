@@ -7,7 +7,9 @@
   switches the whole site at once, and the choice is remembered.
 
   Used on the front page and in the map toolbar, so the language can be changed
-  from either; `tool` styles it as a plain button inside a dock.
+  from either; `tool` styles it as a plain button inside a dock, and `bare`
+  leaves the button out altogether, for a dock that has its own: the list then
+  opens and closes through `open`.
 -->
 <script lang="ts">
   import { tick } from 'svelte';
@@ -15,9 +17,8 @@
   import { LOCALES, localeInfo } from '@/i18n/locales';
   import Icon from '@/ui/Icon.svelte';
 
-  let { tool = false }: { tool?: boolean } = $props();
+  let { tool = false, bare = false, open = $bindable(false) }: { tool?: boolean; bare?: boolean; open?: boolean } = $props();
 
-  let open = $state(false);
   let query = $state('');
   let root: HTMLDivElement;
   let search: HTMLInputElement | undefined = $state();
@@ -58,14 +59,24 @@
   }
 
   function onOutside(event: PointerEvent): void {
-    if (open && !root.contains(event.target as Node)) open = false;
+    const target = event.target as Element | null;
+    // The dock's own language button toggles the list itself.
+    if (open && !root.contains(target) && !target?.closest?.('[data-dock-item="language"]')) open = false;
   }
+
+  // Opened from outside: the search box takes the keyboard, as it does from the trigger.
+  $effect(() => {
+    if (bare && open) {
+      query = '';
+      if (!matchMedia('(pointer: coarse)').matches) void tick().then(() => search?.focus({ preventScroll: true }));
+    }
+  });
 </script>
 
 <svelte:window onpointerdown={onOutside} onkeydown={onKeydown} />
 
-<div class="lang-picker" class:tool bind:this={root}>
-  <button
+<div class="lang-picker" class:tool class:bare bind:this={root}>
+  {#if !bare}<button
     class="trigger"
     onclick={toggle}
     aria-haspopup="true"
@@ -75,7 +86,7 @@
   >
     <Icon name="globe" size={15} />
     <span class="name" lang={current.code}>{current.native}</span>
-  </button>
+  </button>{/if}
 
   {#if open}
     <div class="menu" role="dialog" aria-label={t('lang.label')}>

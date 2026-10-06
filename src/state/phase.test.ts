@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PhaseTracker, classifyPhase, secondsToTouchdown, type PhaseInput } from './phase';
+import { PhaseTracker, TouchdownClock, classifyPhase, secondsToTouchdown, type PhaseInput } from './phase';
 
 const input = (over: Partial<PhaseInput>): PhaseInput => ({
   onGround: false,
@@ -46,12 +46,41 @@ describe('classifyPhase', () => {
 });
 
 describe('secondsToTouchdown', () => {
-  it('divides height by sink rate', () => {
-    expect(secondsToTouchdown(input({ verticalRateFpm: -600, aglFt: 1_000 }))).toBeCloseTo(100);
+  it('flies the height down a 3° path at the ground speed', () => {
+    // 1 000 ft above the runway is 3.2 nm out on a 3° path: 81 s at 140 kt.
+    expect(secondsToTouchdown(input({ verticalRateFpm: -700, groundSpeedKt: 140, aglFt: 1_000 }))).toBeCloseTo(80.75, 1);
   });
-  it('has no answer when climbing, level or high', () => {
+  it('does not move with a noisy sink rate', () => {
+    const a = secondsToTouchdown(input({ verticalRateFpm: -500, groundSpeedKt: 140, aglFt: 1_000 }));
+    const b = secondsToTouchdown(input({ verticalRateFpm: -1_000, groundSpeedKt: 140, aglFt: 1_000 }));
+    expect(a).toBe(b);
+  });
+  it('has no answer when climbing or high', () => {
     expect(secondsToTouchdown(input({ verticalRateFpm: 600, aglFt: 1_000 }))).toBeNull();
     expect(secondsToTouchdown(input({ verticalRateFpm: -600, aglFt: 20_000 }))).toBeNull();
+  });
+});
+
+describe('TouchdownClock', () => {
+  it('counts down one second a second, never up, through noisy estimates', () => {
+    const clock = new TouchdownClock();
+    let agl = 1_000;
+    let last = Infinity;
+    for (let i = 0; i < 400; i++) {
+      // 140 kt down 3°, with ±60 kt of noise in ground speed and ±40 ft in height.
+      agl -= (140 * 1.68781 * Math.tan(Math.PI / 60)) * 0.1;
+      const noisyAgl = agl + Math.sin(i * 1.7) * 40;
+      const gs = 140 + Math.sin(i * 0.9) * 8;
+      const shown = clock.update(input({ verticalRateFpm: -700, groundSpeedKt: gs, aglFt: noisyAgl }), 'final', 0.1);
+      if (shown === null) break;
+      expect(shown).toBeLessThanOrEqual(last + 1e-9);
+      last = shown;
+    }
+  });
+  it('is gone in the flare and when not on an approach', () => {
+    const clock = new TouchdownClock();
+    expect(clock.update(input({ verticalRateFpm: -700, groundSpeedKt: 140, aglFt: 30 }), 'final', 0.1)).toBeNull();
+    expect(clock.update(input({ verticalRateFpm: -700, groundSpeedKt: 140, aglFt: 800 }), 'cruise', 0.1)).toBeNull();
   });
 });
 

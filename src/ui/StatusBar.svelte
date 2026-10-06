@@ -142,6 +142,9 @@
             {#if linkDetail}<span class="dim">· {linkDetail}</span>{/if}
           </p>
           {#if app.networkProfile}<p class="note">{gradeAdvice(app.networkProfile.grade)}</p>{/if}
+          <button class="counters" class:on={app.showDiagnostics} aria-pressed={app.showDiagnostics} onclick={() => (app.showDiagnostics = !app.showDiagnostics)}>
+            {t('ctl.diagnostics')}
+          </button>
         </section>
 
         <section>
@@ -151,7 +154,8 @@
             {t('status.closeUp')} {#each REGIONAL_LAYERS as layer, i}<a href={layer.attributionUrl} target="_blank" rel="noopener noreferrer" title={layer.attribution}>{layer.label}</a> ({layer.licence}){i < REGIONAL_LAYERS.length - 1 ? ' · ' : ''}{/each}<br />
             <a href={TERRARIUM.attributionUrl} target="_blank" rel="noopener noreferrer">{TERRARIUM.attribution}</a><br />
             {t('status.osm')}<br />
-            {t('status.night')} · {t('status.models')} <a href="./models/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear community (GPL-2.0)</a><br />
+            {t('status.night')} · {t('status.models')} <a href="./models/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear community (GPL-2.0)</a>
+            · {t('status.airports')} <a href="./models/airports/CREDITS.md" target="_blank" rel="noopener noreferrer">FlightGear scenery (GPL-2.0)</a><br />
             {t('status.places')} · {t('status.traffic')} <a href="https://adsb.fi" target="_blank" rel="noopener noreferrer">adsb.fi</a>, <a href="https://adsb.lol" target="_blank" rel="noopener noreferrer">adsb.lol</a> (ODbL)<br />
             {t('status.weather')} <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a> (CC BY 4.0) · {t('status.routes')} · {t('status.photos')}<br />
             {madeBy[0]}{#if SITE.author.portfolio}<a href={SITE.author.portfolio} target="_blank" rel="noopener noreferrer">{SITE.author.name}</a>{:else}{SITE.author.name}{/if}{madeBy[1]}
@@ -262,6 +266,19 @@
   .credits { font-size: 11px; color: var(--text-faint); }
   .credits a, .feeds a { color: inherit; text-decoration: none; }
   .credits a:hover, .feeds a:hover { text-decoration: underline; color: var(--text); }
+
+  .counters {
+    margin-top: 8px;
+    padding: 0;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .counters:hover, .counters.on { color: var(--accent); }
 
   .feeds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
   .feeds li { display: flex; align-items: center; gap: 8px; }

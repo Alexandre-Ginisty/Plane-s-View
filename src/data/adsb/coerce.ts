@@ -62,6 +62,13 @@ export const str = (v: unknown): string | null => {
   return t.length > 0 ? t : null;
 };
 
+/**
+ * A flight identity as broadcast. Mode S encodes an unset character as `@`
+ * (code 0), and a transponder with no flight number entered sends eight of
+ * them; decoders pass that through as `"@@@@@@@@"`. Those are no callsign.
+ */
+export const callsign = (v: unknown): string | null => str(typeof v === 'string' ? v.replace(/@/g, ' ') : v);
+
 /** `"none"` is readsb's way of saying "no emergency", which is not a value. */
 export const emergencyOrNull = (v: unknown): string | null => {
   const s = str(v);

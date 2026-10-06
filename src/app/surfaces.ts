@@ -10,6 +10,7 @@
 
 import type { FloatingOrigin } from '@/core/frame';
 import { networkMonitor } from '@/net/quality';
+import { AirportModels } from '@/render/airports';
 import { Engine } from '@/render/engine';
 import { deviceBudget } from '@/render/deviceBudget';
 import { Globe } from '@/render/globe';
@@ -27,6 +28,7 @@ export interface Surfaces {
   pov: PovController;
   pins3d: Pins3D;
   overlay: ViewOverlay;
+  airports: AirportModels;
 }
 
 export function createSurfaces(
@@ -104,11 +106,13 @@ export function createSurfaces(
   const pov = new PovController(origin);
   const pins3d = new Pins3D(origin);
   const overlay = new ViewOverlay(pinOverlay);
+  const airports = new AirportModels(origin);
 
   engine.scene.add(globe.scene);
   engine.scene.add(traffic3d.scene);
   engine.scene.add(ownAircraft.scene);
   engine.scene.add(pins3d.scene);
+  engine.scene.add(airports.scene);
 
-  return { engine, globe, traffic3d, ownAircraft, pov, pins3d, overlay };
+  return { engine, globe, traffic3d, ownAircraft, pov, pins3d, overlay, airports };
 }

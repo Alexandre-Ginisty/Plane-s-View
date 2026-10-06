@@ -78,6 +78,26 @@ Models with no licence file upstream (`b742`, `f15`) rest on the FGAddon-wide
 GPL-compatibility rule only. That rule is explicit, but if you want a written
 statement, ask the authors listed in `CREDITS.md`.
 
+The passenger cabin seen from every airliner's window seat (`airliner-cabin`)
+is the ATR 42-500 cabin by Narendran M, from the FGMEMBERS mirror
+(`github.com/FGMEMBERS/ATR-42-500`, GPL-2.0), converted by
+`tools/fgmodel/cockpit.mjs`. Its seat-pocket magazines (scans of real TIME and
+Digit covers), an airline safety-card scan and the airline logos on the
+headrests are **left out**, and the seat-back screens' picture (photographs and
+film posters) is painted over as a switched-off screen: those images were not
+the model authors' to license.
+
+### 3D airport buildings — GPL-2.0
+
+`public/models/airports` holds terminals, piers, towers and hangars from the
+FlightGear scenery database (`scenery.flightgear.org`), converted by
+`tools/airports/build.mjs`. Every model there is GPL-2.0 by its author; the
+authors are listed per airport in `public/models/airports/CREDITS.md` (linked
+from *Sources*), the licence text is `public/models/LICENSE-GPL-2.0.txt`, and
+the corresponding source is the database itself plus the converter. Fences,
+signs, vehicles and parked aircraft are left out. A few façade sheets carry
+painted airline or brand names, as the real buildings do.
+
 **Trademarks are a separate question from copyright.** The 777 and 787 models
 carry airline liveries (logos and colours). Showing an airline's own aircraft in
 its livery to identify it is descriptive, but it is not covered by the GPL;

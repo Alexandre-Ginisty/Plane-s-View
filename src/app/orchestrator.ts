@@ -24,6 +24,7 @@ import { isInterior, type PovController, type CameraGroup, type CameraMode } fro
 import { isFreighter } from '@/data/freighters';
 import type { Traffic3D } from '@/render/traffic3d';
 import type { Pins3D } from '@/render/pins3d';
+import type { AirportModels } from '@/render/airports';
 import type { ViewOverlay } from '@/render/overlay';
 import type { Pin } from '@/state/appStore.svelte';
 import {
@@ -43,10 +44,12 @@ import { SelectionMap } from '@/map2d/map';
 import { flightRegime } from '@/state/regime';
 import {
   PhaseTracker,
-  secondsToTouchdown,
+  TouchdownClock,
   type FlightPhase,
   type PhaseInput,
 } from '@/state/phase';
+import { clearanceFor } from '@/render/ground';
+import { RunwayMotion } from './runwayMotion';
 import { TrafficStore, type SampledAircraft } from '@/state/traffic';
 import type { TrailPoint } from '@/state/track';
 import { fetchFlightTrace } from '@/data/adsb/trace';
@@ -144,6 +147,7 @@ export class Orchestrator {
   private traffic3d: Traffic3D | null = null;
   private ownAircraft: OwnAircraft | null = null;
   private pins3d: Pins3D | null = null;
+  private airports: AirportModels | null = null;
   private overlay: ViewOverlay | null = null;
   /** The labelled aircraft under the pointer in the 3D view, if any. */
   private hoverTraffic: string | null = null;
@@ -194,8 +198,10 @@ export class Orchestrator {
   /** Phase of the aircraft being flown, and which aircraft that is. */
   private readonly phaseTracker = new PhaseTracker();
   private phaseHex: string | null = null;
-  private phaseInput: PhaseInput | null = null;
   private phaseEventId = 0;
+  private readonly touchdownClock = new TouchdownClock();
+  /** The runway's last minute, flown by the book when the feed goes quiet. See `./runwayMotion`. */
+  private readonly runway = new RunwayMotion();
   /** The view the user chose, restored when the auto camera lets go. */
   private userCameraMode: CameraMode = 'cockpit';
   /** The view last chosen inside and outside, for switching between the two. */
@@ -326,6 +332,7 @@ export class Orchestrator {
     this.ownAircraft = surfaces.ownAircraft;
     this.pov = surfaces.pov;
     this.pins3d = surfaces.pins3d;
+    this.airports = surfaces.airports;
     this.overlay = surfaces.overlay;
     /*
      * The globe changes layer by itself when the active provider stops
@@ -408,14 +415,34 @@ export class Orchestrator {
       const step = this.povSession.step(selected, dt);
       flying = step.flying;
 
-      if (step.action === 'exit') {
+      // Low down, a quiet feed is the runway's blind spot, not a lost
+      // aircraft: the landing or the takeoff is flown on by the book.
+      if (flying) {
+        const ground = globe.sampleHeight(flying.lat, flying.lon);
+        const aglFt = Number.isFinite(ground) ? flying.altFt - ground / FEET_TO_METRES : Number.NaN;
+        const runway = this.runway.step(
+          flying,
+          this.phaseTracker.phase,
+          aglFt,
+          (lat, lon) => globe.sampleHeight(lat, lon),
+          pov.airframe ? clearanceFor(pov.airframe) : 3,
+          dt,
+        );
+        flying = runway.flying;
+        if (runway.landed || this.parkedAndQuiet(flying)) {
+          this.arrive();
+          return;
+        }
+      }
+
+      if (step.action === 'exit' && !this.runway.active) {
         app.notify(tr('notice.lostContact'), 'warn');
         this.exitPov();
         return;
       }
       if (!flying) return; // unreachable once 'exit' is handled; narrows the type
 
-      if (step.warn) {
+      if (step.warn && !this.runway.active) {
         app.notify(tr('notice.signalLost'), 'warn', 4000);
       }
 
@@ -454,6 +481,7 @@ export class Orchestrator {
       const groundBusy = this.groundBusySince !== null && performance.now() - this.groundBusySince < GROUND_BUSY_MAX_MS;
       this.nightLights.update(flying.lat, flying.lon, atmoData[23] ?? 0, dt, { ...where, hold: groundBusy });
       this.groundDetail.update(flying.lat, flying.lon, dt, { ...where, hold: groundBusy });
+      this.airports?.update(flying.lat, flying.lon, flying.altFt, atmoData[23] ?? 0, dt, (lat, lon) => globe.sampleHeight(lat, lon));
 
       this.cameraEcefVec.copy(engine.camera.position);
       traffic3d.update(samples, this.cameraEcefVec, app.selectedHex, (lat, lon) =>
@@ -708,11 +736,33 @@ export class Orchestrator {
       aglFt: Number.isFinite(groundM) ? flying.altFt - groundM / FEET_TO_METRES : Number.NaN,
       altFt: flying.altFt,
     };
-    this.phaseInput = input;
 
     const { phase, event } = this.phaseTracker.update(input, dt);
     if (event) app.phaseEvent = { kind: event, id: ++this.phaseEventId, at: Date.now() };
+    this.touchdownClock.update(input, phase, dt);
     this.direct(phase);
+  }
+
+  /** On the ground at a walk and unheard for a while: it has reached its stand. */
+  private parkedAndQuiet(flying: SampledAircraft): boolean {
+    const phase = this.phaseTracker.phase;
+    return (
+      !this.runway.active &&
+      flying.latest.onGround === true &&
+      (phase === 'taxi' || phase === 'parked') &&
+      this.povSession.silence > 8
+    );
+  }
+
+  /**
+   * The flight is over: the aircraft is down and has stopped talking. Said
+   * as an arrival, not as a lost signal, and back to the map.
+   */
+  private arrive(): void {
+    const dest = app.dossier?.route?.destination;
+    const place = dest?.municipality ?? dest?.name ?? dest?.iata ?? dest?.icao ?? null;
+    app.notify(place ? tr('notice.arrivedAt', { place }) : tr('notice.arrived'), 'info', 6000);
+    this.exitPov();
   }
 
   /** Hold the directed view for this phase, or hand the camera back. */
@@ -741,12 +791,13 @@ export class Orchestrator {
   private resetPhase(): void {
     this.phaseTracker.reset();
     this.phaseHex = null;
-    this.phaseInput = null;
     this.directing = false;
     this.directorSuppressedFor = null;
     app.phase = null;
     app.touchdownInS = null;
     app.phaseEvent = null;
+    this.touchdownClock.reset();
+    this.runway.reset();
   }
 
   private publish(dt: number, selected: SampledAircraft | null, tracked: number): void {
@@ -761,7 +812,7 @@ export class Orchestrator {
     app.selected = selected;
     if (app.view === 'pov') {
       app.phase = this.phaseTracker.phase;
-      app.touchdownInS = this.phaseInput ? secondsToTouchdown(this.phaseInput) : null;
+      app.touchdownInS = this.touchdownClock.seconds;
     }
     publishTelemetry({
       engine,
@@ -832,6 +883,18 @@ export class Orchestrator {
     const from = trail[0]?.t ?? Infinity;
     const before = history.filter((p) => p.t < from);
     return before.length ? [...before, ...trail] : trail;
+  }
+
+  /** The leg the aircraft in view has flown so far, for the HUD's minimap. */
+  flownPath(): readonly TrailPoint[] {
+    const hex = app.selectedHex;
+    const track = hex ? this.traffic.get(hex) : undefined;
+    return hex && track ? this.flownSoFar(hex, track.trailPoints) : [];
+  }
+
+  /** Every aircraft as last sampled, for the HUD's minimap. */
+  get samples(): readonly SampledAircraft[] {
+    return this.lastSamples;
   }
 
   enterPov(): void {
@@ -944,6 +1007,8 @@ export class Orchestrator {
    * address bar already holds the link to them.
    */
   private onContextLost(): void {
+    // Our own teardown, not the GPU's: nothing to recover from.
+    if (this.disposed) return;
     recordMemoryLoss();
     app.notify(tr('notice.gpuReset'), 'warn', 0);
     setTimeout(() => location.reload(), 1800);
@@ -1360,7 +1425,13 @@ export class Orchestrator {
     this.map?.resize();
   }
 
+  private disposed = false;
+
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.clip) void this.toggleRecording();
+    this.historyAbort?.abort();
     this.connection.dispose();
     this.client.stop();
     this.engine?.dispose();
@@ -1370,9 +1441,13 @@ export class Orchestrator {
     this.traffic3d?.dispose();
     this.ownAircraft?.dispose();
     this.pins3d?.dispose();
+    this.airports?.dispose();
     this.overlay?.dispose();
     this.audio.dispose();
     this.gyro.disable();
     this.map?.dispose();
+    // The GPU memory goes back now, not whenever the browser gets round to
+    // collecting the page: a frozen tab must not keep a gigabyte of terrain.
+    this.engine?.renderer.forceContextLoss();
   }
 }

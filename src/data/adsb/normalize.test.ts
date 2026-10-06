@@ -74,6 +74,12 @@ describe('normalizeReadsbResponse', () => {
     expect(states[0]!.hex).toBe('391d49');
   });
 
+  it('reads a callsign of unset characters as none', () => {
+    const body: ReadsbResponse = { ac: [{ ...aircraftFixture, flight: '@@@@@@@@' }, { ...aircraftFixture, hex: '391d4a', flight: 'AFR12@@ ' }], now: ADSB_LOL_NOW_MS };
+    const { states } = normalizeReadsbResponse(body, 'adsb.lol', ADSB_LOL_NOW_MS);
+    expect(states.map((s) => s.callsign)).toEqual([null, 'AFR12']);
+  });
+
   it('reads the alternative shape (aircraft, seconds)', () => {
     const receivedAt = ADSB_FI_NOW_SEC * 1000;
     const body: ReadsbResponse = { aircraft: [aircraftFixture], now: ADSB_FI_NOW_SEC };

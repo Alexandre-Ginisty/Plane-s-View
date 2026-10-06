@@ -93,6 +93,8 @@ export function packPvm(blob) {
     }
 
     if (part.ao) part.ao = { offset: push(Buffer.from(payload.subarray(part.ao.offset, part.ao.offset + part.ao.count))), count: part.ao.count };
+    // An airport pack: which building each vertex belongs to, 16-bit.
+    if (part.inst) part.inst = { offset: push(Buffer.from(payload.subarray(part.inst.offset, part.inst.offset + part.inst.count * 2))), count: part.inst.count, type: 'u16' };
   }
   return writePvm('PVM2', header, chunks);
 }

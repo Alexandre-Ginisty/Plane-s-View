@@ -5,7 +5,7 @@
     "api/**/*.ts",
     "tools/fgmodel/{convert,cockpit,combat,tidy,pvmpack}.mjs",
     "tools/brand/*.mjs",
-    "tools/cabin/*.mjs",
+    "tools/airports/*.mjs",
     "tools/map/*.mjs",
     "tools/routes/*.mjs",
     "tools/tiles/*.mjs"

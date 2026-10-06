@@ -17,3 +17,6 @@ yarn-error.log*
 # The model converter's download cache. Re-fetched from FGAddon on demand;
 # nine megabytes of someone else's SVN mirror does not belong in this repo.
 /tools/fgmodel/.cache
+# The airport builder's download cache: the scenery database's packages and
+# the map tiles used to orient them. Hundreds of megabytes, re-fetchable.
+/tools/airports/.cache

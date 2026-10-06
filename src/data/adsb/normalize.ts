@@ -14,6 +14,7 @@
 
 import { wrapHeading, wrapLongitude } from '@/core/math/geo';
 import {
+  callsign,
   emergencyOrNull,
   feedClockToMs,
   num,
@@ -117,7 +118,7 @@ function normalizeReadsbAircraft(
 
   const state: AircraftState = {
     hex,
-    callsign: str(raw.flight),
+    callsign: callsign(raw.flight),
     lat: lat as number,
     lon: wrapLongitude(lon as number),
     altBaroFt,

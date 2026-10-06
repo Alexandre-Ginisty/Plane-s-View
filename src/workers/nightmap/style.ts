@@ -40,10 +40,16 @@ export function roadStyle(kind: string): LineStyle | null {
   return ROADS[kind] ?? null;
 }
 
-/** Aerodrome lighting: the brightest, coolest thing on the map. */
+/**
+ * Aerodrome lighting: the coolest light on the map, and the most intense per
+ * lamp, but not a floodlit strip. A runway at night is dark pavement between
+ * rows of lights — the centreline every fifteen metres, the edges every sixty —
+ * so it is drawn as the narrow band those lights make from the air, not its
+ * forty-five metres of concrete; a taxiway as its thin centreline.
+ */
 export function aerowayStyle(kind: string): LineStyle | null {
-  if (kind === 'runway') return { widthM: 45, warm: 0.15, cool: 1 };
-  if (kind === 'taxiway') return { widthM: 16, warm: 0, cool: 0.55 };
+  if (kind === 'runway') return { widthM: 8, warm: 0.1, cool: 1 };
+  if (kind === 'taxiway') return { widthM: 3, warm: 0, cool: 0.4 };
   return null;
 }
 
@@ -81,9 +87,12 @@ export function landuseStyle(kind: string): AreaStyle | null {
   }
 }
 
-/** The aprons and terminals of an airfield are floodlit. */
+/**
+ * The aprons of an airfield are floodlit from high masts: an even, moderate
+ * light over the stands, well under the terminals' windows.
+ */
 export function aerowayAreaStyle(kind: string): AreaStyle | null {
-  if (kind === 'apron') return { warm: 0.05, glow: 0.45, cool: 0.4 };
+  if (kind === 'apron') return { warm: 0.05, glow: 0.22, cool: 0.18 };
   if (kind === 'helipad' || kind === 'heliport') return { warm: 0, glow: 0.1, cool: 0.4 };
   return null;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseMetar } from './metar';
+import { parseMetar, skyOf } from './metar';
 
 /** As the Aviation Weather Center sent it, trimmed. */
 const LFPG = {
@@ -67,5 +67,21 @@ describe('parseMetar', () => {
 
   it('drops a flight category it does not know rather than guess', () => {
     expect(parseMetar({ ...LFPG, fltCat: 'UNK' })?.category).toBeNull();
+  });
+});
+
+describe('skyOf', () => {
+  const sky = (rawOb: string, cover: string) => skyOf(parseMetar({ ...LFPG, rawOb, cover })!);
+  it('says the weather before the clouds', () => {
+    expect(sky('METAR EGLL 061020Z 23012KT 6000 -RA BKN012 OVC020 12/10 Q1008', 'OVC')).toBe('rain');
+    expect(sky('METAR EDDF 061020Z 00000KT 0300 FG VV001 08/08 Q1021', 'OVX')).toBe('fog');
+    expect(sky('METAR KJFK 061951Z 22015G25KT 5SM +TSRA BKN030CB 27/22 A2990', 'BKN')).toBe('storm');
+  });
+  it('reads the cover when nothing is falling', () => {
+    expect(sky('METAR LFPG 060900Z 05005KT CAVOK 18/09 Q1019', 'CAVOK')).toBe('clear');
+    expect(sky('METAR LFPG 060900Z 05005KT 9999 SCT030 18/09 Q1019', 'SCT')).toBe('partlyCloudy');
+  });
+  it('ignores weather that is not at the field now', () => {
+    expect(sky('METAR LFPG 060900Z 05005KT 9999 VCSH FEW030 18/09 Q1019 RERA', 'FEW')).toBe('mostlyClear');
   });
 });

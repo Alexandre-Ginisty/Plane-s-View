@@ -28,7 +28,6 @@
   import { SITE } from '@/config/site';
   import LanguagePicker from '@/ui/LanguagePicker.svelte';
   import Logo from '@/ui/Logo.svelte';
-  import Rich from '@/ui/Rich.svelte';
   import { mountHeroScene, type HeroScene } from './heroScene';
   import { app } from '@/state/appStore.svelte';
   import ThemeToggle from '@/ui/ThemeToggle.svelte';
@@ -180,17 +179,8 @@
     sectionEls[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function onKeydown(event: KeyboardEvent): void {
-    // Keys typed in the language list belong to the list, not to the page.
-    if ((event.target as HTMLElement | null)?.closest?.('.lang-picker')) return;
-    if (event.key === 'Enter' || event.key === 'Escape') {
-      event.preventDefault();
-      enter();
-    }
-  }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
 
 <div class="landing" class:leaving bind:this={scrollRoot}>
   <div class="progress" aria-hidden="true">
@@ -202,7 +192,6 @@
     <ThemeToggle compact />
     <button class="enter-pill" onclick={enter}>
       {ready ? t('landing.enter') : t('landing.loadingSky')}
-      <span class="kbd">↵</span>
     </button>
   </div>
 
@@ -276,7 +265,6 @@
             </button>
             <button class="secondary" onclick={() => goTo(1)}>{t('landing.whatIsThis')}</button>
           </div>
-          <p class="hint" data-keyboard-only><Rich key="landing.hint" /></p>
         {/if}
 
         {#if index === SECTIONS.length - 1}
@@ -576,19 +564,6 @@
     color: var(--text);
   }
   .secondary:hover { border-color: var(--border-strong); }
-
-  .hint { margin: 16px 0 0; font-size: 0.82rem; color: var(--text-faint); }
-
-  .kbd {
-    display: inline-block;
-    min-width: 1.4em;
-    padding: 1px 5px;
-    text-align: center;
-    font: 600 11px/1.5 var(--mono);
-    color: var(--accent);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-  }
 
   @media (max-width: 820px) {
     nav { display: none; }

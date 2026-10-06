@@ -107,6 +107,58 @@ export function parseMetar(row: unknown): Metar | null {
   };
 }
 
+/** The sky in a word, for someone who does not read METARs. */
+export type Sky =
+  | 'storm'
+  | 'snow'
+  | 'rain'
+  | 'fog'
+  | 'haze'
+  | 'clear'
+  | 'mostlyClear'
+  | 'partlyCloudy'
+  | 'cloudy'
+  | 'overcast';
+
+/**
+ * What the weather looks like, from the report: the weather groups first
+ * (rain, fog… are what anyone would say before the clouds), then the cover.
+ * Recent weather (`RERA`) and weather in the vicinity (`VCSH`) are not the
+ * weather at the field, and are skipped.
+ */
+export function skyOf(m: Metar): Sky | null {
+  // The present-weather groups sit between the visibility and the clouds; any token of
+  // intensity, descriptor and phenomenon codes will do.
+  const groups = m.raw
+    .split(/\s+/)
+    .filter((w) => /^[-+]?(?:MI|BC|PR|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)+$/.test(w) || /^[-+]?TS$/.test(w));
+  const has = (code: string): boolean => groups.some((g) => g.includes(code));
+  if (has('TS')) return 'storm';
+  if (has('SN') || has('SG') || has('PL')) return 'snow';
+  if (has('RA') || has('DZ') || has('GR') || has('GS') || has('UP')) return 'rain';
+  if (has('FG')) return 'fog';
+  if (has('BR') || has('HZ') || has('FU') || has('DU') || has('SA')) return 'haze';
+  switch (m.cover) {
+    case 'CAVOK':
+    case 'SKC':
+    case 'CLR':
+    case 'NSC':
+    case 'NCD':
+      return 'clear';
+    case 'FEW':
+      return 'mostlyClear';
+    case 'SCT':
+      return 'partlyCloudy';
+    case 'BKN':
+      return 'cloudy';
+    case 'OVC':
+    case 'OVX':
+      return 'overcast';
+    default:
+      return null;
+  }
+}
+
 const cache = new Map<string, { at: number; metar: Metar | null }>();
 const inFlight = new Map<string, Promise<void>>();
 

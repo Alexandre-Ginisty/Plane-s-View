@@ -23,6 +23,9 @@
     fullscreen: '<path d="M3.5 9V3.5H9M15 3.5h5.5V9M20.5 15v5.5H15M9 20.5H3.5V15"/>',
     back: '<path d="M10 5 3 12l7 7"/><path d="M3.5 12H21"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    map: '<path d="M3.5 6.5 9 4l6 2.5L20.5 4v13.5L15 20l-6-2.5-5.5 2.5Z"/><path d="M9 4v13.5M15 6.5V20"/>',
+    plus: '<path d="M12 5.5v13M5.5 12h13"/>',
+    minus: '<path d="M5.5 12h13"/>',
     shuffle: '<path d="M3 7h3.5c5 0 6 10 11 10H21"/><path d="M3 17h3.5c2 0 3.2-1.6 4.2-3.5M13.3 9.5C14.3 8 15.5 7 17.5 7H21"/><path d="m18.5 4.5 2.5 2.5-2.5 2.5M18.5 14.5l2.5 2.5-2.5 2.5"/>',
     details: '<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M7.5 9h9M7.5 13h9M7.5 17h5"/>',
     home: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5V14h4v5.5"/>',
@@ -33,6 +36,10 @@
     record: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
     stop: '<circle cx="12" cy="12" r="8.5"/><rect x="8.8" y="8.8" width="6.4" height="6.4" rx="1" fill="currentColor" stroke="none"/>',
     gyro: '<rect x="7.5" y="3" width="9" height="18" rx="2"/><path d="M11 18h2"/><path d="M3.5 9a8 8 0 0 0 0 6M20.5 9a8 8 0 0 1 0 6"/>',
+    recentre: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+    sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+    moon: '<path d="M20 14.2A8.4 8.4 0 0 1 9.8 4 8.6 8.6 0 1 0 20 14.2Z"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><path d="M12 17.2v.01"/>',
     plane: '<path d="M21 15.5v-2l-8-5V3.8a1.5 1.5 0 0 0-3 0V8.5l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-6Z"/>',
   } as const;
 

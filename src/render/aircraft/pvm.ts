@@ -64,6 +64,10 @@ interface PartHeader {
   ao?: Range;
   /** `PVM2` positions: the box centre and half-extent they are quantised over. */
   quant?: [number, number, number, number, number, number];
+  /** An airport pack: which building each vertex belongs to (`instances`), uint16. */
+  inst?: Range;
+  /** An airport pack: the texture shift to the lit-window version at night, or null. */
+  night?: [number, number] | null;
 }
 
 /** A cockpit display's face, about the eye: +X right, +Y up, −Z forward, metres, radians. */
@@ -96,6 +100,10 @@ interface ModelHeader {
   shellEyes?: Record<string, [number, number, number] | null>;
   /** The undercarriage never retracts (a Cessna 172's): drawn down at every height. */
   fixedGear?: boolean;
+  /** An airport pack: its reference point, latitude and longitude. Metres east, north, up about it. */
+  centre?: [number, number];
+  /** An airport pack: where each building stands, latitude and longitude. */
+  instances?: [number, number][];
   parts: PartHeader[];
 }
 
@@ -108,6 +116,8 @@ interface ModelPart {
   textureIndex: number;
   origin: readonly [number, number, number];
   axis: readonly [number, number, number];
+  /** An airport pack: the texture shift to its night version, or null. */
+  night: readonly [number, number] | null;
 }
 
 export interface LoadedModel {
@@ -125,6 +135,9 @@ export interface LoadedModel {
   shellEyes: Readonly<Record<string, readonly [number, number, number] | null>>;
   /** The undercarriage never retracts: `gear` parts are drawn at every height. */
   fixedGear: boolean;
+  /** An airport pack: its reference point and each building's position (see the header). */
+  centre: readonly [number, number] | null;
+  instances: readonly (readonly [number, number])[];
   parts: ModelPart[];
 }
 
@@ -203,6 +216,7 @@ export function parsePvm(
       for (let i = 0; i < bytes.length; i++) grey[i * 3] = grey[i * 3 + 1] = grey[i * 3 + 2] = bytes[i]! / 255;
       geometry.setAttribute('color', new BufferAttribute(grey, 3));
     }
+    if (part.inst) geometry.setAttribute('inst', new BufferAttribute(new Uint16Array(buffer, payload + part.inst.offset, part.inst.count), 1));
 
     const texture = part.texture >= 0 ? textures[part.texture] ?? null : null;
     /*
@@ -261,6 +275,7 @@ export function parsePvm(
       textureIndex: part.texture,
       origin: part.origin,
       axis: part.axis,
+      night: part.night ?? null,
     });
   }
 
@@ -275,6 +290,8 @@ export function parsePvm(
     look: header.look ?? null,
     shellEyes: header.shellEyes ?? {},
     fixedGear: header.fixedGear === true,
+    centre: header.centre ?? null,
+    instances: header.instances ?? [],
     parts,
   };
 }

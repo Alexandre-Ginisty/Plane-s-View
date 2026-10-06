@@ -299,6 +299,66 @@ const CABINS = [
     ],
   },
   {
+    /*
+     * The one airliner cabin, seated in every airliner, regional jet and
+     * turboprop: the ATR 42-500's, by Narendran M (FGMEMBERS/ATR-42-500,
+     * GPL-2.0). Modelled seat by seat — leather-and-cloth seats with their
+     * tray tables and seat pockets, magazines and safety cards in them,
+     * overhead bins, sidewall panels with real window openings and reveals,
+     * the galley and the lavatory. Its own airframe is not converted; the one
+     * drawn round it is the passenger's own type's, from `shellEyes`.
+     */
+    aircraft: 'atr42',
+    id: 'airliner-cabin',
+    types: ['every airliner, regional jet and turboprop'],
+    label: 'passenger cabin',
+    note: 'the ATR 42-500 cabin by Narendran M; logos, magazine and safety-card scans left out, seat-back screens switched off',
+    root: 'ATR-42-500/Models/Cabin/cabin.xml',
+    within: /Cabin\/cabin\.xml$/,
+    skip: /Effects|Lights|Generic/,
+    // The headrest covers carry an airline's logo; the seats are left plain.
+    drop: /^Logo$/,
+    /*
+     * Scans of real magazine covers and of an airline's safety card ride in
+     * the seat pockets: not the authors' to license, so the pockets are
+     * left empty.
+     */
+    dropTexture: /TimesMagazine|digit-mag|safety/,
+    /*
+     * The seat-back screens' picture is a collage of photographs and film
+     * posters (and one tasteless tile): the bezel stays, the screen is off.
+     */
+    paint: { 'ifes.png': screenOff },
+    /*
+     * The sidewalls and ceiling are wound every which way — the simulator
+     * lights both sides alike — so their smoothed normals cancel into a
+     * crumpled sheet. Each face is turned to the cabin's axis instead.
+     */
+    inward: { name: /^(Cabin|CabinDiv\d|OverheadBins|door|blah)$/, axis: [0, 0.75] },
+    // Authored with the cabin's length along z and x across: turned to the usual axes.
+    acFrame: ([x, y, z]) => [z, y, -x],
+    hull: false,
+    // Already light, and its thin panels do not survive being simplified: taken whole.
+    whole: true,
+    budget: Infinity,
+    eye: { x: 0, y: 0, z: 0 },
+    seat: { at: 0.45, offWall: 0.34, ahead: 0.62 },
+    /*
+     * The window seat over the wing in each airframe, normalised (nose +Y,
+     * up +Z, about its centre): at that airframe's floor height plus a seated
+     * eye, so its own wing and engine fill the window.
+     */
+    shellEyes: {
+      a320: [-0.03853, 0.11966, -0.00884],
+      b738: [-0.0345, 0.02284, -0.05466],
+      crj7: [-0.0238, -0.02355, -0.02766],
+      at72: [-0.03313, 0.01844, -0.04167],
+      md11: [-0.0383, 0.09707, -0.04379],
+      b77w: [-0.0339, 0.04, -0.03365],
+      b748: [-0.0342, 0.05, -0.048],
+    },
+  },
+  {
     aircraft: 'c750',
     id: 'c750-cabin',
     types: ['C750', 'C56X', 'C68A', 'C525', 'C510'],
@@ -390,6 +450,22 @@ async function liningTexture() {
   return sharp(px, { raw: { width: size, height: size, channels: 1 } }).webp({ quality: 80 }).toBuffer();
 }
 
+/**
+ * A seat-back screen switched off: dark glass, a little lighter towards the
+ * top where the cabin lights catch it, over the screen's area of the IFE
+ * sheet (512 px square, the screen 66–456 by 74–378).
+ */
+async function screenOff(image) {
+  const { width, height } = await sharp(image).metadata();
+  const k = width / 512;
+  const glass = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#2a3036"/><stop offset="0.45" stop-color="#101418"/><stop offset="1" stop-color="#07090b"/></linearGradient></defs>` +
+      `<rect x="${60 * k}" y="${68 * k}" width="${402 * k}" height="${316 * k}" rx="${14 * k}" fill="url(#g)"/></svg>`,
+  );
+  return sharp(image).composite([{ input: glass }]).png().toBuffer();
+}
+
 /** The airframe kept about the eye, cockpit axes (+X right, +Y up, +Z aft), metres. */
 const HULL = { x: [-2.2, 2.2], y: [-2.2, 1.8], z: [-4, 2.5] };
 /** Never part of a cockpit: the crew (the camera is in the pilot's head), effects. */
@@ -399,7 +475,18 @@ const CANVAS_PLACEHOLDER = /^canvas\.(png|rgb)$/i;
 /** A display with nothing on it: dark glass. */
 const SCREEN_OFF = [0.03, 0.035, 0.04];
 
-const source = (path) => (FGDATA_DIRS.test(path) ? `${FGDATA}/${path}` : `${FGADDON}/${path}`);
+/*
+ * Aircraft kept outside FGAddon, in their authors' own repositories (same
+ * GPL-2.0): the folder name the simulator knows them by, and where it lives.
+ */
+const ELSEWHERE = {
+  'ATR-42-500/': 'https://raw.githubusercontent.com/FGMEMBERS/ATR-42-500/master/',
+};
+function source(path) {
+  if (FGDATA_DIRS.test(path)) return `${FGDATA}/${path}`;
+  const home = Object.keys(ELSEWHERE).find((k) => path.startsWith(k));
+  return home ? ELSEWHERE[home] + path.slice(home.length) : `${FGADDON}/${path}`;
+}
 const fetchPath = (path) => fetchCached(source(path), `cockpit/${path}`);
 
 /** AC3D axes (y up, z toward the viewer) to cockpit axes about the eye. */
@@ -487,6 +574,15 @@ function facesAway([p, q, r]) {
   const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
   const c = [(p[0] + q[0] + r[0]) / 3, (p[1] + q[1] + r[1]) / 3, (p[2] + q[2] + r[2]) / 3];
   return n[0] * c[0] + n[1] * c[1] + n[2] * c[2] > 0;
+}
+
+/** A triangle whose face (by its winding) points towards a line along z through `axis` (x, y). */
+function facesAxis([p, q, r], axis) {
+  const u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+  const w = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+  const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2]];
+  const c = [(p[0] + q[0] + r[0]) / 3, (p[1] + q[1] + r[1]) / 3];
+  return n[0] * (axis[0] - c[0]) + n[1] * (axis[1] - c[1]) >= 0;
 }
 
 /** Lining coordinates: the corners projected onto the face's dominant plane. */
@@ -577,8 +673,16 @@ function findSeat(spec, solid) {
   });
   const window = windows.sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
   if (window === undefined) console.log(`  ${spec.id}: no window found in the sidewall — the eye is placed by the wall`);
-  const z = (window ?? want) + (seat.aft ?? 0.06);
-  const eye = [cx + side * (wall - HEAD_OFF_WALL_M), y, z];
+  let z = (window ?? want) + (seat.aft ?? 0.06);
+  const eye = [cx + side * (wall - (seat.offWall ?? HEAD_OFF_WALL_M)), y, z];
+  if (seat.ahead) {
+    /*
+     * Sat in the row, not wherever the window put the head: the back of the
+     * seat in front, at chest height, `ahead` metres before the eye.
+     */
+    const back = rayHit(solid, [eye[0], y - 0.35, z], [0, 0, -1], 1.5);
+    if (Number.isFinite(back)) eye[2] = z += seat.ahead - back;
+  }
   /*
    * Out of the window and a little down and back, the way a passenger looks
    * out: at the wing and the ground rather than the horizon.
@@ -617,7 +721,11 @@ async function convertCockpit(spec) {
       if (object.verts.length === 0) continue;
       if (!inside && (HULL_DROP.test(object.name) || HULL_DROP.test(object.texture ?? ''))) continue;
       if (spec.drop?.test(object.name)) continue;
-      const world = object.verts.map((v) => toCockpit(applyTransform(transform, applyTransform(local, v)), spec.eye));
+      if (object.texture && spec.dropTexture?.test(object.texture)) continue;
+      const world = object.verts.map((v) => {
+        const p = applyTransform(transform, applyTransform(local, v));
+        return toCockpit(spec.acFrame ? spec.acFrame(p) : p, spec.eye);
+      });
       if (inside) (spec.displays ?? []).forEach((d, i) => d.name.test(object.name) && faces[i].push(world));
       if (process.env.COCKPIT_FRONT) {
         // Debugging aid: what stands in the view ahead.
@@ -627,7 +735,8 @@ async function convertCockpit(spec) {
       // A Canvas display's stand-in sheet ("CDU", "DED panel") is what the
       // simulator draws the live page over; here the screen is simply off.
       const placeholder = Boolean(object.texture && CANVAS_PLACEHOLDER.test(posix.basename(object.texture)));
-      const texture = object.texture && !placeholder ? posix.normalize(posix.join(folder, object.texture)) : null;
+      const sheet = spec.retexture?.find(([name]) => name.test(object.name))?.[1] ?? object.texture;
+      const texture = sheet && !placeholder ? posix.normalize(posix.join(folder, sheet)) : null;
 
       for (const surface of object.surfaces) {
         if ((surface.flags & 0x0f) !== 0 || surface.refs.length < 3) continue;
@@ -660,13 +769,17 @@ async function convertCockpit(spec) {
           const c = rest[k + 1];
           // The airframe only near the eye; any corner in keeps a triangle whole.
           if (!inside && !inHull(world[a.v]) && !inHull(world[b.v]) && !inHull(world[c.v])) continue;
-          const v = [world[a.v], world[b.v], world[c.v]];
+          let v = [world[a.v], world[b.v], world[c.v]];
           let group = own;
           let uv = [
             [a.u, a.t],
             [b.u, b.t],
             [c.u, c.t],
           ];
+          if (spec.inward?.name.test(object.name) && !facesAxis(v, spec.inward.axis)) {
+            v = [v[0], v[2], v[1]];
+            uv = [uv[0], uv[2], uv[1]];
+          }
           // The skin from inside: its face turned away from the eye.
           const skin = !inside && opaque && facesAway(v);
           if (skin) group = groupFor(LINING, { rgb: TRIM, emis: [0, 0, 0], trans: 0 });
@@ -681,6 +794,26 @@ async function convertCockpit(spec) {
   let look = spec.look ?? null;
   if (spec.seat) {
     const solid = [...groups.values()].filter((g) => g.mat.trans <= 0.02).flatMap((g) => g.tris.map((t) => t.v));
+    if (process.env.CABIN_PROBE) {
+      // Debugging aid: the cabin's extent, and what a ray sideways meets along it.
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (const tri of solid) for (const p of tri) for (let k = 0; k < 3; k++) (lo[k] = Math.min(lo[k], p[k])), (hi[k] = Math.max(hi[k], p[k]));
+      console.log('  bounds', lo.map((v) => v.toFixed(2)), hi.map((v) => v.toFixed(2)));
+      const [px, py] = process.env.CABIN_PROBE.split(',').map(Number);
+      if (process.env.CABIN_FINE) {
+        const [h, z0, z1] = process.env.CABIN_FINE.split(',').map(Number);
+        let line = '';
+        for (let z = z0; z <= z1; z += 0.05) line += rayHit(solid, [px, 0.08 + h, z], [-1, 0, 0], 3).toFixed(2).replace('Infinity', ' inf') + ' ';
+        console.log('  fine', line);
+      }
+      for (let z = lo[2]; z <= hi[2]; z += 1) {
+        const down = rayHit(solid, [px, py, z], [0, -1, 0]);
+        const up = rayHit(solid, [px, py, z], [0, 1, 0]);
+        const row = [0.6, 0.9, 1.1, 1.3, 1.6].map((h) => rayHit(solid, [px, py - down + h, z], [-1, 0, 0]).toFixed(2)).join(' ');
+        if (process.env.CABIN_FINE) continue;
+        console.log(`  z ${z.toFixed(1)} floor ${down.toFixed(2)} roof ${up.toFixed(2)} left@0.6/0.9/1.1/1.3/1.6: ${row}`);
+      }
+    }
     const found = findSeat(spec, solid);
     if (!found) {
       console.log(`  ${id}: no floor under the centreline — the eye stays where it was given`);
@@ -738,7 +871,9 @@ async function convertCockpit(spec) {
     } catch {
       // Unreadable here; shipped as it is.
     }
-    const hash = createHash('sha1').update(data).digest('hex').slice(0, 8);
+    const paint = spec.paint?.[base];
+    if (paint) image = await paint(image);
+    const hash = createHash('sha1').update(image).digest('hex').slice(0, 8);
     const encoded = await shrink(image, base.replace(/\.rgba?$/i, '.png').replace(/[^\w.-]/g, '_'));
     const name = `${id}-${hash}-${encoded.name}`;
     await writeFile(join(OUT, name), encoded.data);
@@ -773,7 +908,7 @@ async function convertCockpit(spec) {
     if (group.tris.length === 0) continue;
     computeNormals(group.tris);
     // A cabin is seen from further off than a panel, and repeats its seats by the hundred: a looser bound.
-    meshes.set(group, spec.seat ? simplified(index(group.tris), 6000, 0.004) : simplified(index(group.tris)));
+    meshes.set(group, spec.whole ? index(group.tris) : spec.seat ? simplified(index(group.tris), 6000, 0.004) : simplified(index(group.tris)));
   }
   const total = [...meshes.values()].reduce((n, m) => n + m.indices.length / 3, 0);
   const budget = spec.budget ?? BUDGET;
@@ -861,7 +996,7 @@ async function convertCockpit(spec) {
    * what the eye looks through and the skin behind them is cleared, so the
    * wing outside can be another type's.
    */
-  const shellEyes = {};
+  const shellEyes = { ...spec.shellEyes };
   for (const ext of spec.exteriors ?? []) {
     const { rootFrame } = await resolveModelTree(ext.root, async (p) => (await fetchPath(p)).toString('utf8'), { skip: { test: (p) => p !== ext.root } });
     shellEyes[ext.aircraft] = await eyeIn(ext.aircraft, ext.eye, rootFrame);
@@ -872,7 +1007,7 @@ async function convertCockpit(spec) {
 
   const header = {
     id,
-    source: `FlightGear FGAddon Aircraft/${spec.root}`,
+    source: ELSEWHERE[`${spec.root.split('/')[0]}/`] ? `${ELSEWHERE[`${spec.root.split('/')[0]}/`]}${spec.root.split('/').slice(1).join('/')}` : `FlightGear FGAddon Aircraft/${spec.root}`,
     license: 'GPL-2.0',
     notices,
     lengthM: 1,
@@ -902,10 +1037,15 @@ async function convertCockpit(spec) {
    * FGData's shared instruments, which are GPL-2.0 as well.
    */
   const creditsPath = join(OUT, 'CREDITS.md');
+  const home = ELSEWHERE[`${spec.root.split('/')[0]}/`];
   if (existsSync(creditsPath)) {
-    const row =
-      `| \`${id}\` | ${spec.types.join(', ')} (${spec.label ?? 'cockpit view'}) | [Aircraft/${posix.dirname(spec.root)}](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/${posix.dirname(spec.root)}/)` +
-      ` and FGData \`Aircraft/Instruments-3d\` | GPL-2.0 | ${notices.map((n) => `\`${n}\``).join(', ')} |`;
+    // An aircraft kept elsewhere is credited to its repository, with its folder.
+    const repo = home && home.replace('https://raw.githubusercontent.com/', '').split('/').slice(0, 2).join('/');
+    const where = home
+      ? `[${repo}](https://github.com/${repo}) \`${posix.dirname(spec.root.split('/').slice(1).join('/'))}\``
+      : `[Aircraft/${posix.dirname(spec.root)}](https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/${posix.dirname(spec.root)}/) and FGData \`Aircraft/Instruments-3d\``;
+    const shippedNotices = notices.length ? notices.map((n) => `\`${n}\``).join(', ') : '`LICENSE-GPL-2.0.txt`';
+    const row = `| \`${id}\` | ${spec.types.join(', ')} (${spec.label ?? 'cockpit view'}${spec.note ? `; ${spec.note}` : ''}) | ${where} | GPL-2.0 | ${shippedNotices} |`;
     // This row replaced, and rows for files no longer shipped (an interior
     // dropped or renamed) dropped: a credit for nothing is noise.
     const shipped = (l) => {

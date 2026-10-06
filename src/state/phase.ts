@@ -108,15 +108,74 @@ export function classifyPhase(input: PhaseInput, previous: FlightPhase | null = 
   return agl >= CRUISE_AGL ? 'cruise' : 'level';
 }
 
+/** The glide path almost every approach flies, degrees. */
+const GLIDE_DEG = 3;
+/** Below this the aircraft is in the flare: the touchdown is a second or two away, not a number. */
+const FLARE_FT = 50;
+
 /**
- * Seconds until touchdown at the present descent rate, or null when that is
- * not a meaningful question (not descending, or no idea where the ground is).
+ * Seconds until touchdown down a standard 3° glide path from here, or null
+ * when that is not a meaningful question (not on an approach, no idea where
+ * the ground is).
+ *
+ * Height and ground speed, not the descent rate. The reported vertical rate
+ * is the noisiest number in ADS-B — it swings by a few hundred feet a minute
+ * from one report to the next — and dividing the height by it made the
+ * countdown jump by twenty seconds at a time. An approach is flown down a
+ * fixed path at a near-constant speed, so where the aircraft is on that path
+ * says when it arrives far better than how fast it happens to be sinking.
  */
 export function secondsToTouchdown(input: PhaseInput): number | null {
-  if (input.onGround || input.verticalRateFpm > -VS_DEADBAND) return null;
+  if (input.onGround || input.verticalRateFpm > 200) return null;
   const agl = Number.isFinite(input.aglFt) ? input.aglFt : input.altFt;
   if (!(agl > 0) || agl > FINAL_AGL * 2) return null;
-  return agl / (-input.verticalRateFpm / 60);
+  const speedFtS = input.groundSpeedKt * 1.68781;
+  if (speedFtS < 60) return null;
+  return agl / (speedFtS * Math.tan((GLIDE_DEG * Math.PI) / 180));
+}
+
+/**
+ * The touchdown countdown as shown: a clock, not a measurement.
+ *
+ * Once it has an answer it runs down at one second a second, like a real
+ * countdown, and new estimates only steer it — never more than a third of a
+ * second per second — so the number on screen always goes down, one tick at a
+ * time. A wildly different estimate (a go-around, a level segment, a new
+ * aircraft) resets it instead of being chased.
+ */
+export class TouchdownClock {
+  private shown: number | null = null;
+
+  /** The countdown as last updated, seconds, or null when there is none to give. */
+  get seconds(): number | null {
+    return this.shown;
+  }
+
+  update(input: PhaseInput | null, phase: FlightPhase | null, dt: number): number | null {
+    const estimate = input && (phase === 'final' || phase === 'approach') ? secondsToTouchdown(input) : null;
+    const agl = input ? (Number.isFinite(input.aglFt) ? input.aglFt : input.altFt) : Infinity;
+    if (estimate === null || agl < FLARE_FT) {
+      // Hold through a brief gap in the estimate, but not past zero.
+      if (this.shown !== null && estimate === null && agl >= FLARE_FT && this.shown > dt) {
+        this.shown -= dt;
+        return this.shown;
+      }
+      this.shown = null;
+      return null;
+    }
+    if (this.shown === null || Math.abs(estimate - this.shown) > Math.max(25, this.shown * 0.4)) {
+      this.shown = estimate;
+      return this.shown;
+    }
+    const steer = (estimate - this.shown) * (1 - Math.exp(-dt / 8));
+    const limit = dt / 3;
+    this.shown = Math.max(0, this.shown - dt + Math.min(limit, Math.max(-limit, steer)));
+    return this.shown;
+  }
+
+  reset(): void {
+    this.shown = null;
+  }
 }
 
 export type PhaseEvent = 'liftoff' | 'touchdown';

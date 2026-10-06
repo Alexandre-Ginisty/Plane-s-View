@@ -122,18 +122,30 @@ forecast. Helicopters fly as helicopters: nose down to go fast, flared to slow.
 
 ## Controls
 
-| Key | Action |
+No keyboard shortcuts: everything is a button, in a toolbar that folds away
+(`src/ui/ToolbarDock.svelte`) — at the bottom of the map (catch a landing or a
+takeoff, pins, share, help, theme, language) and in the 3D view (sound, auto
+camera, gyroscope, recentre, photo, clip, share, full screen). Hovering a
+button names it; on a touch screen the name shows for a moment after the tap.
+The menu button folds the bar to itself, and the choice is remembered.
+
+In the 3D view a small north-up map in the bottom-left corner shows where the
+aircraft is (`src/ui/hud/MiniMap.svelte`): the same imagery as the map, the
+leg flown so far and the traffic around, reaching further as the aircraft
+climbs. Tap it to enlarge it, `+`/`−` to step closer or wider, tap another
+aircraft on it to step across, and fold it to a button. Plain image tiles,
+not a second WebGL map: no extra GPU context, and the tiles mostly come from
+the browser cache the globe already filled.
+
+| Gesture | Action |
 |---|---|
-| click | select an aircraft |
-| `↵` | step inside the selected aircraft |
-| `Esc` | back to the map |
-| `1`–`4` | Cockpit / Chase / Wing / Orbit |
-| drag | look around |
-| `C` | recentre the view |
-| `S` | save a photo of the view, captioned with the flight |
-| `R` | record a clip of the view (again to stop and save) |
-| `D` | diagnostics (fps, render ms, tiles, queue) |
-| `H` | key and controls |
+| click an aircraft | select it; **Board** steps inside |
+| drag | look around (in 3D) or pan (map) |
+| wheel | zoom |
+| right-click on the map | drop a pin |
+| `Esc` | the one key left: closes whatever is open, back to the map |
+
+The fps / tiles diagnostics open from the counters in the status pill.
 
 Append `?go` to the URL to skip the landing page and open straight into the
 map — useful for a bookmark.
@@ -163,9 +175,47 @@ the tell of a killed tab — makes the next one a step lighter, and a lost GPU
 context reloads the view lighter at the same aircraft. `?tier=low` forces a
 budget (`high`, `mid`, `low`, `minimal`) for testing.
 
-The site installs as an app and opens without a network (`public/sw.js`):
-the page and the static files it has used are cached; live data never is.
-On a phone, the gyroscope button turns the head as the phone turns.
+The site installs as an app (`public/sw.js`): only the build's own files
+(`/assets/`, icons) are kept by the service worker; models go through the
+ordinary HTTP cache and live data is never cached. The terrain/imagery cache
+in IndexedDB is capped (120 MB on a desktop, 40 MB on a phone) and anything
+older than five days is dropped when the app opens; leaving the page frees the
+GPU at once (`pagehide`). On a phone, the gyroscope button turns the head as
+the phone turns.
+
+### Landings, takeoffs and the window seat
+
+A feed goes quiet near the ground — receivers lose aircraft below the
+horizon — so the last metres are flown by the book instead of dropping the
+view (`src/app/runwayMotion.ts`): a 3° glide, the flare, the rollout and a
+taxi off before the view returns to the map; a takeoff is the roll, the
+rotation and the climb until the feed picks the aircraft up again. The
+touchdown countdown is the height over a 3° path at the ground speed, ticking
+down a second a second.
+
+The window seat is one real cabin for every airliner — the ATR 42-500 cabin
+from FlightGear (GPL-2.0), seats, screens, bins and window reveals modelled —
+drawn inside the passenger's own airframe so the wing out of the window is the
+right one. Nobody else is aboard.
+
+### Real airports
+
+At 43 of the world's main airports the real terminals, piers, towers and
+hangars appear as the aircraft comes within 28 km below FL180, and
+go again once it has left (`src/render/airports.ts`). They are the FlightGear
+community's models (GPL-2.0, authors in `public/models/airports/CREDITS.md`),
+converted once by `node tools/airports/build.mjs [ICAO…]` — the scenery server
+is rate-limited and closed to other sites, so nothing is fetched from it at
+run time. Each building is stood on this globe's terrain where it is, and the
+façades switch to their lit-window sheets at night.
+
+Not every placed model is kept. Each is checked against the building
+footprints of OpenStreetMap: turned the way that fits them best, and left out
+when a large one stands on nothing mapped (a misplaced terminal, a generic
+warehouse used as filler). Buildings since demolished are listed and left out,
+a model placed twice on the same spot is drawn once, and an airport whose set
+does not hold up — Rome Fiumicino, untextured and doubled — is not built at
+all. Of the 65 airports tried, the others have too few models to be worth it.
 
 ---
 

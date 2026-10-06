@@ -18,9 +18,10 @@
  *
  * ## The window seat
  *
- * The other interior view: a passenger's, at a window. Airliners, regional
- * jets, turboprops and business jets have their cabin converted the same way
- * (`<id>-cabin.pvm`); a freighter gets its hold instead. An aircraft with no
+ * The other interior view: a passenger's, at a window. Every airliner,
+ * regional jet and turboprop shares one real cabin, converted the same way
+ * (`airliner-cabin.pvm`, an ATR 42's); business jets have the Citation's, and
+ * a freighter gets its hold instead. The seats are empty. An aircraft with no
  * cabin behind the flight deck — a light aircraft, a helicopter, a fighter —
  * puts the eye in the other front seat (or, single-seat, the pilot's) turned
  * to the side window.
@@ -104,27 +105,23 @@ const BY_MODEL: Record<string, Entry> = {
 };
 
 /*
- * Cabins. A stand-in's cabin, like its flight deck, comes with its own
- * airframe about it. The regional 2-2 cabin is drawn in the regional jet's
- * and in the ATR's, so those and their relatives see their own kind of wing
- * and engine out of the window.
+ * Cabins. One passenger cabin for every airliner, regional jet and
+ * turboprop: the Embraer 190's, modelled seat by seat (`airliner-cabin`,
+ * see `tools/fgmodel/cockpit.mjs`). It is drawn in the airframe of the
+ * passenger's own family, the eye over the wing there, so the wing and the
+ * engine out of the window are the right kind.
  * Freighters, whatever the type, get the MD-11F's main deck: rollers, rails
  * and the cargo net, empty between loads.
  */
 const cabin = (file: string, aircraft: string): Entry => ({ file, aircraft, kind: 'airliner', fit: { hud: null, screens: [] } });
-const RJ_CABIN = cabin('r22-cabin', 'crj7');
-const RJ_IN_ATR = cabin('r22-cabin', 'at72');
-/*
- * Generated cabins (`tools/cabin`), by what the passenger sits in: the
- * regional 2-2, the single-aisle 3-3, the twin-aisle 2-4-2 and the 3-4-3 of
- * the big twins and the jumbo. Each is drawn in an airframe of its own family, its eye over the
- * wing there.
- */
-const SINGLE_AISLE_A320 = cabin('n33-cabin', 'a320');
-const SINGLE_AISLE_737 = cabin('n33-cabin', 'b738');
-const TWIN_AISLE_MD11 = cabin('w242-cabin', 'md11');
-const BIG_TWIN_777 = cabin('w343-cabin', 'b77w');
-const JUMBO_747 = cabin('w343-cabin', 'b748');
+const airliner = (aircraft: string): Entry => cabin('airliner-cabin', aircraft);
+const RJ_CABIN = airliner('crj7');
+const RJ_IN_ATR = airliner('at72');
+const SINGLE_AISLE_A320 = airliner('a320');
+const SINGLE_AISLE_737 = airliner('b738');
+const TWIN_AISLE_MD11 = airliner('md11');
+const BIG_TWIN_777 = airliner('b77w');
+const JUMBO_747 = airliner('b748');
 const BIZJET_CABIN = cabin('c750-cabin', 'c750');
 const JET_HOLD = cabin('md11-cargo', 'md11');
 
@@ -148,51 +145,6 @@ const CABIN_BY_MODEL: Record<string, Entry> = {
   da40: RIGHT_SEAT, c172: RIGHT_SEAT, c208: RIGHT_SEAT, pc12: RIGHT_SEAT,
   ec35: LEFT_SEAT_HELI, bo05: LEFT_SEAT_HELI, s76c: LEFT_SEAT_HELI, as32: LEFT_SEAT_HELI,
 };
-
-/**
- * How far left of the centreline the captain's eye is in each two-crew deck,
- * metres: the first officer sits as far to the right. From each simulator's
- * own view 0 (see `tools/fgmodel/cockpit.mjs`).
- */
-const CREW_SEAT: Record<string, number> = {
-  'c750-cockpit': 0.375,
-  'b738-cockpit': 0.51,
-  'a320-cockpit': 0.45,
-  'at72-cockpit': 0.6,
-  'crj7-cockpit': 0.528,
-  'e145-cockpit': 0.54,
-  'b748-cockpit': 0.53,
-  'b77w-cockpit': 0.57,
-  'md80-cockpit': 0.5,
-};
-
-/**
- * The first officer, in the right seat, written about their own eye
- * (`tools/cabin/generate.mjs`). The seat beside you on a flight deck is never
- * empty, and an empty one is the quickest tell that the view is a model.
- */
-/** How far aft of the design eye a pilot sitting back in the seat has their eye, metres. */
-const CREW_AFT_M = 0.12;
-
-async function firstOfficer(deckFile: string): Promise<Group | null> {
-  const half = CREW_SEAT[deckFile];
-  if (half === undefined) return null;
-  const model = await loadModelById('crew-fo');
-  if (!model) return null;
-  const crew = new Group();
-  crew.name = 'first-officer';
-  for (const part of model.parts) {
-    const mesh = new Mesh(part.geometry, part.material);
-    mesh.matrixAutoUpdate = false;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    crew.add(mesh);
-  }
-  // A simulator's design eye sits forward of a pilot at rest — leaning in to
-  // the panel — so the first officer, sitting back in the seat, is further aft.
-  crew.position.set(half * 2, -0.04, CREW_AFT_M);
-  return crew;
-}
 
 /** By kind, for a type with no model at all. */
 const BY_KIND: Record<CockpitKind, Entry> = {
@@ -242,10 +194,7 @@ function entryFor(id: string | null, kind: CockpitKind, seat: Seat, freighter: b
 export async function loadModelledCockpit(typeCode: string | null, kind: CockpitKind, seat: Seat = 'cockpit', freighter = false): Promise<Modelled | null> {
   const id = await modelIdFor(typeCode);
   const entry = entryFor(id, kind, seat, freighter);
-  const [model, crew] = await Promise.all([
-    loadModelById(entry.file),
-    seat === 'cockpit' && entry.kind === 'airliner' ? firstOfficer(entry.file).catch(() => null) : null,
-  ]);
+  const model = await loadModelById(entry.file);
   if (!model) return null;
 
   const group = new Group();
@@ -265,7 +214,6 @@ export async function loadModelledCockpit(typeCode: string | null, kind: Cockpit
     }
     group.add(mesh);
   }
-  if (crew) group.add(crew);
   // Display faces measured by the converter, where the entry does not place its own.
   const fit: CockpitFit = entry.fit.screens.length || entry.fit.hud ? entry.fit : { hud: null, screens: model.displays.map((d) => ({ ...d })) };
   return {

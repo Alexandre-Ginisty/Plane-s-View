@@ -81,9 +81,9 @@ function extentOf(
   return { x: max[0]! - min[0]!, y: max[1]! - min[1]!, z: max[2]! - min[2]! };
 }
 
-// Airframes only: an interior (`f16-cockpit.pvm`, `crj7-cabin.pvm`, `at72-cargo.pvm`) and the crew
-// (`crew-fo.pvm`) are in metres about an eye, not unit length.
-const files = readdirSync(DIR).filter((f) => f.endsWith('.pvm') && !/-(cockpit|cabin|cargo)\.pvm$|^crew-/.test(f));
+// Airframes only: an interior (`f16-cockpit.pvm`, `airliner-cabin.pvm`, `md11-cargo.pvm`) is in
+// metres about an eye, not unit length.
+const files = readdirSync(DIR).filter((f) => f.endsWith('.pvm') && !/-(cockpit|cabin|cargo)\.pvm$/.test(f));
 
 /*
  * Helicopters are exempt from the wing rules — their "span" is a rotor and they

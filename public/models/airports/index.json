@@ -1,0 +1,303 @@
+[
+ {
+  "icao": "CYUL",
+  "lat": 45.4706,
+  "lon": -73.7408,
+  "radiusKm": 3.5,
+  "bytes": 2463632
+ },
+ {
+  "icao": "CYVR",
+  "lat": 49.1967,
+  "lon": -123.1815,
+  "radiusKm": 3.5,
+  "bytes": 753612
+ },
+ {
+  "icao": "EBBR",
+  "lat": 50.901,
+  "lon": 4.4844,
+  "radiusKm": 3.5,
+  "bytes": 2489912
+ },
+ {
+  "icao": "EDDF",
+  "lat": 50.0379,
+  "lon": 8.5622,
+  "radiusKm": 4,
+  "bytes": 1622744
+ },
+ {
+  "icao": "EDDH",
+  "lat": 53.6304,
+  "lon": 9.9882,
+  "radiusKm": 3,
+  "bytes": 5043172
+ },
+ {
+  "icao": "EDDK",
+  "lat": 50.8659,
+  "lon": 7.1427,
+  "radiusKm": 3,
+  "bytes": 1280812
+ },
+ {
+  "icao": "EDDL",
+  "lat": 51.2895,
+  "lon": 6.7668,
+  "radiusKm": 3,
+  "bytes": 1075228
+ },
+ {
+  "icao": "EDDM",
+  "lat": 48.3538,
+  "lon": 11.7861,
+  "radiusKm": 4,
+  "bytes": 954228
+ },
+ {
+  "icao": "EDDS",
+  "lat": 48.6899,
+  "lon": 9.2219,
+  "radiusKm": 3,
+  "bytes": 2846184
+ },
+ {
+  "icao": "EGKK",
+  "lat": 51.1537,
+  "lon": -0.1821,
+  "radiusKm": 3,
+  "bytes": 1573272
+ },
+ {
+  "icao": "EGLL",
+  "lat": 51.47,
+  "lon": -0.4543,
+  "radiusKm": 4,
+  "bytes": 1283012
+ },
+ {
+  "icao": "EGSS",
+  "lat": 51.885,
+  "lon": 0.235,
+  "radiusKm": 3,
+  "bytes": 1563776
+ },
+ {
+  "icao": "EHAM",
+  "lat": 52.3105,
+  "lon": 4.7683,
+  "radiusKm": 4.5,
+  "bytes": 3895960
+ },
+ {
+  "icao": "EIDW",
+  "lat": 53.4213,
+  "lon": -6.2701,
+  "radiusKm": 3,
+  "bytes": 1180028
+ },
+ {
+  "icao": "EKCH",
+  "lat": 55.618,
+  "lon": 12.656,
+  "radiusKm": 3.5,
+  "bytes": 922756
+ },
+ {
+  "icao": "ELLX",
+  "lat": 49.6233,
+  "lon": 6.2044,
+  "radiusKm": 2.5,
+  "bytes": 955316
+ },
+ {
+  "icao": "ENGM",
+  "lat": 60.1976,
+  "lon": 11.1004,
+  "radiusKm": 3.5,
+  "bytes": 83552
+ },
+ {
+  "icao": "FAOR",
+  "lat": -26.1367,
+  "lon": 28.2411,
+  "radiusKm": 3.5,
+  "bytes": 452484
+ },
+ {
+  "icao": "KATL",
+  "lat": 33.6407,
+  "lon": -84.4277,
+  "radiusKm": 4.5,
+  "bytes": 2444636
+ },
+ {
+  "icao": "KDEN",
+  "lat": 39.8561,
+  "lon": -104.6737,
+  "radiusKm": 5,
+  "bytes": 600036
+ },
+ {
+  "icao": "KEWR",
+  "lat": 40.6895,
+  "lon": -74.1745,
+  "radiusKm": 3.5,
+  "bytes": 959540
+ },
+ {
+  "icao": "KJFK",
+  "lat": 40.6413,
+  "lon": -73.7781,
+  "radiusKm": 4,
+  "bytes": 3605308
+ },
+ {
+  "icao": "KLAX",
+  "lat": 33.9416,
+  "lon": -118.4085,
+  "radiusKm": 4,
+  "bytes": 3380464
+ },
+ {
+  "icao": "KMIA",
+  "lat": 25.7959,
+  "lon": -80.287,
+  "radiusKm": 3.5,
+  "bytes": 57360
+ },
+ {
+  "icao": "KORD",
+  "lat": 41.9742,
+  "lon": -87.9073,
+  "radiusKm": 4.5,
+  "bytes": 282860
+ },
+ {
+  "icao": "KSEA",
+  "lat": 47.4502,
+  "lon": -122.3088,
+  "radiusKm": 3.5,
+  "bytes": 113696
+ },
+ {
+  "icao": "KSFO",
+  "lat": 37.6213,
+  "lon": -122.379,
+  "radiusKm": 4,
+  "bytes": 1327116
+ },
+ {
+  "icao": "LEMD",
+  "lat": 40.4719,
+  "lon": -3.5626,
+  "radiusKm": 4.5,
+  "bytes": 1867492
+ },
+ {
+  "icao": "LEPA",
+  "lat": 39.5517,
+  "lon": 2.7388,
+  "radiusKm": 3,
+  "bytes": 640120
+ },
+ {
+  "icao": "LFBD",
+  "lat": 44.8283,
+  "lon": -0.7156,
+  "radiusKm": 3,
+  "bytes": 2520980
+ },
+ {
+  "icao": "LFLL",
+  "lat": 45.7256,
+  "lon": 5.0811,
+  "radiusKm": 3,
+  "bytes": 2336008
+ },
+ {
+  "icao": "LFML",
+  "lat": 43.4393,
+  "lon": 5.2214,
+  "radiusKm": 3,
+  "bytes": 2173892
+ },
+ {
+  "icao": "LFMN",
+  "lat": 43.6584,
+  "lon": 7.2159,
+  "radiusKm": 2.5,
+  "bytes": 2302560
+ },
+ {
+  "icao": "LFPG",
+  "lat": 49.0097,
+  "lon": 2.5479,
+  "radiusKm": 4.5,
+  "bytes": 3577268
+ },
+ {
+  "icao": "LFPO",
+  "lat": 48.7262,
+  "lon": 2.3652,
+  "radiusKm": 3.5,
+  "bytes": 625108
+ },
+ {
+  "icao": "LFRS",
+  "lat": 47.1532,
+  "lon": -1.6107,
+  "radiusKm": 2.5,
+  "bytes": 929632
+ },
+ {
+  "icao": "LIMC",
+  "lat": 45.63,
+  "lon": 8.7231,
+  "radiusKm": 4,
+  "bytes": 2811028
+ },
+ {
+  "icao": "LKPR",
+  "lat": 50.1008,
+  "lon": 14.26,
+  "radiusKm": 3,
+  "bytes": 2181456
+ },
+ {
+  "icao": "LOWW",
+  "lat": 48.1103,
+  "lon": 16.5697,
+  "radiusKm": 3.5,
+  "bytes": 4697060
+ },
+ {
+  "icao": "LSGG",
+  "lat": 46.2381,
+  "lon": 6.109,
+  "radiusKm": 3,
+  "bytes": 2646628
+ },
+ {
+  "icao": "LSZH",
+  "lat": 47.4582,
+  "lon": 8.5555,
+  "radiusKm": 3.5,
+  "bytes": 2486336
+ },
+ {
+  "icao": "OMDB",
+  "lat": 25.2532,
+  "lon": 55.3657,
+  "radiusKm": 4,
+  "bytes": 230448
+ },
+ {
+  "icao": "PHNL",
+  "lat": 21.3187,
+  "lon": -157.9225,
+  "radiusKm": 3.5,
+  "bytes": 2552792
+ }
+]

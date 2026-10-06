@@ -12,14 +12,14 @@
   import { Orchestrator } from '@/app/orchestrator';
   import { app } from '@/state/appStore.svelte';
   import { resolveTheme, watchSystemTheme } from '@/ui/theme';
-  import { CAMERA_MODES } from '@/render/pov';
   import { t } from '@/i18n/index.svelte';
   import Rich from '@/ui/Rich.svelte';
+  import { dockFolded, rememberDockFolded } from '@/ui/dockMemory';
   import LanguagePicker from '@/ui/LanguagePicker.svelte';
   import Logo from '@/ui/Logo.svelte';
   import AircraftPanel from '@/ui/AircraftPanel.svelte';
   import Landing from '@/ui/intro/Landing.svelte';
-  import ThemeToggle from '@/ui/ThemeToggle.svelte';
+  import ToolbarDock, { type DockItem } from '@/ui/ToolbarDock.svelte';
   import Diagnostics from '@/ui/Diagnostics.svelte';
   import Hud from '@/ui/Hud.svelte';
   import Legend from '@/ui/Legend.svelte';
@@ -90,24 +90,21 @@
    * The browser's fullscreen is asked for alongside, and where it is refused
    * or missing (an iPhone has none for a page) the overlays still go, which
    * is most of what was wanted. Leaving the browser's fullscreen — its own
-   * Esc, or a swipe — leaves cinema too, so the two can never disagree.
+   * gesture or button — leaves cinema too, so the two can never disagree.
+   *
+   * The way out is a button, like a video player's: it shows whenever the
+   * mouse moves or the screen is touched, and fades with the cursor.
    */
-  let cinemaHint = $state(false);
   let idle = $state(false);
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
-  let hintTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     if (app.cinema) {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen?.().catch(() => undefined);
       }
-      cinemaHint = true;
-      clearTimeout(hintTimer);
-      hintTimer = setTimeout(() => (cinemaHint = false), 2500);
       wakeCursor();
     } else {
-      cinemaHint = false;
       idle = false;
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
     }
@@ -121,11 +118,11 @@
     return () => document.removeEventListener('fullscreenchange', onFullscreen);
   });
 
-  /** The cursor hides after a moment of stillness in cinema, like a video. */
+  /** The cursor and the way out hide after a moment of stillness in cinema, like a video. */
   function wakeCursor(): void {
     idle = false;
     clearTimeout(idleTimer);
-    if (app.cinema) idleTimer = setTimeout(() => (idle = true), 2000);
+    if (app.cinema) idleTimer = setTimeout(() => (idle = true), 2500);
   }
 
   let dragging = false;
@@ -140,27 +137,6 @@
   let downY = 0;
   let downAt = 0;
   let overTraffic = $state(false);
-
-  /**
-   * Open the key once, for someone who has never seen this before.
-   *
-   * `localStorage` is exactly the right store for this and exactly the wrong
-   * thing to trust: it throws outright in a locked-down browser and comes back
-   * empty in a private window. Both are fine — the worst case is that a
-   * returning user is shown the key again, which is a far smaller problem than
-   * a first-time user never discovering that the keyboard does anything.
-   */
-  function openLegendOnFirstVisit(): void {
-    // A touch screen has no keyboard to discover.
-    if (matchMedia('(hover: none) and (pointer: coarse)').matches) return;
-    try {
-      if (localStorage.getItem('planesview.seen') === '1') return;
-      localStorage.setItem('planesview.seen', '1');
-    } catch {
-      return;
-    }
-    app.showLegend = true;
-  }
 
   /*
    * Seed the store from what `main.ts` already put on the document, then keep
@@ -194,101 +170,102 @@
       .then(() => {
         orchestrator = instance;
         booting = false;
-        openLegendOnFirstVisit();
       })
       .catch((err: unknown) => {
         bootError = err instanceof Error ? err.message : String(err);
         booting = false;
       });
 
-    return () => instance.dispose();
+    /*
+     * Leaving the site. A closed tab frees everything by itself, but one the
+     * browser keeps frozen for the Back button (the back/forward cache) would
+     * keep the whole globe — the GPU's terrain, the decoded tiles, the polling
+     * — alive in the background. So on the way out it is all let go, and a
+     * return through Back starts the page afresh instead of thawing a
+     * half-dismantled one.
+     */
+    const onLeave = (event: PageTransitionEvent): void => {
+      if (event.persisted) instance.dispose();
+    };
+    const onReturn = (event: PageTransitionEvent): void => {
+      if (event.persisted) location.reload();
+    };
+    addEventListener('pagehide', onLeave);
+    addEventListener('pageshow', onReturn);
+
+    return () => {
+      removeEventListener('pagehide', onLeave);
+      removeEventListener('pageshow', onReturn);
+      instance.dispose();
+    };
   });
 
+  /*
+   * No keyboard shortcuts: everything is a button in a dock, because nobody
+   * browsing a website reaches for the keyboard and a phone has none. Escape
+   * alone is kept, as every web page keeps it — it closes whatever is on top,
+   * one thing per press, and never both dismisses a panel and ejects the user.
+   */
   function onKeydown(event: KeyboardEvent): void {
-    // The landing page owns the keyboard while it is up; it has its own
-    // handler, and letting these through would switch camera modes in an app
-    // the visitor cannot see.
-    if (showLanding) return;
+    if (showLanding || event.key !== 'Escape') return;
     const target = event.target as HTMLElement | null;
     if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
     const o = orchestrator;
     if (!o) return;
-
-    switch (event.key) {
-      case 'Escape':
-        // The key closes whatever is on top before it changes the view, so it
-        // never both dismisses a panel and ejects the user in one press.
-        if (app.cinema) app.cinema = false;
-        else if (app.pinMode) app.pinMode = false;
-        else if (app.showLegend) app.showLegend = false;
-        else if (app.view === 'pov') o.exitPov();
-        else if (app.selectedHex) void o.select(null);
-        break;
-      case 'Enter':
-        if (app.view === 'map' && app.selectedHex) o.enterPov();
-        break;
-      case 'd':
-      case 'D':
-        app.showDiagnostics = !app.showDiagnostics;
-        break;
-      case 'c':
-      case 'C':
-        o.recentreView();
-        break;
-      case 'h':
-      case 'H':
-      case '?':
-        app.showLegend = !app.showLegend;
-        break;
-      case 'p':
-      case 'P':
-        if (app.view === 'map') app.pinMode = !app.pinMode;
-        break;
-      case 'f':
-      case 'F':
-        app.cinema = !app.cinema;
-        break;
-      case '/':
-        // The search box, from anywhere on the map.
-        if (app.view === 'map') {
-          event.preventDefault();
-          document.getElementById('search-input')?.focus();
-        }
-        break;
-      case 'a':
-      case 'A':
-        app.setAutoCamera(!app.autoCamera);
-        app.notify(t(app.autoCamera ? 'app.autoCameraOn' : 'app.autoCameraOff'), 'info', 2500);
-        break;
-      case 'l':
-      case 'L':
-        void o.catchAircraft('landing');
-        break;
-      case 't':
-      case 'T':
-        void o.catchAircraft('takeoff');
-        break;
-      case 's':
-      case 'S':
-        if (app.view === 'pov') void o.takePhoto();
-        break;
-      case 'r':
-      case 'R':
-        if (app.view === 'pov' || app.recordingSince !== null) void o.toggleRecording();
-        break;
-      case 'v':
-      case 'V':
-        // Inside or outside.
-        if (app.view === 'pov') o.toggleCameraGroup();
-        break;
-      default: {
-        // 1-5 select a camera view while flying.
-        const index = Number.parseInt(event.key, 10) - 1;
-        const mode = CAMERA_MODES[index];
-        if (app.view === 'pov' && mode) o.setCameraMode(mode.id);
-      }
-    }
+    if (app.cinema) app.cinema = false;
+    else if (langOpen) langOpen = false;
+    else if (app.pinMode) app.pinMode = false;
+    else if (app.showLegend) app.showLegend = false;
+    else if (app.view === 'pov') o.exitPov();
+    else if (app.selectedHex) void o.select(null);
   }
+
+  /*
+   * The map's dock: going flying first, then the map's own tools. Folded or
+   * open is remembered per visitor (see `@/ui/dockMemory`).
+   */
+  let langOpen = $state(false);
+  let mapDockFolded = $state(dockFolded('map', false));
+  $effect(() => rememberDockFolded('map', mapDockFolded));
+  const mapDock = $derived<DockItem[]>([
+    {
+      id: 'landing',
+      label: t('app.catchLanding'),
+      icon: 'landing',
+      disabled: app.shuffling,
+      onclick: () => void orchestrator?.catchAircraft('landing'),
+    },
+    {
+      id: 'takeoff',
+      label: t('app.catchTakeoff'),
+      icon: 'takeoff',
+      disabled: app.shuffling,
+      onclick: () => void orchestrator?.catchAircraft('takeoff'),
+    },
+    {
+      id: 'pin',
+      label: t('app.pin'),
+      icon: 'pin',
+      active: app.pinMode,
+      badge: app.pins.length || undefined,
+      onclick: () => (app.pinMode = !app.pinMode),
+    },
+    { id: 'share', label: t('share.button'), icon: 'share', onclick: () => void shareView() },
+    {
+      id: 'legend',
+      label: t('legend.title'),
+      icon: 'help',
+      active: app.showLegend,
+      onclick: () => (app.showLegend = !app.showLegend),
+    },
+    {
+      id: 'theme',
+      label: t(app.theme === 'dark' ? 'theme.toLight' : 'theme.toDark'),
+      icon: app.theme === 'dark' ? 'sun' : 'moon',
+      onclick: () => app.setTheme(app.theme === 'dark' ? 'light' : 'dark', false),
+    },
+    { id: 'language', label: t('lang.title'), icon: 'globe', active: langOpen, onclick: () => (langOpen = !langOpen) },
+  ]);
 
   /*
    * Fingers on the view. One finger looks around and a tap steps across, like
@@ -477,47 +454,19 @@
           </button>
         </h1>
 
-        <div class="dock" style="--i: 1" role="toolbar" aria-label={t('app.mapToolbar')}>
-          <button class="tool" onclick={goHome} title={t('app.homeTitle')}>
-            <Icon name="home" /><span class="text">{t('app.home')}</span>
-          </button>
-          <button
-            class="tool"
-            class:on={app.pinMode}
-            aria-pressed={app.pinMode}
-            onclick={() => (app.pinMode = !app.pinMode)}
-            title={t('app.pinTitle')}
-          >
-            <Icon name="pin" /><span class="text">{t('app.pin')}</span>
-            {#if app.pins.length > 0}<span class="count">{app.pins.length}</span>{/if}
-          </button>
-          <button class="tool" onclick={() => void shareView()} title={t('share.title')}>
-            <Icon name="share" /><span class="text">{t('share.button')}</span>
-          </button>
-          <button class="tool" class:on={app.showLegend} onclick={() => (app.showLegend = !app.showLegend)} title={t('app.keyTitle')}>
-            <Icon name="key" /><span class="text">{t('app.key')}</span>
-          </button>
-          <LanguagePicker tool />
-          <ThemeToggle compact tool />
-        </div>
+        <div class="search-slot" style="--i: 1"><SearchBox {orchestrator} /></div>
 
-        <div class="search-slot" style="--i: 2"><SearchBox {orchestrator} /></div>
-
-        <div class="dock actions" style="--i: 3" role="toolbar" aria-label={t('app.goFlying')}>
-          <button
-            class="tool"
-            disabled={app.shuffling}
-            onclick={() => void orchestrator?.catchAircraft('landing')}
-            title={t('app.catchLandingTitle')}
-          ><Icon name="landing" /><span class="text">{t('app.catchLanding')}</span><span class="kbd">L</span></button>
-          <button
-            class="tool"
-            disabled={app.shuffling}
-            onclick={() => void orchestrator?.catchAircraft('takeoff')}
-            title={t('app.catchTakeoffTitle')}
-          ><Icon name="takeoff" /><span class="text">{t('app.catchTakeoff')}</span><span class="kbd">T</span></button>
-        </div>
       </header>
+      <div class="dock-area" class:behind={app.selectedHex !== null}>
+        <ToolbarDock
+          items={mapDock}
+          label={t('app.mapToolbar')}
+          openLabel={t('dock.open')}
+          closeLabel={t('dock.close')}
+          bind:collapsed={mapDockFolded}
+        />
+        <div class="lang-slot"><LanguagePicker bare bind:open={langOpen} /></div>
+      </div>
       {#if app.pinMode && !app.cinema}
         <p class="pin-hint" role="status">
           <Icon name="pin" size={14} />
@@ -525,6 +474,7 @@
           {#if app.pins.length > 0}
             <button class="chip" onclick={() => app.clearPins()}>{t('app.removeAll')}</button>
           {/if}
+          <button class="chip done" onclick={() => (app.pinMode = false)}>{t('app.pinDone')}</button>
         </p>
       {/if}
       {#if !app.cinema}<AircraftPanel {orchestrator} />{/if}
@@ -537,8 +487,10 @@
       <Legend />
       <Notices />
       <StatusBar />
-    {:else if cinemaHint}
-      <p class="cinema-hint" role="status"><Rich key="app.cinemaHint" /></p>
+    {:else}
+      <button class="cinema-exit" class:asleep={idle} onclick={() => (app.cinema = false)}>
+        <Icon name="close" size={15} /><span>{t('app.cinemaExit')}</span>
+      </button>
     {/if}
   {/if}
 </main>
@@ -546,31 +498,33 @@
 <style>
   main { position: relative; width: 100%; height: 100%; overflow: hidden; }
   main.idle, main.idle :global(canvas) { cursor: none; }
+  main.cinema { touch-action: manipulation; }
 
   main.cinema .toolbar,
   main.cinema .brackets { display: none; }
 
-  .cinema-hint {
+  .cinema-exit {
     position: absolute;
-    bottom: 28px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
     z-index: 30;
-    margin: 0;
-    padding: 6px 14px;
-    font-family: var(--mono);
-    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px 9px 11px;
+    font: 600 11px/1 var(--mono);
     letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--hud-text);
     background: var(--hud-bg);
     border: 1px solid var(--hud-border);
-    pointer-events: none;
-    animation: hint 2.5s ease-out forwards;
+    border-radius: 999px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: opacity 0.4s var(--ease);
   }
-  @keyframes hint {
-    0%, 70% { opacity: 1; }
-    100% { opacity: 0; }
-  }
+  .cinema-exit:hover { border-color: var(--hud-accent); color: var(--hud-accent); }
+  .cinema-exit.asleep { opacity: 0; pointer-events: none; }
 
 
   .pin-hint {
@@ -717,78 +671,36 @@
   .brand-home:hover .word { filter: brightness(1.2); }
   .brand-home:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-  .dock {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 3px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(14px) saturate(1.2);
-    -webkit-backdrop-filter: blur(14px) saturate(1.2);
-    box-shadow: var(--shadow);
-    clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
-  }
-
-  /* A button inside a dock. Also used by `ThemeToggle`. */
-  .dock :global(.tool) {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    height: 34px;
-    padding: 0 12px;
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    background: transparent;
-    border: 0;
-    transition: color 0.18s var(--ease), background 0.18s var(--ease);
-  }
-  /* The lit rule under a hovered or active tool grows from its centre. */
-  .dock :global(.tool)::after {
-    content: '';
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 3px;
-    height: 2px;
-    background: var(--accent);
-    box-shadow: var(--glow-strong);
-    transform: scaleX(0);
-    transition: transform 0.25s var(--ease);
-  }
-  .dock :global(.tool:hover) { color: var(--accent); background: var(--hover-bg); }
-  .dock :global(.tool:hover)::after { transform: scaleX(0.5); }
-  .dock :global(.tool.on) { color: var(--accent); background: var(--active-bg); }
-  .dock :global(.tool.on)::after { transform: scaleX(1); }
-  .dock :global(.tool:hover .icon) { transform: translateY(-1px) scale(1.08); }
-  .dock :global(.tool .icon) { transition: transform 0.25s var(--ease); }
-  .dock :global(.tool:disabled) { opacity: 0.5; cursor: progress; }
-  .dock .kbd { margin-left: 2px; opacity: 0.7; }
-
-  .count {
-    min-width: 17px;
-    padding: 1px 5px;
-    font-size: 9px;
-    text-align: center;
-    color: var(--on-accent);
-    background: var(--accent);
-    border-radius: 9px;
-  }
-
   .search-slot { display: contents; }
-  .actions { margin-left: auto; }
 
-  @media (max-width: 1180px) {
-    .actions .tool .text { display: none; }
+  /*
+   * The dock floats at the bottom centre of the map, clear of the aircraft
+   * panel on the right and the feed status on the left; the language list
+   * opens above it.
+   */
+  .dock-area {
+    position: absolute;
+    left: 50%;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 21;
+    transform: translateX(-50%);
+    animation: dock-in 0.5s var(--ease) 0.2s both;
   }
-  @media (max-width: 760px) {
-    .dock .text, .dock .kbd { display: none; }
-    .actions { margin-left: 0; }
+  @keyframes dock-in {
+    from { opacity: 0; transform: translate(-50%, 14px); }
+  }
+  .lang-slot { position: absolute; right: 0; bottom: 100%; }
+  .lang-slot :global(.menu) { top: auto; bottom: 10px; }
+
+  .pin-hint .done { color: var(--accent); }
+
+  /* A phone: the aircraft sheet takes the bottom; the dock waits under it. */
+  @media (max-width: 640px) {
+    .dock-area.behind { display: none; }
+  }
+  /* Too narrow to share the bottom row with the feed status: the dock sits above it. */
+  @media (max-width: 900px) {
+    .dock-area { bottom: calc(58px + env(safe-area-inset-bottom)); }
   }
 
   .boot {

@@ -56,9 +56,10 @@ const LEAD_S = 12;
  * [1] x: region weight (0 none … 1 in), y: brightness
  */
 const data = new Float32Array(8);
-// Brightness of the lights. Raised with the darker night ground: the lamps
-// carry the picture now, and their peaks must reach the bloom threshold.
-data[5] = 2.1;
+// Brightness of the lights, set against the night exposure: a lit street is
+// a few times brighter than the moonlit ground, not a sheet of neon. Only the
+// densest cores and the runways come near the bloom threshold.
+data[5] = 1.0;
 
 /** Per level: west, south, 1/width, 1/height of the square (degrees). Width 0 means "not drawn yet". */
 const levelBox = new Float32Array(NIGHT_LEVELS.length * 4);
@@ -162,13 +163,15 @@ float nightLamps(vec2 q, float footprint) {
       vec2 o = vec2(float(x), float(y));
       vec2 at = o + vec2(nightHash(id + o), nightHash(id + o + 37.1)) * 0.8 + 0.1;
       vec2 d = f - at;
-      // A lamp's pool is a few metres; never sharper than the pixel can show.
-      float r = max(3.0, footprint * 0.6) / cell;
+      // A lamp's pool on the ground is ten metres or so across its bright
+      // part, soft-edged — a hard little disc reads as a polka dot from low
+      // down — and never sharper than the pixel can show.
+      float r = max(9.0, footprint * 0.6) / cell;
       lamps += exp(-dot(d, d) / (r * r)) / (3.14159 * r * r);
     }
   }
   // Each lamp's integral over the plane is 1 per cell, so the mean is 1.
-  return mix(min(lamps, 14.0), 1.0, far);
+  return mix(min(lamps, 3.0), 1.0, far);
 }
 
 // How much a finer level should be used at this pixel size: all of it while a
@@ -233,23 +236,30 @@ vec3 cityLights(vec3 worldPos, vec2 q, float footprint, vec3 albedo) {
   // is, so a road it saw no light on keeps a trace of headlights and no more —
   // which is what turns a road map into a night: islands of towns in the dark.
   float urban = smoothstep(0.0, 0.3, glow);
-  m *= mix(0.18, 1.0, urban) * (1.0 + glow * 1.1);
+  m *= mix(0.12, 1.0, urban) * (0.65 + glow * 0.5);
   // The lamps, but not on the finest level, which draws every lamp itself.
   m *= mix(nightLamps(q * cos(radians(lat)), ground), 1.0, c3);
   // The satellite's glow is the light a town throws up: from low down a faint
   // halo round the streets, from high up most of what a town is — a pool of
   // orange whose streets are too fine to tell apart.
+  // It stands in for the streets' average where they are too fine to draw, so
+  // it is no brighter than they are on average: most of a city's area is
+  // roofs, yards and parks, dark between the lamps.
   float aloft = smoothstep(60.0, 450.0, ground);
-  m += vec3(glow * 0.62, glow * 0.29, glow * 0.04) * mix(0.12, 1.6, aloft);
+  m += vec3(glow * 0.62, glow * 0.36, glow * 0.12) * mix(0.03, 0.34, aloft);
 
-  vec3 sodium = vec3(1.0, 0.50, 0.16);
-  vec3 warm = vec3(1.0, 0.80, 0.56);
-  vec3 cool = vec3(0.72, 0.86, 1.0);
-  vec3 light = m.r * sodium * 1.15 + m.g * warm * 0.95 + m.b * cool * 1.3;
+  // Measured colours, not poster ones. High-pressure sodium is a yellow-orange
+  // (about 2000 K), and most European and American cities are now half LED at
+  // 3000-4000 K, so from the air a city reads as a warm, slightly yellow white
+  // with orange threads, not as saturated orange.
+  vec3 sodium = vec3(1.0, 0.60, 0.26);
+  vec3 warm = vec3(1.0, 0.84, 0.64);
+  vec3 cool = vec3(0.84, 0.90, 1.0);
+  vec3 light = m.r * sodium + m.g * warm * 0.85 + m.b * cool * 1.1;
 
-  // Linear while dim — a faint glow stays faint — and rolling off as it brightens, so a
-  // dense core blooms towards white instead of clipping to a flat orange.
-  light = light / (1.0 + light * 0.7);
+  // Linear while dim — a faint glow stays faint — and rolling off as it
+  // brightens, so a dense core settles under white rather than glaring.
+  light = light / (1.0 + light * 1.3);
 
   return light * nightLights[1].y * smoothstep(${NIGHT_FROM.toFixed(3)}, 0.6, night);
 }

@@ -74,17 +74,20 @@ function packModels(): Plugin {
       outDir = config.build.outDir;
     },
     closeBundle() {
-      const dir = new URL(`./${outDir}/models/`, import.meta.url);
-      let names: string[] = [];
-      try {
-        names = readdirSync(dir).filter((n) => n.endsWith('.pvm'));
-      } catch {
-        return;
-      }
-      for (const name of names) {
-        const file = new URL(name, dir);
-        writeFileSync(new URL(`${name}.gz`, dir), gzipSync(readFileSync(file), { level: 9 }));
-        rmSync(file);
+      // The aircraft, and the airports' buildings beside them.
+      for (const sub of ['', 'airports/']) {
+        const dir = new URL(`./${outDir}/models/${sub}`, import.meta.url);
+        let names: string[] = [];
+        try {
+          names = readdirSync(dir).filter((n) => n.endsWith('.pvm'));
+        } catch {
+          continue;
+        }
+        for (const name of names) {
+          const file = new URL(name, dir);
+          writeFileSync(new URL(`${name}.gz`, dir), gzipSync(readFileSync(file), { level: 9 }));
+          rmSync(file);
+        }
       }
     },
   };

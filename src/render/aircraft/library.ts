@@ -222,7 +222,8 @@ async function fetchPacked(id: string): Promise<ArrayBuffer | null> {
   return response.ok ? response.arrayBuffer() : null;
 }
 
-async function fetchModel(id: string): Promise<LoadedModel | null> {
+/** A model file, read afresh and owned by the caller (`loadModelById` shares and keeps them). */
+export async function fetchModel(id: string): Promise<LoadedModel | null> {
   try {
     const buffer = await fetchPacked(id);
     if (!buffer) return null;

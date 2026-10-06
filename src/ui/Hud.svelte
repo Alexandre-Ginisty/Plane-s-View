@@ -23,9 +23,12 @@
   import type { Orchestrator } from '@/app/orchestrator';
   import FlightCard from './hud/FlightCard.svelte';
   import Tapes from './hud/Tapes.svelte';
+  import MiniMap from './hud/MiniMap.svelte';
   import Icon, { type IconName } from './Icon.svelte';
   import { shareView } from '@/app/share';
   import { hasGyro } from '@/app/gyro';
+  import ToolbarDock, { type DockItem } from './ToolbarDock.svelte';
+  import { dockFolded, rememberDockFolded } from './dockMemory';
 
   const gyroAvailable = hasGyro();
 
@@ -58,11 +61,18 @@
    */
   const phase = $derived(app.phase);
   const moment = $derived(isTakeoffPhase(phase) || isLandingPhase(phase));
+  /*
+   * Far out, minutes: nobody needs to know it is 3:47 rather than 3:52, and a
+   * number that precise invites watching it wobble. Inside two minutes the
+   * clock counts down by the second — see `TouchdownClock`, which makes sure
+   * it only ever goes down.
+   */
   const countdown = $derived.by(() => {
     const s = app.touchdownInS;
     if (s === null || !(phase === 'final' || phase === 'approach')) return null;
-    const whole = Math.max(0, Math.round(s));
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+    if (s > 120) return t('hud.touchdownAbout', { min: Math.round(s / 60) });
+    const whole = Math.max(0, Math.ceil(s));
+    return t('hud.touchdownIn', { time: `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}` });
   });
 
   /*
@@ -124,6 +134,50 @@
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   });
 
+  /*
+   * The view's tools, in one dock that folds into its menu button: on a phone
+   * it starts folded, so the view is the view.
+   */
+  let toolsFolded = $state(dockFolded('hud'));
+  $effect(() => rememberDockFolded('hud', toolsFolded));
+  const tools = $derived<DockItem[]>([
+    {
+      id: 'sound',
+      label: t(app.sound ? 'hud.muteEngines' : 'hud.hearEngines'),
+      icon: app.sound ? 'sound' : 'mute',
+      active: app.sound,
+      onclick: () => void orchestrator.setSound(!app.sound),
+    },
+    {
+      id: 'auto',
+      label: t('hud.autoCamera'),
+      icon: 'auto',
+      active: app.autoCamera,
+      onclick: () => {
+        app.setAutoCamera(!app.autoCamera);
+        app.notify(t(app.autoCamera ? 'app.autoCameraOn' : 'app.autoCameraOff'), 'info', 2500);
+      },
+    },
+    ...(gyroAvailable
+      ? [{ id: 'gyro', label: t('hud.gyro'), icon: 'gyro', active: app.gyro, onclick: () => void orchestrator.setGyro(!app.gyro) } satisfies DockItem]
+      : []),
+    { id: 'recentre', label: t('ctl.recentre'), icon: 'recentre', onclick: () => orchestrator.recentreView() },
+    { id: 'photo', label: t('capture.photo'), icon: 'camera', onclick: () => void orchestrator.takePhoto() },
+    {
+      id: 'record',
+      label: t(clipTime !== null ? 'capture.stop' : 'capture.record'),
+      icon: clipTime !== null ? 'stop' : 'record',
+      alert: clipTime !== null,
+      onclick: () => void orchestrator.toggleRecording(),
+    },
+    { id: 'share', label: t('share.button'), icon: 'share', onclick: () => void shareView() },
+    { id: 'fullscreen', label: t('hud.fullscreen'), icon: 'fullscreen', onclick: () => (app.cinema = true) },
+  ]);
+
+  /* The minimap's state, so the wind and heading block can sit above it. */
+  let mapFolded = $state(dockFolded('minimap', false));
+  let mapLarge = $state(false);
+
   const degraded = $derived(
     app.network && app.network.grade !== 'fast' && app.network.grade !== 'good'
       ? profileFor(app.network.grade)
@@ -132,8 +186,9 @@
 </script>
 
 {#if sample}
-  <div class="hud" aria-live="off">
+  <div class="hud" class:with-map={!mapFolded} class:map-large={!mapFolded && mapLarge} aria-live="off">
     <Tapes {sample} />
+    <MiniMap {sample} {orchestrator} bind:folded={mapFolded} bind:large={mapLarge} />
 
     <div class="ident">
       <span class="callsign">{callsign}</span>
@@ -149,7 +204,7 @@
 
     {#if phase}
       <p class="phase" class:moment role="status">
-        {phaseLabel(phase)}{#if countdown}<span class="eta"> · {t('hud.touchdownIn', { time: countdown })}</span>{/if}
+        {phaseLabel(phase)}{#if countdown}<span class="eta"> · {countdown}</span>{/if}
       </p>
     {/if}
 
@@ -189,7 +244,7 @@
               class="group"
               class:active={current.group === group.id}
               onclick={() => orchestrator.setCameraGroup(group.id)}
-              title={`${groupHint(group.id)} (V)`}
+              title={groupHint(group.id)}
               aria-pressed={current.group === group.id}
             >
               {groupLabel(group.id)}
@@ -203,7 +258,7 @@
               class="mode"
               class:active={app.cameraMode === mode.id}
               onclick={() => orchestrator.setCameraMode(mode.id)}
-              title={`${cameraHint(mode.id)} (${CAMERA_MODES.indexOf(mode) + 1})`}
+              title={cameraHint(mode.id)}
               aria-pressed={app.cameraMode === mode.id}
             >
               <Icon name={MODE_ICONS[mode.id] ?? 'cockpit'} size={18} />
@@ -214,64 +269,18 @@
       </div>
 
       <!--
-        The engine note sits with the view controls because it is the same
-        kind of switch: it changes what the aircraft is like to be in rather
-        than what the app is doing. Off by default — see `app.sound`.
+        The tools sit with the view controls but apart from them: they change
+        what the aircraft is like to be in, or keep a moment of it, rather than
+        where the camera is.
       -->
-      <div class="utility">
-        <button
-          class="round"
-          class:active={app.sound}
-          onclick={() => void orchestrator.setSound(!app.sound)}
-          title={t(app.sound ? 'hud.muteEngines' : 'hud.hearEngines')}
-          aria-label={t(app.sound ? 'hud.muteEngines' : 'hud.hearEngines')}
-          aria-pressed={app.sound}
-        ><Icon name={app.sound ? 'sound' : 'mute'} size={17} /></button>
-        <button
-          class="round optional"
-          class:active={app.autoCamera}
-          onclick={() => app.setAutoCamera(!app.autoCamera)}
-          title={t('hud.autoCameraTitle')}
-          aria-label={t('hud.autoCamera')}
-          aria-pressed={app.autoCamera}
-        ><Icon name="auto" size={17} /></button>
-        {#if gyroAvailable}
-          <button
-            class="round"
-            class:active={app.gyro}
-            onclick={() => void orchestrator.setGyro(!app.gyro)}
-            title={t('hud.gyro')}
-            aria-label={t('hud.gyro')}
-            aria-pressed={app.gyro}
-          ><Icon name="gyro" size={17} /></button>
-        {/if}
-        <button
-          class="round"
-          onclick={() => void orchestrator.takePhoto()}
-          title={t('capture.photoTitle')}
-          aria-label={t('capture.photo')}
-        ><Icon name="camera" size={17} /></button>
-        <button
-          class="round roomy"
-          class:recording={clipTime !== null}
-          onclick={() => void orchestrator.toggleRecording()}
-          title={t(clipTime !== null ? 'capture.stopTitle' : 'capture.recordTitle')}
-          aria-label={t('capture.record')}
-          aria-pressed={clipTime !== null}
-        ><Icon name={clipTime !== null ? 'stop' : 'record'} size={17} /></button>
-        <button
-          class="round"
-          onclick={() => void shareView()}
-          title={t('share.title')}
-          aria-label={t('share.button')}
-        ><Icon name="share" size={17} /></button>
-        <button
-          class="round"
-          onclick={() => (app.cinema = true)}
-          title={t('hud.fullscreenTitle')}
-          aria-label={t('hud.fullscreen')}
-        ><Icon name="fullscreen" size={17} /></button>
-      </div>
+      <ToolbarDock
+        items={tools}
+        label={t('hud.tools')}
+        openLabel={t('dock.open')}
+        closeLabel={t('dock.close')}
+        hud
+        bind:collapsed={toolsFolded}
+      />
     </div>
 
     {#if clipTime !== null}
@@ -281,7 +290,6 @@
     <button class="exit" onclick={() => orchestrator.exitPov()}>
       <Icon name="back" size={15} />
       <span>{t('hud.backToMap')}</span>
-      <span class="kbd">Esc</span>
     </button>
   </div>
 {/if}
@@ -336,6 +344,17 @@
     border-left: 2px solid var(--hud-accent);
     backdrop-filter: blur(6px);
   }
+  /*
+   * The wind and heading block stands on the minimap's corner when it is
+   * open; enlarged, or on a short screen where it would reach the speed tape,
+   * it gives way — its figures are all in the details card too.
+   */
+  .hud.with-map :global(.environment) { bottom: 204px; }
+  .hud.map-large :global(.environment) { display: none; }
+  @media (max-height: 760px) {
+    .hud.with-map :global(.environment) { display: none; }
+  }
+
   .callsign { font-size: 19px; font-weight: 700; letter-spacing: 0.12em; }
   .sub { font-size: 11.5px; color: var(--hud-dim); letter-spacing: 0.06em; }
 
@@ -504,23 +523,6 @@
   .mode.active { color: var(--on-accent); }
   .mode.active :global(.icon) { transform: scale(1.12); }
 
-  .utility { display: flex; gap: 6px; }
-  .round {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    color: var(--hud-dim);
-    background: var(--hud-bg);
-    border: 1px solid var(--hud-border);
-    border-radius: 50%;
-    backdrop-filter: blur(12px);
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s var(--ease);
-  }
-  .round:hover { color: var(--hud-accent); border-color: var(--hud-accent); transform: translateY(-2px); }
-  .round.active { color: var(--hud-accent); border-color: var(--hud-accent); box-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.35); }
-
-  .round.recording { color: #ff5a4f; border-color: #ff5a4f; box-shadow: 0 0 14px rgb(255 90 79 / 0.4); }
 
   .rec {
     position: absolute;
@@ -632,15 +634,9 @@
       bottom: calc(12px + env(safe-area-inset-bottom));
       width: calc(100vw - 16px);
     }
-    .round { width: 40px; height: 40px; }
   }
   @media (max-width: 520px) {
-    /* Recording steps aside first (unless running): the photo and the link stay. */
-    .utility .roomy:not(.recording) { display: none; }
     .rec { top: calc(60px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); }
-  }
-  @media (max-width: 380px) {
-    .utility .optional { display: none; }
   }
   /* A phone on its side: no room for anything stacked. */
   @media (max-height: 480px) {

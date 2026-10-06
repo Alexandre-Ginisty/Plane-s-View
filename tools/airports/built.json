@@ -1,0 +1,3670 @@
+{
+ "CYUL": {
+  "authors": [
+   {
+    "name": "Baihef",
+    "models": [
+     "CYUL Aeroquay",
+     "CYUL Terminal"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m180deg",
+     "Apron Lightpole 16m360deg",
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Torsten Dreyer",
+    "models": [
+     "Generic animated glass jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "ece83ada7e4da9b8.webp",
+   "69fb7f2a9cd54f66.webp",
+   "9f10f88f56f98c25.webp",
+   "e6a2e77c0524ce52.webp"
+  ]
+ },
+ "CYVR": {
+  "authors": [
+   {
+    "name": "Andre Dietrich",
+    "models": [
+     "Radar tower as seen at EIDW"
+    ]
+   },
+   {
+    "name": "Thomas Grossberger",
+    "models": [
+     "Generic 15m tank - grey",
+     "Generic 30m tank; grey"
+    ]
+   },
+   {
+    "name": "Owen Smith",
+    "models": [
+     "Generic 10m tank; brown",
+     "Grey storage tank 10m diameter",
+     "Orange storage tank 10m diameter",
+     "Orange storage tank 5m diameter"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 10m diameter storage tank",
+     "Generic 20m diameter storage tank",
+     "Generic 30m diameter storage tank",
+     "Generic 5m diameter storage tank",
+     "Generic AVGAS storage - 1 cylinder",
+     "Water works filtration bed 20m"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "Generic Blast Deflector, 49m long"
+    ]
+   },
+   {
+    "name": "Robert Shearman",
+    "models": [
+     "KIND old terminal"
+    ]
+   }
+  ],
+  "textures": [
+   "2b78b928d3d22d5c.webp",
+   "0a6c667b493ca442.webp",
+   "cb3df143781809b6.webp",
+   "9a3ac31578c5bc1f.webp",
+   "5d0d5a75e6a7bb48.webp",
+   "6835a32bff7a6999.webp",
+   "83ecd207b6dcc26d.webp",
+   "47d4aafb15a474bc.webp",
+   "dcd9d4572870264d.webp",
+   "bec255593c057c28.webp"
+  ]
+ },
+ "EBBR": {
+  "authors": [
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "EBBR Building 031",
+     "EBBR Building 036",
+     "EBBR Building 037",
+     "EBBR Building 038",
+     "EBBR Building 038c",
+     "EBBR Building 039",
+     "EBBR Old Tower",
+     "EBBR Terminal 1",
+     "EBBR Terminal 2",
+     "EBBR Terminal2 Jetway",
+     "EBBR Tower"
+    ]
+   },
+   {
+    "name": "Thomas Grossberger",
+    "models": [
+     "Generic 20m tank; grey"
+    ]
+   },
+   {
+    "name": "Isaak Dieleman",
+    "models": [
+     "EBBR_Stand_214_Jetway",
+     "EBBR_Stand_231_Jetway"
+    ]
+   },
+   {
+    "name": "Sven Seipp",
+    "models": [
+     "EBBR_Aviapartner",
+     "EBBR_Aviapartner_3",
+     "EBBR_Aviapartner_Cargo_Belgium",
+     "EBBR_IAG_Cargo",
+     "EBBR_LH_Technik",
+     "EBBR_Swissport",
+     "EBBR_Swissport_cargo_Belgium",
+     "EBBR_Viva_Xpress_Logistics",
+     "EBBR_connector",
+     "EBBR_new_DHL_Hub"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m180deg"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "caisses_services"
+    ]
+   }
+  ],
+  "textures": [
+   "0849ab5f4bcaea7d.webp",
+   "52d48818a4431119.webp",
+   "ed1ae85add6587e1.webp",
+   "ab4b369f2e47de3e.webp",
+   "a092a21b47568d51.webp",
+   "cea95d80dd8abcf8.webp",
+   "3d52cc0ee447b9cf.webp",
+   "78d3b08aad75b927.webp",
+   "7ed344064685950e.webp",
+   "546d9856d359fd09.webp",
+   "77b8335185744118.webp",
+   "fa7135d1726d6dd5.webp",
+   "d858f2559e88725f.webp",
+   "832f71b20c0c6c23.webp",
+   "de6beff83838eb0a.webp",
+   "fcb0b80cd82ba11e.webp",
+   "9f10f88f56f98c25.webp",
+   "44397e1ed445f76d.webp",
+   "f92ac6118324d543.webp",
+   "a5cddb94aaa61f6f.webp",
+   "ac779d185bc3ff6f.webp",
+   "d26f61f425a952b4.webp",
+   "ccf3169302602e37.webp",
+   "550e20a4a30873d8.webp",
+   "8a06f8b6e0f6bd60.webp"
+  ]
+ },
+ "EDDF": {
+  "authors": [
+   {
+    "name": "Christian Schmitt",
+    "models": [
+     "Airrail center at the EDDF airport",
+     "EDDF A380 Halle",
+     "EDDF Gate A",
+     "EDDF Gate B",
+     "EDDF Gate C",
+     "EDDF Gate D",
+     "EDDF Jumbohalle",
+     "EDDF Terminal 2",
+     "EDDF blast deflector high",
+     "EDDF blast deflector low",
+     "EDDF tower",
+     "Luftbrueckendenkmal Frankfurt am Main - Germany"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic_Chimney_01",
+     "Localizer"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m360deg"
+    ]
+   },
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "EDDF Apron lightpole"
+    ]
+   },
+   {
+    "name": "Jonathan Schellhase",
+    "models": [
+     "Aircraft bridge in EDDF to RWY 07L_25R"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "EDDF Flugsteig A plus",
+     "Generic Skyscraper 1"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4"
+    ]
+   },
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "ilssta1"
+    ]
+   },
+   {
+    "name": "Sven Seipp",
+    "models": [
+     "EDDF_Condor_Hangar",
+     "EDDF_DHL_Hub",
+     "EDDF_FedEx_Station",
+     "EDDF_Feuerwache_4",
+     "EDDF_LH_Cargo1",
+     "EDDF_LH_Export",
+     "EDDF_LH_Import",
+     "EDDF_LH_Technik_Logistic_Services",
+     "EDDF_LH_Technik_south",
+     "EDDF_perishable_center",
+     "EDDF_vehicle_gate"
+    ]
+   }
+  ],
+  "textures": [
+   "0129cbafc0e83a37.webp",
+   "a7855abcd05f4fbf.webp",
+   "c57f4b1ff83747fd.webp",
+   "bd33238e0a8da632.webp",
+   "091f182f1cb59688.webp",
+   "0e92fb2d2f43d733.webp",
+   "a2dd5fdb2d4b93bd.webp",
+   "6f09f7eb8636b396.webp",
+   "e213c80653d9fbb5.webp",
+   "a92988c34d7ccb13.webp",
+   "c1eb107ce73a7d87.webp",
+   "0762c3b4beda361b.webp",
+   "46f020caca5e5cc1.webp",
+   "3fc885fc03c2c09a.webp",
+   "aa7b4b7eec18d018.webp",
+   "44343ea6badbf7cd.webp",
+   "a0f4653b7dc1d038.webp",
+   "8c3b992c1a3c6073.webp",
+   "3bc50bd500e3c958.webp",
+   "a786804d1b0803d0.webp",
+   "760c1523d72468e3.webp",
+   "b53f826f10880017.webp",
+   "e41e5dee1b73158d.webp",
+   "d3683e40f7ba2cfa.webp",
+   "6af01a5011df92b7.webp",
+   "beb4a95305f27e2d.webp",
+   "7383804ae8fe9d90.webp",
+   "645c969ca322884a.webp",
+   "2b6030ffde0b5f29.webp",
+   "71d6f1c0f62aa7f7.webp",
+   "ef6e48ed3a7a5a1f.webp",
+   "4ba7b8099fc9286f.webp",
+   "9cbb4fe09f21fcbe.webp",
+   "6952c6846a11748d.webp",
+   "24cd85d6003c85e2.webp",
+   "9f10f88f56f98c25.webp",
+   "60904e238f8b299e.webp",
+   "bac6d99e0ac1d2c3.webp",
+   "fc7f23986da933b2.webp",
+   "d05c5496e422cb78.webp",
+   "dc7699edefc097e3.webp",
+   "0b9faa0e7d7b5bba.webp",
+   "9291993eff672118.webp",
+   "25f9571d0585a793.webp",
+   "8893daf97780529d.webp",
+   "a4c8b6022a57bee8.webp",
+   "835b3ca7f9b493e6.webp",
+   "e06d4c954c5369e3.webp",
+   "c9264fa5e9862820.webp",
+   "7454c468f07b9e88.webp",
+   "6918904f5f5ef7ab.webp",
+   "d26eeff45e66fd9d.webp",
+   "5022efb97bbe65b2.webp",
+   "72533081c642a8ba.webp",
+   "3822c2ac4817a108.webp",
+   "7ac71ba5fea32176.webp",
+   "ff06bd34bc695958.webp",
+   "88f710603f5ec7cb.webp",
+   "0b9694399931823a.webp"
+  ]
+ },
+ "EDDH": {
+  "authors": [
+   {
+    "name": "Henning Stahlke",
+    "models": [
+     "EDDH Tower",
+     "EDDH hangar L+K",
+     "EDDH radar tower3",
+     "Hangar_LHT"
+    ]
+   },
+   {
+    "name": "Torsten Dreyer",
+    "models": [
+     "EDDH Gebaeude 230",
+     "EDDH Hangar GH",
+     "EDDH Hans Grade Weg",
+     "EDDH Parkhaus Lilienthalstrasse",
+     "EDDH Parkhaus Mietwagen",
+     "EDDH Parkrotunde",
+     "EDDH Radartower 2",
+     "Polizeistern Hamburg - Germany",
+     "Ueberseering 12 - Hamburg - Germany",
+     "Ueberseering 24 - Hamburg - Germany",
+     "Ueberseering 30 - Hamburg - Germany",
+     "Ueberseering 33a - Hamburg - Germany",
+     "Ueberseering 35 - Hamburg - Germany"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m180deg",
+     "Apron Lightpole 16m360deg",
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Christian Thiriot",
+    "models": [
+     "Aircraft stairs"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Hamburg Airport Terminals (EDDH)",
+     "Jetway 20m red"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "0667c3eaf3f77019.webp",
+   "13cbc7ecfff87c78.webp",
+   "75e30c29a4fcf878.webp",
+   "7703fe5187866bb7.webp",
+   "089253fe0edba97f.webp",
+   "2783c61cca05590b.webp",
+   "0a696ecda9e31d7b.webp",
+   "dfad22e04adf44ff.webp",
+   "f413e68894d30a91.webp",
+   "317ca57f6be3b476.webp",
+   "b39863f6d6c44eea.webp",
+   "4caca71711b24f13.webp",
+   "7d40410c664adc80.webp",
+   "dee126b8dc3506dc.webp",
+   "9f10f88f56f98c25.webp",
+   "2fdb37dc39749064.webp",
+   "97669ee04e4e6ff2.webp",
+   "36e6ded0d85ba609.webp",
+   "40c839ae8a9bf462.webp",
+   "436ce46fcec8da42.webp",
+   "af133d1313643919.webp",
+   "be47cc3d8d394b26.webp",
+   "73db008f74044685.webp",
+   "829b211baff67637.webp",
+   "49ae043d5c423228.webp",
+   "e452dac1add46e77.webp",
+   "0e27558c7d5bdf2c.webp",
+   "03ecbdd47cabaf41.webp",
+   "e47d4d334826e096.webp"
+  ]
+ },
+ "EDDK": {
+  "authors": [
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway-10",
+     "jetway-20",
+     "office",
+     "orly-centrale"
+    ]
+   },
+   {
+    "name": "Alexander Raldugin",
+    "models": [
+     "Iru Power Plant Building 2 - Tallinn - Estonia"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "EGKK blastscreen",
+     "EGKK building 3",
+     "EGKK maintenance building 1/1",
+     "EGKK multi-storey carpark",
+     "EGKK office"
+    ]
+   },
+   {
+    "name": "Paolo Rota",
+    "models": [
+     "LIDT - Hangar south",
+     "LSZS Hangar Block North"
+    ]
+   },
+   {
+    "name": "Carsten Vogel",
+    "models": [
+     "EDDC/Dresden APRON-1"
+    ]
+   },
+   {
+    "name": "Christian Schmitt",
+    "models": [
+     "EDDF blast deflector generic",
+     "EDDF blast deflector high",
+     "EDDF blast deflector low"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "KNUQ - Moffett field - Hangar N-211"
+    ]
+   },
+   {
+    "name": "Torsten Dreyer",
+    "models": [
+     "EDDH Radartower 2",
+     "EDHL Hangar H"
+    ]
+   },
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "T Hangar 2"
+    ]
+   },
+   {
+    "name": "David Glowsky",
+    "models": [
+     "Generic fire station modeled on the one at LOWI"
+    ]
+   },
+   {
+    "name": "Paul Bohnert",
+    "models": [
+     "Generic hotel building as located just off Oshkosh runway 9 approach."
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "Zone_Indus_petit"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   },
+   {
+    "name": "Thomas Grossberger",
+    "models": [
+     "EDDP DHL Tank"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Localizer Aerial Bridge 50M"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "EDDK Tower"
+    ]
+   },
+   {
+    "name": "Thomas Schonhoven",
+    "models": [
+     "EDDK Cylinder",
+     "EDDK Railway Station",
+     "EDDK-Terminal1",
+     "EDDK-Terminal2"
+    ]
+   }
+  ],
+  "textures": [
+   "abbed57f90de2180.webp",
+   "9a5a5a37cd0d27e5.webp",
+   "01a091167de8c6f4.webp",
+   "d555db8f3eaa00e3.webp",
+   "52cd630fffd156de.webp",
+   "4b6064d98eb22560.webp",
+   "c85a93ee5e981158.webp",
+   "2b7aba577d914abf.webp",
+   "1390651680a60f56.webp",
+   "158ce664094fa39a.webp",
+   "054f7ee58eb87ab7.webp",
+   "cdbe77a3a9f82f12.webp",
+   "f8c8f2d31e1f566a.webp",
+   "37325666bcf69877.webp",
+   "e73a68adcbc2c790.webp",
+   "6952c6846a11748d.webp",
+   "24cd85d6003c85e2.webp",
+   "3b4bdbb044257016.webp",
+   "b1edf3f43ae2a6ac.webp",
+   "4bfb430d479705b5.webp",
+   "85cf1e6095cf02c7.webp",
+   "ef33f16ba68df289.webp",
+   "00df0a2112ec33e6.webp",
+   "4ef8bce0b092a048.webp",
+   "7445f5892da3f60c.webp",
+   "2d58ce5d2fd3e8aa.webp",
+   "88dc238349bef76c.webp",
+   "0f8ab725f588f602.webp",
+   "aeace305d5180b12.webp",
+   "f2a96b92c61cd32a.webp",
+   "9a415de6ea3e415a.webp",
+   "88ae2407aefb7891.webp",
+   "068f466068536bb2.webp",
+   "a6926b637cad39f3.webp",
+   "ef46c7135d08f3a3.webp",
+   "436ce46fcec8da42.webp",
+   "0e51ed3325b37b74.webp",
+   "2e47468a937e8301.webp",
+   "dee126b8dc3506dc.webp",
+   "e81d0d9ecd7aa020.webp",
+   "856b2f276078838d.webp",
+   "f10d6fbc366e13fb.webp",
+   "32e7f8982c99be54.webp",
+   "23e1fa8d20cbb526.webp",
+   "eac24de8142269da.webp",
+   "a55282774b445227.webp",
+   "5d0ad806854ef548.webp",
+   "ebcc88da4e9da068.webp"
+  ]
+ },
+ "EDDL": {
+  "authors": [
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "EDDL Terminal"
+    ]
+   },
+   {
+    "name": "Roberto Inzerillo",
+    "models": [
+     "EDDL Tower"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Industrial Unit (50mx75m)",
+     "MultiFlight Hangar - EGNM"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway",
+     "jetway-10",
+     "jetway-20",
+     "jetway-30r",
+     "office"
+    ]
+   },
+   {
+    "name": "David Megginson",
+    "models": [
+     "small glass office building"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Generic animated jetway",
+     "Single animated, movable jetway",
+     "Triple animated, movable jetway"
+    ]
+   },
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "T Hangars"
+    ]
+   },
+   {
+    "name": "Nicolas Slezak",
+    "models": [
+     "Big Hangar"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "cargobox"
+    ]
+   }
+  ],
+  "textures": [
+   "86931ab4b462ed31.webp",
+   "8a8a5d2999c6539b.webp",
+   "abbed57f90de2180.webp",
+   "be90e0c718e42c0e.webp",
+   "ef46c7135d08f3a3.webp",
+   "e6a2e77c0524ce52.webp",
+   "69fb7f2a9cd54f66.webp",
+   "d0a16ddd6d0a519a.webp",
+   "c40199776600795a.webp",
+   "cb9609f7e871bc2b.webp",
+   "436ce46fcec8da42.webp"
+  ]
+ },
+ "EDDM": {
+  "authors": [
+   {
+    "name": "David Glowsky",
+    "models": [
+     "Detached jetways on apron 1 at EDDM",
+     "EDDM Main tower",
+     "EDDM Terminal 1",
+     "EDDM Terminal 2",
+     "EDDM engine test hangar",
+     "EDDM hangar 1",
+     "EDDM hangar 3",
+     "EDDM hangar 4",
+     "EDDM, Building on apron 3 - luggage sorting",
+     "EDDM, Ground tower terminal 2",
+     "EDDM, Northern building on apron 1",
+     "EDDM, Office and Hotel buildings behind terminal 1",
+     "EDDM, Southern building on apron 1",
+     "EDDM, Terminal 2 entrance hall"
+    ]
+   },
+   {
+    "name": "Christian Schmitt",
+    "models": [
+     "EDDF blast deflector high"
+    ]
+   },
+   {
+    "name": "merspieler",
+    "models": [
+     "EDDM CRJ Tailfin"
+    ]
+   }
+  ],
+  "textures": [
+   "4ae9e8d1b04fd394.webp",
+   "a1c02559e2ec1e05.webp",
+   "3fe521e14f2438bd.webp",
+   "694b79e84dc10c2e.webp",
+   "8f7219bf737bc008.webp",
+   "bb878dacc928f060.webp",
+   "5807c66535469b16.webp",
+   "2e7ef479a25cefc9.webp",
+   "eae4f9a9219a19cb.webp",
+   "181e2a6992758c36.webp",
+   "222d5a168985522a.webp",
+   "6952c6846a11748d.webp",
+   "24cd85d6003c85e2.webp",
+   "25c7e1c4317cf3e1.webp",
+   "ee637889cebfd7c1.webp",
+   "13dd615d16c5d4ea.webp",
+   "e38f1ebbba3ff1f6.webp",
+   "1a53d909d34c60f4.webp",
+   "427b9e47d39e7d22.webp",
+   "7147c708dda7ed9d.webp",
+   "d2d8ce4f0959bd79.webp",
+   "e346f84167036423.webp",
+   "01d4c6c1ea3e0bdd.webp",
+   "2b573a3a83962e83.webp",
+   "774cf4b1f506e4ac.webp",
+   "a551adea92b0e7c3.webp",
+   "b0df00f9203b0198.webp",
+   "8114fafda6e5476d.webp",
+   "d8ce085cd8b39473.webp",
+   "068d16e11d9404d6.webp",
+   "f0d5b66166f7dc18.webp",
+   "a5d6ef573999b27c.webp",
+   "f9f2c8ac70d4a1fb.webp",
+   "69a0a05a15474798.webp",
+   "b4193a2cf66434f3.webp",
+   "c90022b5b1bb6a7a.webp",
+   "93611b31de0cbe2c.webp",
+   "1861664b04db58a8.webp",
+   "d87f22184dd31921.webp",
+   "6b280ddd857766ca.webp",
+   "e6ea1e6c4884999d.webp",
+   "e3ffd97bf4249315.webp",
+   "3d9fcfaca660914e.webp",
+   "6245babd1651c231.webp",
+   "d0748a23c4c0f0b1.webp",
+   "0ef65d521cf683f8.webp",
+   "4bacf8104b913ecf.webp",
+   "59254ef228920488.webp",
+   "5acf25673cd3cdd2.webp",
+   "17a1bb22df6309e6.webp"
+  ]
+ },
+ "EDDS": {
+  "authors": [
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "T Hangars"
+    ]
+   },
+   {
+    "name": "Nicolas Slezak",
+    "models": [
+     "Hangar"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Generic Control Tower",
+     "Medium Glass Office Building"
+    ]
+   },
+   {
+    "name": "Robert Shearman",
+    "models": [
+     "KMTN modular hangar"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Industrial Unit (100mx70m)",
+     "Industrial Unit (100mx90m)",
+     "Industrial Unit (110mx185m)",
+     "Industrial Unit (185mx300m)",
+     "Industrial Unit (70mx75m)",
+     "Retail Unit (100mx55m)",
+     "Retail Unit (75mx60m) Double Roof Section",
+     "Retail Unit (90mx50m)"
+    ]
+   },
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "EDDF Apron lightpole"
+    ]
+   },
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "Small modern office"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway-20",
+     "office",
+     "tecalemit",
+     "tecalemit-h"
+    ]
+   },
+   {
+    "name": "David Megginson",
+    "models": [
+     "small glass office building"
+    ]
+   },
+   {
+    "name": "Stefan Frank",
+    "models": [
+     "EDDS DC Aviation Hangar",
+     "EDDS GA redwhite barrier",
+     "EDDS General Aviation Terminal 1",
+     "EDDS General Aviation Terminal 2",
+     "EDDS Ground Control",
+     "EDDS Jet A-1 Tanks",
+     "EDDS Lufthansa Technik Hangar",
+     "EDDS North Wall 1",
+     "Jetway 40m grey"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m180deg",
+     "Apron Lightpole 16m360deg",
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Frank Goeldner",
+    "models": [
+     "EDDI airport storage 141-143"
+    ]
+   },
+   {
+    "name": "Lukas Gafner",
+    "models": [
+     "LSZE office"
+    ]
+   },
+   {
+    "name": "Christian Thiriot",
+    "models": [
+     "Aircraft stairs"
+    ]
+   }
+  ],
+  "textures": [
+   "d0a16ddd6d0a519a.webp",
+   "43b78cabe603c0d1.webp",
+   "0c9f442e2cd455e8.webp",
+   "38585148ba86ba21.webp",
+   "4a6c8834ff46c84a.webp",
+   "e53b614993fb0138.webp",
+   "7534e08cae5c2ee8.webp",
+   "05f450b4f82735b2.webp",
+   "5c5610e1afc2a9f5.webp",
+   "9f692f62a4aa18c6.webp",
+   "307c0a9837df067d.webp",
+   "d9af1f9845f0a94f.webp",
+   "a0290f17ca82b9d3.webp",
+   "e999240dc2089039.webp",
+   "87c278d369ae1d31.webp",
+   "9c6fb240eea49bf5.webp",
+   "be90e0c718e42c0e.webp",
+   "ef46c7135d08f3a3.webp",
+   "abbed57f90de2180.webp",
+   "856b2f276078838d.webp",
+   "29434d16a9328e6b.webp",
+   "9f10f88f56f98c25.webp",
+   "975b3956adca2f75.webp",
+   "83ba13089b5eb4d5.webp",
+   "e5260d520c82f627.webp",
+   "a781e68ec0be70cf.webp",
+   "c138978e897c7f8f.webp",
+   "4df226e633658a67.webp",
+   "17bb98fcba818d55.webp",
+   "2fdb37dc39749064.webp",
+   "496cee98db7fbe2f.webp",
+   "078a3f0c340b3d08.webp"
+  ]
+ },
+ "EGKK": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Gasometer",
+     "Generic 20m diameter storage tank",
+     "Generic 30m diameter storage tank",
+     "Industrial Unit (130mx95m)",
+     "Office (47mx52m)",
+     "Water works filtration bed 20m",
+     "Water works filtration bed 30m"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "caisses_services",
+     "jetway-ba"
+    ]
+   },
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "Medium Hangar"
+    ]
+   },
+   {
+    "name": "Emmanuel Baranger",
+    "models": [
+     "Mobile Jetway for 737",
+     "Mobile Jetway for 747"
+    ]
+   },
+   {
+    "name": "Vic Marriott",
+    "models": [
+     "Mobile Jetway for A320"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway",
+     "office"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "EGKK blastscreen",
+     "EGKK bridge",
+     "EGKK building 3",
+     "EGKK building 4",
+     "EGKK cargo",
+     "EGKK fire station",
+     "EGKK hotel",
+     "EGKK junction",
+     "EGKK maintenance building 0/1",
+     "EGKK maintenance building 1/1",
+     "EGKK maintenance building 1/3",
+     "EGKK maintenance building 1/4",
+     "EGKK maintenance building 1/5",
+     "EGKK maintenance building 1/7",
+     "EGKK maintenance building 2/1",
+     "EGKK multi-storey carpark",
+     "EGKK north terminal",
+     "EGKK office",
+     "EGKK office building 1",
+     "EGKK oil storage tank",
+     "EGKK pier 1",
+     "EGKK pier 2",
+     "EGKK pier 3",
+     "EGKK pier 4",
+     "EGKK pier 5",
+     "EGKK pier 6",
+     "EGKK south terminal",
+     "EGKK tower",
+     "Industrial Unit (50mx100m)"
+    ]
+   }
+  ],
+  "textures": [
+   "9aba8b03b2c853dd.webp",
+   "44397e1ed445f76d.webp",
+   "9a7c237865d5210d.webp",
+   "d1986d71daaf93da.webp",
+   "11b21322a736d654.webp",
+   "69fb7f2a9cd54f66.webp",
+   "abbed57f90de2180.webp",
+   "49c89e745f49b2a5.webp",
+   "d221beec8140ff82.webp",
+   "2e47468a937e8301.webp",
+   "42a20a46a480d84c.webp",
+   "9a5a5a37cd0d27e5.webp",
+   "4766cb73d85d6f8f.webp",
+   "da9dc155af4e67f8.webp",
+   "0e51ed3325b37b74.webp",
+   "785d3389b9296d5e.webp",
+   "b7e8d9b6bda10cc7.webp",
+   "2bd3f688a5d32ab2.webp",
+   "01a091167de8c6f4.webp",
+   "96d59a4f2b2b0149.webp",
+   "0dce81aecfae05f7.webp",
+   "5d85eb0b9c991bfa.webp",
+   "0aaf49715858f641.webp",
+   "b3fa470609048386.webp",
+   "25d321da65676976.webp",
+   "a9df04e0401e35d8.webp",
+   "d6740d12ae2c69e9.webp",
+   "3630af01fc3ec8df.webp",
+   "660d739c044d4120.webp",
+   "fdf49eb693b6936d.webp",
+   "d42f75f0d70d73f0.webp",
+   "9959087caf674fc0.webp",
+   "0797b6a26c571860.webp",
+   "f64042ed15fcf955.webp",
+   "0cc33e0511c934fe.webp",
+   "d32bc2b0edc51b9d.webp",
+   "2d58ce5d2fd3e8aa.webp"
+  ]
+ },
+ "EGLL": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 10m diameter storage tank",
+     "Generic 20m diameter storage tank",
+     "Generic 5m diameter storage tank"
+    ]
+   },
+   {
+    "name": "John Holden",
+    "models": [
+     "EGLL Terminal 4"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "EGLL Terminal 3",
+     "EGLL Terminal 5 A,B,C",
+     "EGLL tower"
+    ]
+   },
+   {
+    "name": "Jonathan Redpath",
+    "models": [
+     "London Heathrow Terminal 4"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway-10",
+     "jetway-20",
+     "jetway-30l",
+     "jetway-30r"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "jetway-ba"
+    ]
+   }
+  ],
+  "textures": [
+   "219ae1df2ac53636.webp",
+   "d1740c77cc6074d0.webp",
+   "abef64359954d333.webp",
+   "a71ece665234b5ce.webp",
+   "d04907d04110d0c5.webp",
+   "ef46c7135d08f3a3.webp",
+   "11b21322a736d654.webp"
+  ]
+ },
+ "EGSS": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 20m diameter storage tank",
+     "Generic AVGAS storage - 2 cylinders"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "EGKK blastscreen",
+     "EGKK maintenance building 2/1"
+    ]
+   },
+   {
+    "name": "Andrew Keeble",
+    "models": [
+     "EGSH Control Tower"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "caisses_services",
+     "cargobox"
+    ]
+   },
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "T Hangar 2",
+     "T Hangars"
+    ]
+   },
+   {
+    "name": "Gijs de Rooy",
+    "models": [
+     "EHLE Hangar"
+    ]
+   },
+   {
+    "name": "LemiCandy",
+    "models": [
+     "EGSS Terminal"
+    ]
+   },
+   {
+    "name": "David van Mosselbeen",
+    "models": [
+     "Generic Building 135x65x35m Green"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "KLSV building 1"
+    ]
+   }
+  ],
+  "textures": [
+   "9f10f88f56f98c25.webp",
+   "b3fa470609048386.webp",
+   "10bd26975a3e2ea2.webp",
+   "44397e1ed445f76d.webp",
+   "cb9609f7e871bc2b.webp",
+   "2e47468a937e8301.webp",
+   "d0a16ddd6d0a519a.webp",
+   "0f8ab725f588f602.webp",
+   "2bd45b72972f3aff.webp",
+   "34e9f7eb1f88a5a8.webp",
+   "1585c36097ed0c0e.webp",
+   "559a2c2d866fc6e1.webp",
+   "01fda42634fc55fe.webp",
+   "fa4b9125dfaba168.webp"
+  ]
+ },
+ "EHAM": {
+  "authors": [
+   {
+    "name": "Michel van de Mheen",
+    "models": [
+     "EHAM - Hilton",
+     "EHAM - Schiphol Plaza",
+     "EHAM - WTC Schiphol Airport",
+     "EHAM - klein reclamezuil",
+     "EHAM Base Maintenance Hangar 14",
+     "EHAM Gate B",
+     "EHAM Gate C",
+     "EHAM Gate D",
+     "EHAM Gate H",
+     "EHAM Hangar 10",
+     "EHAM Hangar 11 and 12",
+     "EHAM Hangar 11b and 12b",
+     "EHAM Hangar 32 (Martinair maintenace hangar)",
+     "EHAM Hangar 4",
+     "EHAM Martinair Cargo",
+     "EHAM Old Tower",
+     "EHAM Old Tower East",
+     "EHAM Terminal 1",
+     "EHAM Terminal 1 and 23",
+     "EHAM Terminal 2",
+     "EHAM Tower East",
+     "EHAM Transavia Building",
+     "EHAM centrum 1",
+     "EHAM centrum 10",
+     "EHAM centrum 11",
+     "EHAM centrum 12",
+     "EHAM centrum 13",
+     "EHAM centrum 2",
+     "EHAM centrum 3",
+     "EHAM centrum 4",
+     "EHAM centrum 5",
+     "EHAM centrum 6",
+     "EHAM centrum 7",
+     "EHAM centrum 8",
+     "EHAM centrum 9",
+     "EHAM east 1",
+     "EHAM east 10",
+     "EHAM east 11",
+     "EHAM east 12",
+     "EHAM east 13",
+     "EHAM east 14",
+     "EHAM east 16",
+     "EHAM east 17",
+     "EHAM east 18",
+     "EHAM east 19",
+     "EHAM east 2",
+     "EHAM east 20",
+     "EHAM east 21",
+     "EHAM east 22",
+     "EHAM east 23",
+     "EHAM east 24",
+     "EHAM east 25",
+     "EHAM east 3",
+     "EHAM east 4",
+     "EHAM east 5",
+     "EHAM east 6",
+     "EHAM east 7",
+     "EHAM east 8",
+     "EHAM east 9",
+     "EHAM fire centrum",
+     "EHAM olietank a",
+     "EHAM olietank b",
+     "EHAM parking"
+    ]
+   },
+   {
+    "name": "Gijs de Rooy",
+    "models": [
+     "EHAM Tower West",
+     "Mexx Europe International - Amsterdam"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Radar"
+    ]
+   }
+  ],
+  "textures": [
+   "c9aa5bccd07d3879.webp",
+   "ddaf2439793618de.webp",
+   "d25d710312be7a2d.webp",
+   "a23ffcc2a70d7357.webp",
+   "fe259b9a491b86ee.webp",
+   "6b3ebe5a90eb7b98.webp",
+   "26e5aeaf1a736c15.webp",
+   "7d81cee5da1db2a3.webp",
+   "1bb833bf8c33dd37.webp",
+   "c2f1d8ce46cb5d34.webp",
+   "d0d90f33c823b542.webp",
+   "3428759542d165ed.webp",
+   "09ff58874128a5ee.webp",
+   "b5cfb5e448c68a9d.webp",
+   "575ff41753b54519.webp",
+   "c4b47d18697b9122.webp",
+   "0105f9a5dd9b1c92.webp",
+   "fd5848f5c4aa2182.webp",
+   "88906d4ded2c4279.webp",
+   "6f46a6f2e7e58455.webp",
+   "753fed39e17d00bd.webp",
+   "0b5443d834412eb0.webp",
+   "cf0c4c0dead459e1.webp",
+   "f80d7280e87adab2.webp",
+   "853d95985a729d83.webp",
+   "a15ae34708f528a3.webp",
+   "8b62f2f854834810.webp"
+  ]
+ },
+ "EIDW": {
+  "authors": [
+   {
+    "name": "Andre Dietrich",
+    "models": [
+     "EIDW PSR radar",
+     "EIDW Pier D",
+     "EIDW Radar Building",
+     "EIDW SSR radar",
+     "EIDW Terminal 1 to 2 connection",
+     "EIDW Terminal1",
+     "EIDW Terminal1 Hub",
+     "EIDW Terminal1 Ramp",
+     "EIDW Terminal2",
+     "EIDW Terminal2 Hub",
+     "EIDW Tower",
+     "EIDW combined PSR/SSR radar",
+     "EIDW firehouse",
+     "EIDW historical Terminal",
+     "Radar tower as seen at EIDW"
+    ]
+   }
+  ],
+  "textures": [
+   "2113cf0d8acdc697.webp",
+   "36db3834b7155323.webp",
+   "0498b5e97de8fdf8.webp",
+   "b2086fd47873fa5b.webp",
+   "3fac6e89c9dc329a.webp",
+   "744cfcb81746540d.webp",
+   "c43c505f4f6ae43b.webp",
+   "e5faeedd35c91f79.webp",
+   "b61803c7736eb540.webp",
+   "ae6a518e79706b07.webp",
+   "9148d222d1a57ea6.webp",
+   "cb179799d12cefbf.webp",
+   "955b75293dfd46f8.webp",
+   "725e788388a17990.webp",
+   "4157b36fac30893c.webp",
+   "22066ceb34c44303.webp",
+   "d4b6013a7f1a8a5c.webp",
+   "f1e5bb91fb3a538a.webp",
+   "7c0e037f04d8bd97.webp",
+   "9db9ca8a8d516e9f.webp",
+   "b8498b76d57ab237.webp",
+   "c12d2d5b2a6a6652.webp",
+   "066653adc5e93af8.webp",
+   "319b1cba032c146c.webp",
+   "94fa4136b0bbaa92.webp",
+   "b2f23b0c7e41ce67.webp",
+   "520702f6d3c721ac.webp",
+   "23eab162c4446512.webp",
+   "bd0ddd805f9f835d.webp",
+   "ffc6d43e171092e5.webp",
+   "6ae48033e2bfebe5.webp",
+   "a781ad67c7cc9adc.webp",
+   "01e8eece5bcfe1d2.webp",
+   "cdfbbc0e26a79928.webp",
+   "76ecf951675e5c37.webp",
+   "b12ea6ea1bf1cc22.webp",
+   "28f4357884cf1a35.webp",
+   "6e45965a876dbf85.webp",
+   "e2caa2ef2a10bbfe.webp",
+   "1afc6ccbe2b1641c.webp",
+   "408b298363c08260.webp",
+   "64cdecf9a19f363c.webp",
+   "2b78b928d3d22d5c.webp",
+   "0a6c667b493ca442.webp",
+   "8f1add42e183d175.webp",
+   "1c22e1e95dd760fd.webp"
+  ]
+ },
+ "EKCH": {
+  "authors": [
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "office"
+    ]
+   },
+   {
+    "name": "Emmanuel Baranger",
+    "models": [
+     "Mobile Jetway for 737"
+    ]
+   },
+   {
+    "name": "Morten Oesterlund Joergensen",
+    "models": [
+     "Hilton Copenhagen Airport Hotel",
+     "Koebenhavns Lufthavn, Kastrups Kontroltaarn"
+    ]
+   }
+  ],
+  "textures": [
+   "abbed57f90de2180.webp",
+   "d1986d71daaf93da.webp"
+  ]
+ },
+ "ELLX": {
+  "authors": [
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "cargoip"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "Water tower as seen at KNUQ"
+    ]
+   },
+   {
+    "name": "Melchior Franz",
+    "models": [
+     "square-shaped helipad, modelled after KSFO"
+    ]
+   },
+   {
+    "name": "Vic Marriott",
+    "models": [
+     "4m90 Helipad Collar"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway-30l",
+     "jetway-30r"
+    ]
+   },
+   {
+    "name": "Emmanuel Baranger",
+    "models": [
+     "Mobile Jetway for 737"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Dual animated, movable jetway",
+     "Single animated, movable jetway",
+     "Triple animated, movable jetway"
+    ]
+   },
+   {
+    "name": "Christian Schmitt",
+    "models": [
+     "EDDF blast deflector generic"
+    ]
+   },
+   {
+    "name": "Thomas Polzer",
+    "models": [
+     "Administration of airport ELLX",
+     "ELLX Main Tower",
+     "ELLX firestation tower",
+     "Hangar General Aviation",
+     "North Hangar for maintenance",
+     "Passengers Terminal 2",
+     "Passengers connector to jetways",
+     "firestation garage for firetruck"
+    ]
+   },
+   {
+    "name": "Sven Seipp",
+    "models": [
+     "ELLX_DHL_gobal_forwarding"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m180deg"
+    ]
+   }
+  ],
+  "textures": [
+   "cfcb735a7792607c.webp",
+   "d532eeff9abb49d5.webp",
+   "f3e41a33b95a31eb.webp",
+   "ef46c7135d08f3a3.webp",
+   "d1986d71daaf93da.webp",
+   "436ce46fcec8da42.webp",
+   "6952c6846a11748d.webp",
+   "24cd85d6003c85e2.webp",
+   "fc90fb3113e3d6c1.webp",
+   "8a4caec22199fea7.webp",
+   "e1916b79b491ab4a.webp",
+   "c079c7f4d974491c.webp",
+   "eae788ba83cc1d47.webp",
+   "21ad079bc06bf952.webp",
+   "e38f1ebbba3ff1f6.webp",
+   "9a415de6ea3e415a.webp",
+   "aeace305d5180b12.webp",
+   "f2a96b92c61cd32a.webp",
+   "88ae2407aefb7891.webp",
+   "2140ae24f182237e.webp",
+   "1a53d909d34c60f4.webp",
+   "925038566be3f391.webp",
+   "cf0a270154e846cb.webp",
+   "6d5d96884980f230.webp",
+   "068d16e11d9404d6.webp",
+   "c2b361697a406bba.webp",
+   "1c0b73dcdf0013a9.webp",
+   "80392bf8248657f3.webp",
+   "9f10f88f56f98c25.webp"
+  ]
+ },
+ "ENGM": {
+  "authors": [
+   {
+    "name": "Israel A. Hernandez",
+    "models": [
+     "Office 65x50"
+    ]
+   },
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "T Hangars"
+    ]
+   },
+   {
+    "name": "David van Mosselbeen",
+    "models": [
+     "Generic Building 135x65x35m Green"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "garageab"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "ATC Tower 100m"
+    ]
+   },
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "Small modern office"
+    ]
+   }
+  ],
+  "textures": [
+   "25c9a6748512be82.webp",
+   "d0a16ddd6d0a519a.webp",
+   "193565a3353dc6a4.webp",
+   "9a9defdfaa1f9e5c.webp",
+   "8b6bbcf78622aed0.webp",
+   "e999240dc2089039.webp"
+  ]
+ },
+ "FAOR": {
+  "authors": [
+   {
+    "name": "Thomas Polzer",
+    "models": [
+     "EDFH Passenger Checkin and Apron"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Hangars_45x18m"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway",
+     "jetway-30r"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Emirates Hangar"
+    ]
+   },
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "Multiplayer Movable Hangar C"
+    ]
+   },
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "Small modern office"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "jetway-ba"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Retail Unit (100mx55m)"
+    ]
+   }
+  ],
+  "textures": [
+   "da0c219377970985.webp",
+   "05b6ddca469d5caa.webp",
+   "69fb7f2a9cd54f66.webp",
+   "ef46c7135d08f3a3.webp",
+   "946a0bd53550a74e.webp",
+   "739de76b7ed07405.webp",
+   "350f6c73c6a6a63d.webp",
+   "e999240dc2089039.webp",
+   "11b21322a736d654.webp"
+  ]
+ },
+ "KATL": {
+  "authors": [
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 7",
+     "Generic Skyscraper 9"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 1",
+     "Generic Skyscraper 3"
+    ]
+   },
+   {
+    "name": "Alex Park",
+    "models": [
+     "KATL atrium terminal",
+     "KATL delta terminal",
+     "KATL fuel station",
+     "KATL fuel store",
+     "KATL office buildings",
+     "KATL terminal 2",
+     "KATL terminal 3",
+     "KATL terminal 4",
+     "KATL tower"
+    ]
+   }
+  ],
+  "textures": [
+   "4414d5dd63ff4309.webp",
+   "6a090682b32b27c4.webp",
+   "a716b5ce1c7a1f32.webp",
+   "25f9571d0585a793.webp",
+   "8893daf97780529d.webp",
+   "702f38c80e3f4071.webp",
+   "b5017848533d2ff1.webp",
+   "8c5ed79581dbaf90.webp",
+   "5a1ed3e3ac25b7d1.webp",
+   "2d75f669d94a31cf.webp",
+   "ce5677114dd3dae6.webp",
+   "c7c3791fa2adfbb5.webp",
+   "4eb11c0d3aa5bf24.webp",
+   "c6980a633ca76854.webp",
+   "6835a32bff7a6999.webp",
+   "85110b3fcf7da320.webp"
+  ]
+ },
+ "KDEN": {
+  "authors": [
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 7"
+    ]
+   },
+   {
+    "name": "John Holden",
+    "models": [
+     "KDEN Concourse C"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "ATC Tower 100m",
+     "KDEN hotel",
+     "KDEN terminal"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "a716b5ce1c7a1f32.webp",
+   "4e9149cbeefebf80.webp",
+   "a4c8b6022a57bee8.webp",
+   "8893daf97780529d.webp",
+   "a6825381d8746235.webp",
+   "acd2e163bd4c67ee.webp",
+   "c433669e1d964ff4.webp",
+   "4413c318396781be.webp",
+   "7f21422478f88201.webp",
+   "1a01a434d54389c3.webp",
+   "539dc77f77df9ffc.webp",
+   "e452dac1add46e77.webp",
+   "583f41e2cd86c985.webp",
+   "9a9defdfaa1f9e5c.webp",
+   "8b6bbcf78622aed0.webp",
+   "436ce46fcec8da42.webp"
+  ]
+ },
+ "KEWR": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 10m diameter storage tank",
+     "Generic 30m diameter storage tank",
+     "Generic_Chimney_01"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 1",
+     "Generic Skyscraper 3"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 7",
+     "Generic Skyscraper 8"
+    ]
+   },
+   {
+    "name": "Thonon Cedric",
+    "models": [
+     "EBLG_terminal_airport"
+    ]
+   },
+   {
+    "name": "Jean-paul Chatre",
+    "models": [
+     "LFLC Aérogare"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "AutoGate"
+    ]
+   }
+  ],
+  "textures": [
+   "44343ea6badbf7cd.webp",
+   "6a090682b32b27c4.webp",
+   "8893daf97780529d.webp",
+   "4414d5dd63ff4309.webp",
+   "a4c8b6022a57bee8.webp",
+   "a716b5ce1c7a1f32.webp",
+   "e73a45f508f223b6.webp",
+   "25f9571d0585a793.webp",
+   "c893f5863564544b.webp",
+   "26e96ac474b3d7c0.webp",
+   "47f6722176037408.webp"
+  ]
+ },
+ "KJFK": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 10m diameter storage tank",
+     "Generic 20m diameter storage tank",
+     "Generic 30m diameter storage tank",
+     "Generic 40m diameter storage tank",
+     "Generic 5m diameter storage tank",
+     "Generic_Chimney_01",
+     "Water works filtration bed 20m",
+     "Water works filtration bed 30m"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 1",
+     "Generic Skyscraper 3"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 7"
+    ]
+   },
+   {
+    "name": "Alex Park",
+    "models": [
+     "KJFK TWA Terminal",
+     "KJFK Terminal 1",
+     "KJFK Terminal 4",
+     "KJFK Terminal 6",
+     "KJFK Terminal 7",
+     "KJFK Terminal 9",
+     "KJFK Tower"
+    ]
+   }
+  ],
+  "textures": [
+   "44343ea6badbf7cd.webp",
+   "25f9571d0585a793.webp",
+   "4e9149cbeefebf80.webp",
+   "a716b5ce1c7a1f32.webp",
+   "6a090682b32b27c4.webp",
+   "8893daf97780529d.webp",
+   "fbd35c87d5d99bab.webp",
+   "48bf5c1800a8912b.webp",
+   "14181dc4e724f257.webp",
+   "8c5ed79581dbaf90.webp",
+   "d4e25d9f3740e8ae.webp",
+   "a493379cfe87ff01.webp"
+  ]
+ },
+ "KLAX": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic_Chimney_01"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 7",
+     "Generic Skyscraper 8",
+     "Generic Skyscraper 9"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Chevron Oil Refinery",
+     "Generic Skyscraper 3",
+     "KLAX Tom Bradley International Terminal"
+    ]
+   },
+   {
+    "name": "Alex Park",
+    "models": [
+     "KLAX Encounter Restaurant",
+     "KLAX Fuel Store",
+     "KLAX Striped Hangar",
+     "KLAX Tower",
+     "KLAX Window-roofed Hangar"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "KLAX Skyroad",
+     "KLAX Terminal 1",
+     "KLAX Terminal 2",
+     "KLAX Terminal 3",
+     "KLAX Terminal 4",
+     "KLAX Terminal 5",
+     "KLAX Terminal 6",
+     "KLAX Terminal 7",
+     "KLAX Terminal 8"
+    ]
+   },
+   {
+    "name": "John Holden",
+    "models": [
+     "30mx34m Hangar"
+    ]
+   }
+  ],
+  "textures": [
+   "44343ea6badbf7cd.webp",
+   "a4c8b6022a57bee8.webp",
+   "a716b5ce1c7a1f32.webp",
+   "4414d5dd63ff4309.webp",
+   "6a090682b32b27c4.webp",
+   "e73a45f508f223b6.webp",
+   "e49d4312df6db00a.webp",
+   "36069aea30ac1d5e.webp",
+   "c6980a633ca76854.webp",
+   "d4e25d9f3740e8ae.webp",
+   "8893daf97780529d.webp",
+   "702f38c80e3f4071.webp",
+   "4e9149cbeefebf80.webp",
+   "6b9768402f75e952.webp",
+   "85110b3fcf7da320.webp",
+   "633e726ca0c708ad.webp",
+   "5e68198df8021a82.webp",
+   "56d14793db8f2ead.webp",
+   "bdbd5e9d13661474.webp",
+   "f816c93d210d5a34.webp",
+   "ff737dc9c1d28692.webp",
+   "0e38c6c073662ec4.webp",
+   "7e07dcc054417897.webp",
+   "1f6bc79db435b97d.webp",
+   "d3f7dab060d58e20.webp",
+   "57b76ece1fc23161.webp",
+   "7a377f5c68d8e3bd.webp",
+   "6ad03c0d8800e4d4.webp"
+  ]
+ },
+ "KMIA": {
+  "authors": [
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 9"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 1",
+     "Generic Skyscraper 3",
+     "KMIA Terminals"
+    ]
+   }
+  ],
+  "textures": [
+   "4414d5dd63ff4309.webp",
+   "a4c8b6022a57bee8.webp",
+   "6a090682b32b27c4.webp",
+   "25f9571d0585a793.webp",
+   "8893daf97780529d.webp",
+   "702f38c80e3f4071.webp",
+   "4e9149cbeefebf80.webp"
+  ]
+ },
+ "KORD": {
+  "authors": [
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 7"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 1"
+    ]
+   },
+   {
+    "name": "John Holden",
+    "models": [
+     "KORD Terminal C"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 30m diameter storage tank",
+     "Generic 50m diameter storage tank",
+     "Localizer"
+    ]
+   },
+   {
+    "name": "Alex Hudghton",
+    "models": [
+     "Water works filtration bed 25m"
+    ]
+   }
+  ],
+  "textures": [
+   "4414d5dd63ff4309.webp",
+   "4e9149cbeefebf80.webp",
+   "a716b5ce1c7a1f32.webp",
+   "25f9571d0585a793.webp",
+   "8893daf97780529d.webp",
+   "a4c8b6022a57bee8.webp",
+   "835b3ca7f9b493e6.webp"
+  ]
+ },
+ "KSEA": {
+  "authors": [
+   {
+    "name": "John Holden",
+    "models": [
+     "KSEA Main Terminal",
+     "KSEA North Terminal",
+     "KSEA South Satellite Terminal",
+     "KSEA South Warehouse"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 20m diameter storage tank",
+     "Generic 30m diameter storage tank"
+    ]
+   }
+  ],
+  "textures": [
+   "e55ce21138050723.webp",
+   "c3d7666df9aee95f.webp"
+  ]
+ },
+ "KSFO": {
+  "authors": [
+   {
+    "name": "Gijs de Rooy",
+    "models": [
+     "KSFO AirTrain Track",
+     "KSFO Domestic Garage",
+     "KSFO Garage A",
+     "KSFO International Terminal",
+     "KSFO Maintenance Building 1",
+     "KSFO Terminal 3 (part 2)",
+     "KSFO Terminal A",
+     "KSFO Terminal C",
+     "KSFO Terminal E",
+     "KSFO Terminal F",
+     "KSFO Terminal G"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "KSFO Terminal D"
+    ]
+   },
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 3",
+     "KSFO New ATC Tower (2016)"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2"
+    ]
+   },
+   {
+    "name": "Thomas Polzer",
+    "models": [
+     "EDWB DSAirServHangar"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 10m diameter storage tank",
+     "Generic 20m diameter storage tank",
+     "Generic 30m diameter storage tank",
+     "Generic 5m diameter storage tank",
+     "Generic AVGAS storage - 1 cylinder",
+     "Water works filtration bed 10m",
+     "Water works filtration bed 20m",
+     "Water works filtration bed 30m"
+    ]
+   },
+   {
+    "name": "Dick Maurer",
+    "models": [
+     "hangar4",
+     "hangar5"
+    ]
+   },
+   {
+    "name": "Melchior Franz",
+    "models": [
+     "square-shaped helipad, modelled after KSFO"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Animated jetway, EHAM style"
+    ]
+   }
+  ],
+  "textures": [
+   "629e290aacb89506.webp",
+   "0e38c6c073662ec4.webp",
+   "f557cf85379d022c.webp",
+   "2829ebbf768ddeac.webp",
+   "19b54bb1f7e62cdb.webp",
+   "d372cb597f840317.webp",
+   "3c994884204f3f1d.webp",
+   "6a090682b32b27c4.webp",
+   "a4c8b6022a57bee8.webp",
+   "6b594ca4ca8d000e.webp",
+   "f662be58cbbc02ee.webp",
+   "44bf0a0581f700a0.webp",
+   "b39198ac5fe6d776.webp",
+   "7a9e95ec5eb7cb4d.webp",
+   "d284a6aa2e173ab1.webp",
+   "cf6ac9e336074684.webp",
+   "f19d71bd722df5bd.webp",
+   "8fd28e91f385100f.webp",
+   "1f6bc79db435b97d.webp",
+   "7e07dcc054417897.webp",
+   "debc0c95fb40bbf4.webp",
+   "5e166f41fc715967.webp",
+   "37805f237d741800.webp",
+   "d3f7dab060d58e20.webp",
+   "071c02294a80cfa2.webp",
+   "ff737dc9c1d28692.webp",
+   "7d03cbe35e85db87.webp",
+   "38573ef6a6515da9.webp",
+   "b6ecc2b5d3375865.webp",
+   "8613f0d984d0919e.webp"
+  ]
+ },
+ "LEMD": {
+  "authors": [
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic 20m diameter pressure vessel",
+     "Retail Unit (90mx50m)"
+    ]
+   },
+   {
+    "name": "Juan Vera del Campo",
+    "models": [
+     "LEMD AENA Cargo",
+     "LEMD IBERIA Cargo",
+     "LEMD North tower",
+     "LEMD T1-2-3",
+     "LEMD T4",
+     "LEMD T4S"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "tecalemit"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Medium Glass Office Building"
+    ]
+   },
+   {
+    "name": "Paul Bohnert",
+    "models": [
+     "Generic hotel building as located just off Oshkosh runway 9 approach."
+    ]
+   },
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "Estadio Wanda"
+    ]
+   }
+  ],
+  "textures": [
+   "b059e45a4e48603b.webp",
+   "7b51231c7947b269.webp",
+   "74df068fb5f41531.webp",
+   "11a8f6a94d30d2ce.webp",
+   "67ea1e1710301ae0.webp",
+   "a49c08ae29a6fa5c.webp",
+   "840170352a0d6f93.webp",
+   "87c278d369ae1d31.webp",
+   "9c6fb240eea49bf5.webp",
+   "068f466068536bb2.webp",
+   "e607c04091e8686f.webp"
+  ]
+ },
+ "LEPA": {
+  "authors": [
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "TACAN NavAid"
+    ]
+   },
+   {
+    "name": "Juan Vera del Campo",
+    "models": [
+     "LEPA TWR",
+     "LEPA Terminal"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "jetway-ba"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway-30l",
+     "jetway-30r"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Dual animated, movable jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "64e0146649d3c361.webp",
+   "d445450998b2d1da.webp",
+   "868cb2705801aa01.webp",
+   "11b21322a736d654.webp",
+   "ef46c7135d08f3a3.webp",
+   "436ce46fcec8da42.webp"
+  ]
+ },
+ "LFBD": {
+  "authors": [
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "TACAN NavAid"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "Zone-Indus"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Industrial Unit (120mx90m)",
+     "Industrial Unit (185mx300m)",
+     "Industrial Unit (35mx55m)",
+     "Industrial Unit (50mx75m)",
+     "Industrial Unit (70mx75m)",
+     "MultiFlight Hangar - EGNM"
+    ]
+   },
+   {
+    "name": "Christian Schmitt",
+    "models": [
+     "EDDF blast deflector high"
+    ]
+   },
+   {
+    "name": "Josh Babcock",
+    "models": [
+     "Generic Blast Deflector, 63m long"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "Water tower as seen at KNUQ"
+    ]
+   },
+   {
+    "name": "Michel van de Mheen",
+    "models": [
+     "EHAM olietank b"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Bordeaux-Merignac Billie",
+     "Bordeaux-Merignac D",
+     "Bordeaux-Merignac TW",
+     "Bordeaux-Mérignac A"
+    ]
+   },
+   {
+    "name": "Torsten Dreyer",
+    "models": [
+     "Generic animated glass jetway"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Jean-paul Chatre",
+    "models": [
+     "Bordeaux Mérignac  Accès",
+     "Bordeaux-Merignac-B"
+    ]
+   }
+  ],
+  "textures": [
+   "64e0146649d3c361.webp",
+   "a6926b637cad39f3.webp",
+   "8a8a5d2999c6539b.webp",
+   "8b22f2d2c620a95f.webp",
+   "ffa63766f304229e.webp",
+   "9f692f62a4aa18c6.webp",
+   "307c0a9837df067d.webp",
+   "d9af1f9845f0a94f.webp",
+   "a0290f17ca82b9d3.webp",
+   "6952c6846a11748d.webp",
+   "24cd85d6003c85e2.webp",
+   "b2b9cb0af97ae5db.webp",
+   "50d98a3c15669b3e.webp",
+   "aefda15e2f655da4.webp",
+   "d532eeff9abb49d5.webp",
+   "c4b47d18697b9122.webp",
+   "b71b9e3753072215.webp",
+   "14dbac92c46ac458.webp",
+   "2dce7e26d1b4d16f.webp",
+   "88d7a9aa62294f4c.webp",
+   "a8b86a5ee783009e.webp",
+   "ea94ac1ccc47071d.webp",
+   "7223ddf481105185.webp",
+   "e6a2e77c0524ce52.webp",
+   "436ce46fcec8da42.webp",
+   "9f10f88f56f98c25.webp",
+   "7f957f2b08957ac9.webp",
+   "7c69b381e48714af.webp",
+   "2c95b397b4c6b42e.webp"
+  ]
+ },
+ "LFLL": {
+  "authors": [
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m360deg",
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "David ALBERT",
+    "models": [
+     "LFLL AF TERM ARM",
+     "LFLL AF TERM BODY",
+     "LFLL BAT TECH 01",
+     "LFLL BAT TECH 02",
+     "LFLL BAT TECH 03",
+     "LFLL BAT TECH 04",
+     "LFLL BAT TECH FD",
+     "LFLL BAT TECH PD",
+     "LFLL BAT TOWER",
+     "LFLL-TERM-01",
+     "LFLL-TERM-02",
+     "LFLL-TERM-CENTER"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Localizer"
+    ]
+   }
+  ],
+  "textures": [
+   "9f10f88f56f98c25.webp",
+   "273edc1d02351af0.webp",
+   "7e7114b1d311f998.webp",
+   "afd99d71991a05ad.webp",
+   "e9efc1877e2b1579.webp",
+   "2f88c0b4b489529f.webp",
+   "976c008da28a2d08.webp",
+   "4d09d815aa9828f8.webp",
+   "69d1b94f6dfdee6b.webp",
+   "1171fbd7b0214afd.webp",
+   "508f3dd4d01b7503.webp",
+   "4385fb219effb8c6.webp",
+   "22456fb668723f84.webp",
+   "f60ba1baf46f9a27.webp",
+   "23171b7e7f2440f5.webp",
+   "d505fa8a2462a79c.webp",
+   "99fa564eab99e0b3.webp",
+   "835b3ca7f9b493e6.webp"
+  ]
+ },
+ "LFML": {
+  "authors": [
+   {
+    "name": "Stuart Buchanan",
+    "models": [
+     "FBO",
+     "Medium Hangar",
+     "T Hangar 2",
+     "T Hangars"
+    ]
+   },
+   {
+    "name": "Robert Shearman",
+    "models": [
+     "KMTN modular hangar"
+    ]
+   },
+   {
+    "name": "Michel van de Mheen",
+    "models": [
+     "EHAM olietank a"
+    ]
+   },
+   {
+    "name": "Georg Vollnhals",
+    "models": [
+     "Generic General Aviation Fuel Station"
+    ]
+   },
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "EDDF Apron lightpole"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Generic AVGAS storage - 1 cylinder",
+     "Generic AVGAS storage - 2 cylinders",
+     "Industrial Unit (110mx185m)",
+     "Industrial Unit (50mx75m)",
+     "Industrial Unit (55mx35m)",
+     "Industrial Unit (85mx160m)",
+     "MultiFlight Hangar - EGNM"
+    ]
+   },
+   {
+    "name": "Nicolas Slezak",
+    "models": [
+     "Big Hangar"
+    ]
+   },
+   {
+    "name": "Paul Bohnert",
+    "models": [
+     "Generic hotel building as located just off Oshkosh runway 9 approach.",
+     "hanger T single white 02"
+    ]
+   },
+   {
+    "name": "Torsten Dreyer",
+    "models": [
+     "Generic Fuel Pump"
+    ]
+   },
+   {
+    "name": "Juan Vera del Campo",
+    "models": [
+     "Hangar 2"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "Industrial Unit (50mx100m)"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "Zone-Indus-long",
+     "caisses_services",
+     "zone_services"
+    ]
+   },
+   {
+    "name": "Alexis Bory",
+    "models": [
+     "Generic Blast Deflector, 49m long"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "tecalemit",
+     "tecalemit-h"
+    ]
+   },
+   {
+    "name": "Paolo Savini",
+    "models": [
+     "Generic Italian civil water tower"
+    ]
+   },
+   {
+    "name": "Jean-paul Chatre",
+    "models": [
+     "LFML Acces pistes",
+     "LFML Aérogare A",
+     "LFML Aérogare hall 2-3",
+     "LFML Terminal 2",
+     "LFML Tour de controle",
+     "LFML acces jetways ",
+     "LFML acces jetways 3",
+     "LFML ancienne TW"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "9a7c237865d5210d.webp",
+   "38585148ba86ba21.webp",
+   "4a6c8834ff46c84a.webp",
+   "e53b614993fb0138.webp",
+   "fa7065cd15e8308d.webp",
+   "675a83c87f1d4c44.webp",
+   "575ff41753b54519.webp",
+   "61ecd34b4b6dbf80.webp",
+   "0f8ab725f588f602.webp",
+   "c40199776600795a.webp",
+   "d0a16ddd6d0a519a.webp",
+   "e0f6f257c183f108.webp",
+   "23d888e93d4d548d.webp",
+   "05f450b4f82735b2.webp",
+   "5c5610e1afc2a9f5.webp",
+   "8a8a5d2999c6539b.webp",
+   "edd6b8aa5fc26603.webp",
+   "6fcfb9c2f97de23c.webp",
+   "8642cf650515fbce.webp",
+   "d221beec8140ff82.webp",
+   "02fda0216436fe1e.webp",
+   "a6926b637cad39f3.webp",
+   "253ca83a9272e595.webp",
+   "44397e1ed445f76d.webp",
+   "cb3df143781809b6.webp",
+   "9a3ac31578c5bc1f.webp",
+   "5d0d5a75e6a7bb48.webp",
+   "87c278d369ae1d31.webp",
+   "068f466068536bb2.webp",
+   "cd1b6d0c3ad8727f.webp",
+   "416203df4c6e9ded.webp",
+   "f61fb365dacc8c3e.webp",
+   "e21729127a1bc622.webp",
+   "8bad5750d6221e24.webp",
+   "bd36b1dafaa089cc.webp",
+   "56b332594093d2d1.webp",
+   "436ce46fcec8da42.webp",
+   "336a0e41fc177244.webp"
+  ]
+ },
+ "LFMN": {
+  "authors": [
+   {
+    "name": "Olivier Jacq",
+    "models": [
+     "Bird scarer for airports."
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Apron Lightpole 16m360deg",
+     "Apron Lightpole 22m180deg"
+    ]
+   },
+   {
+    "name": "Hein Grumpel",
+    "models": [
+     "LFMN_Bande_Piste",
+     "LFMN_Fret",
+     "LFMN_Radar",
+     "LFMN_SSLIA",
+     "LFMN_Terminal_1",
+     "LFMN_Terminal_1_Finger",
+     "LFMN_Terminal_1_Hangarcomplex",
+     "LFMN_Terminal_1_Parking",
+     "LFMN_Terminal_1_Towercomplex",
+     "LFMN_Terminal_2_central",
+     "LFMN_Terminal_2_gateway_north",
+     "LFMN_Terminal_2_gateway_south",
+     "LFMN_facilitybuilding"
+    ]
+   },
+   {
+    "name": "Vic Marriott",
+    "models": [
+     "Mobile Jetway for A320"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Single animated, movable jetway"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Radar"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "9f10f88f56f98c25.webp",
+   "aa75ba0adca0f800.webp",
+   "ea6965234428649a.webp",
+   "d1986d71daaf93da.webp",
+   "436ce46fcec8da42.webp",
+   "285b9ea485ec2bfa.webp",
+   "dbbecc64404d250d.webp",
+   "4d8ba37e337c3325.webp",
+   "853d95985a729d83.webp",
+   "a15ae34708f528a3.webp",
+   "6ca816dce942ed07.webp",
+   "1c7093a8b62b15e4.webp",
+   "69fb7f2a9cd54f66.webp"
+  ]
+ },
+ "LFPG": {
+  "authors": [
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "AutoGate",
+     "Docking Gate",
+     "Grde_zonesol",
+     "LFPG_AF",
+     "LFPG_aerogare1",
+     "LFPG_fret",
+     "LFPG_heliport",
+     "LFPG_hotels",
+     "Ptite_zonesol",
+     "Safedock2S-5m",
+     "Safedock2S-7m",
+     "Zone-Indus",
+     "Zone-Indus-long",
+     "caisses_services"
+    ]
+   }
+  ],
+  "textures": [
+   "a6926b637cad39f3.webp",
+   "44397e1ed445f76d.webp",
+   "79928d201ef13f7c.webp",
+   "19d5659f9dd929f7.webp",
+   "47f6722176037408.webp",
+   "b6984c4d8f136ccd.webp",
+   "a2e50195091990ba.webp"
+  ]
+ },
+ "LFPO": {
+  "authors": [
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "Hotel Hilton - Orly - France",
+     "fret-north",
+     "garageab",
+     "hangar-h2",
+     "hangar-h3-h4",
+     "hangar-h5",
+     "hangar-h7",
+     "hangar-paint",
+     "jetway-10",
+     "jetway-20",
+     "jetway-30l",
+     "jetway-30r",
+     "office",
+     "orly-centrale",
+     "orly-south-connector-ew",
+     "orly-south-satellite",
+     "orly-terminal-south",
+     "orly-tower-cta",
+     "orly-tower-final",
+     "orly-west",
+     "orly-west-connector-n",
+     "orly-west-connector-s",
+     "pavillon",
+     "sheraton",
+     "sre",
+     "ssis",
+     "tecalemit",
+     "tecalemit-h"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "Hilton Paris",
+     "airone",
+     "cargobox",
+     "cargoib",
+     "cargoim",
+     "cargoip",
+     "grille",
+     "orly-tanks"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Dual animated, movable jetway",
+     "Single animated, movable jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "976996bfdb4af34b.webp",
+   "37325666bcf69877.webp",
+   "84201976bb27b175.webp",
+   "1debe019107a868a.webp",
+   "ac1cf8b665375843.webp",
+   "193565a3353dc6a4.webp",
+   "abbed57f90de2180.webp",
+   "87c278d369ae1d31.webp",
+   "9a30d7afab96ce66.webp",
+   "ef46c7135d08f3a3.webp",
+   "cb9609f7e871bc2b.webp",
+   "cfcb735a7792607c.webp",
+   "b9974ad07576a643.webp",
+   "436ce46fcec8da42.webp"
+  ]
+ },
+ "LFRS": {
+  "authors": [
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "LongRow"
+    ]
+   },
+   {
+    "name": "Gijs de Rooy",
+    "models": [
+     "EHLE Hangar"
+    ]
+   },
+   {
+    "name": "Thomas Polzer",
+    "models": [
+     "EDFH Passenger Checkin and Apron",
+     "EDWB DSAirServAdmin",
+     "EDWB DSAirServHangar",
+     "EDWB HangarBRight"
+    ]
+   },
+   {
+    "name": "Justin Munson",
+    "models": [
+     "Hangar, 70x15 m (230x50 ft)"
+    ]
+   },
+   {
+    "name": "Juan Vera del Campo",
+    "models": [
+     "Hangar 40x40m tan"
+    ]
+   },
+   {
+    "name": "Dick Maurer",
+    "models": [
+     "hangar5"
+    ]
+   },
+   {
+    "name": "Jean-paul Chatre",
+    "models": [
+     "Nantes 4",
+     "Nantes Aérogare 1",
+     "Nantes TW",
+     "Nimes 3",
+     "Nimes Aéroport 2"
+    ]
+   }
+  ],
+  "textures": [
+   "0f8ab725f588f602.webp",
+   "2bd45b72972f3aff.webp",
+   "b39198ac5fe6d776.webp",
+   "7a9e95ec5eb7cb4d.webp",
+   "50686fb7afb786c2.webp",
+   "da0c219377970985.webp",
+   "30dcaa2389ea80ef.webp",
+   "0d2756431530d171.webp",
+   "0aac1954133b5e85.webp",
+   "b7d7a2f8ccc763e0.webp",
+   "38573ef6a6515da9.webp",
+   "bd68f3d24a5ff6db.webp",
+   "f777be81c02ecca4.webp"
+  ]
+ },
+ "LIMC": {
+  "authors": [
+   {
+    "name": "Francesco Angelo Brisa",
+    "models": [
+     "Malpensa Terminal 1",
+     "Malpensa Tower"
+    ]
+   },
+   {
+    "name": "Ryan Miller",
+    "models": [
+     "Dual animated, movable jetway",
+     "Single animated, movable jetway"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Industrial Unit (100mx70m)",
+     "Industrial Unit (120mx90m)"
+    ]
+   },
+   {
+    "name": "Vic Marriott",
+    "models": [
+     "Generic Helipad Collar"
+    ]
+   },
+   {
+    "name": "Alex Hudghton",
+    "models": [
+     "Hydrocarbon Tank 65m"
+    ]
+   },
+   {
+    "name": "Claudio Pavan",
+    "models": [
+     "Air Cargo LD11",
+     "Air Cargo LD3",
+     "Air Cargo LD8",
+     "LIMC Building A",
+     "LIMC Building B",
+     "LIMC Building C",
+     "LIMC Building E",
+     "LIMC Building F",
+     "LIMC Building G",
+     "LIMC Building H",
+     "LIMC Building I",
+     "LIMC Building J",
+     "LIMC Cargo City",
+     "LIMC Dogane Building",
+     "LIMC Fire station 1",
+     "LIMC Fire station 2",
+     "LIMC Fire station 3",
+     "LIMC Fire station 4",
+     "LIMC Power plant",
+     "LIMC Power relay",
+     "LIMC Radar",
+     "LIMC Service Building 1",
+     "LIMC Service Building 2",
+     "LIMC T2 DHL Building",
+     "LIMC Technik Building",
+     "LIMC Terminal 2",
+     "LIMJ Building K"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "caisses_services",
+     "cargoim"
+    ]
+   },
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "cargocontainergroup1",
+     "container6",
+     "cpalette3"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "Airfield Tool House"
+    ]
+   }
+  ],
+  "textures": [
+   "f90c2464fe304052.webp",
+   "8ef6d28330757f7f.webp",
+   "d081f8bf82fbd5a6.webp",
+   "436ce46fcec8da42.webp",
+   "ffa63766f304229e.webp",
+   "7534e08cae5c2ee8.webp",
+   "f3e41a33b95a31eb.webp",
+   "3013307a9f0e90aa.webp",
+   "c05eb22841d03326.webp",
+   "8355d35dca4e2fd7.webp",
+   "44397e1ed445f76d.webp",
+   "75343aa9b172c571.webp",
+   "d6e11247d9482264.webp",
+   "e114efa9a48f6c74.webp",
+   "dab5874c0e4f3db2.webp",
+   "dd90ef347f1509b2.webp",
+   "10e83c54c193d619.webp",
+   "6ad06d1a67165539.webp",
+   "36fb56702935dd2d.webp",
+   "f2b6c708c5234894.webp",
+   "de4e88da85df1496.webp",
+   "5ce1f88f6fd4cdf9.webp",
+   "43d43b03a43b6a98.webp",
+   "1c5b0686a1916e90.webp",
+   "00f3d053611ea089.webp",
+   "9e3f8c8b3cd8bc62.webp",
+   "cb9609f7e871bc2b.webp",
+   "9745c6273bfef706.webp",
+   "91172be0b92533d1.webp",
+   "77e00e69b560205a.webp",
+   "e7c9627d6b03e2c0.webp",
+   "7a9ef5c358d098f6.webp",
+   "cb779c917d5fcdfa.webp",
+   "ea1976cc0a991fde.webp",
+   "1fd7107cb2118be5.webp",
+   "0e6cdb880f48042b.webp",
+   "5cb60cb167827a4c.webp",
+   "2d76298361bd1e02.webp",
+   "368840d970db117d.webp",
+   "96bd9d3ed07d2fcd.webp",
+   "22f1e3859f51d2bf.webp",
+   "f44fe15543d91d58.webp",
+   "56556862515eed9d.webp",
+   "582fe2b0cd5a1b70.webp"
+  ]
+ },
+ "LKPR": {
+  "authors": [
+   {
+    "name": "Andre Burkert",
+    "models": [
+     " LKPR_SA_HANGAR_E",
+     "Apron Lightpole 22m180deg",
+     "LKPR RADAR",
+     "LKPR_EA_CARGOTERM_MENZIES",
+     "LKPR_EA_CARGOTERM_SKYPORT",
+     "LKPR_EA_FUELSTATION1",
+     "LKPR_EA_GASTRO_HROCH",
+     "LKPR_EA_VETERINARY_STATION",
+     "LKPR_NA_AIRPORTCENTER",
+     "LKPR_NA_APCCSA",
+     "LKPR_NA_BUSSTATION",
+     "LKPR_NA_CATERING",
+     "LKPR_NA_FIRESTATION",
+     "LKPR_NA_GARAGE",
+     "LKPR_NA_HANGAR_F",
+     "LKPR_NA_HOTELMAR",
+     "LKPR_NA_HOTELTRAN",
+     "LKPR_NA_HPLANT",
+     "LKPR_NA_MAINFIRE",
+     "LKPR_NA_MAINTENANCE",
+     "LKPR_NA_PARKINGA",
+     "LKPR_NA_PARKINGC",
+     "LKPR_NA_PARKINGD",
+     "LKPR_NA_POLICE",
+     "LKPR_NA_TERMINAL",
+     "LKPR_NA_TERM_CONCOURSE_A",
+     "LKPR_NA_TERM_CONCOURSE_B",
+     "LKPR_NA_TERM_CONCOURSE_C",
+     "LKPR_NA_TERM_CONCOURSE_D",
+     "LKPR_NA_TOWER",
+     "LKPR_NA_TRAVELSERV",
+     "LKPR_SA_HANGAR_A",
+     "LKPR_SA_HANGAR_B",
+     "LKPR_SA_HANGAR_C",
+     "LKPR_SA_HANGAR_D",
+     "LKPR_SA_HANGAR_GA",
+     "LKPR_SA_HANGAR_N",
+     "LKPR_SA_TERM3",
+     "LKPR_SA_TERM4",
+     "LKPR_WAETHRADARBUILD1",
+     "LKPR_WAETHRADARBUILD2",
+     "Weather Radar  h24m d11m",
+     "logistic_hangar_350x50",
+     "silo_tank_10m"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "cargobox",
+     "cargoib",
+     "cargoim",
+     "cargoip"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Localizer"
+    ]
+   },
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "buil10_lkpr",
+     "buil11_lkpr",
+     "buil12_lkpr",
+     "buil14_lkpr",
+     "buil15_lkpr",
+     "buil16_lkpr",
+     "buil17_lkpr",
+     "buil18_lkpr",
+     "buil19_lkpr",
+     "buil1_lkpr",
+     "buil20_lkpr",
+     "buil21_lkpr",
+     "buil22_lkpr",
+     "buil23_lkpr",
+     "buil24_lkpr",
+     "buil25_lkpr",
+     "buil26_lkpr",
+     "buil27_lkpr",
+     "buil28_lkpr",
+     "buil29_lkpr",
+     "buil2_lkpr",
+     "buil30_lkpr",
+     "buil31_lkpr",
+     "buil32_lkpr",
+     "buil3_lkpr",
+     "buil4_lkpr",
+     "buil5_lkpr",
+     "buil7_lkpr",
+     "buil8_lkpr",
+     "firetruck_lkpr",
+     "sestka_lkpr",
+     "sign2_lkpr",
+     "skladiste_lkpr"
+    ]
+   }
+  ],
+  "textures": [
+   "5c1a736f9d41ccb1.webp",
+   "f6cf646dee142201.webp",
+   "5335a6722522e9ab.webp",
+   "5bf2c543f75da2c3.webp",
+   "01a52bd0332e2759.webp",
+   "3cffd0b7e019c246.webp",
+   "d5f4eaa3eceea377.webp",
+   "ae92a5a1afba282f.webp",
+   "6a2213733e371d2d.webp",
+   "3fbeb4358b75491d.webp",
+   "3ad07244cce44c24.webp",
+   "e8122b7ff6135b3b.webp",
+   "68228daa84491e3d.webp",
+   "cf080344821b21e2.webp",
+   "5f87a5f1f4b0ff56.webp",
+   "9f10f88f56f98c25.webp",
+   "91d612bbb17b4d74.webp",
+   "b0261ae337e76933.webp",
+   "bc0d302a7eb90866.webp",
+   "4dd3ee218b221bfa.webp",
+   "6591db2998db3518.webp",
+   "1a78e07de8f28c29.webp",
+   "e148b52f99d2fdb5.webp",
+   "0846a0e7caf116f4.webp",
+   "b6cd6543c34affec.webp",
+   "001f826a5a84de53.webp",
+   "d46e08210df54695.webp",
+   "4535dc3006d97ee4.webp",
+   "49f43a77cbc0f150.webp",
+   "14cef9a61eaf193b.webp",
+   "35ea315088481f1a.webp",
+   "364dacebfa239e44.webp",
+   "7590b4edd31750be.webp",
+   "76ca2635a9f1a519.webp",
+   "407c75ef3e915e7d.webp",
+   "87aae154f216c8e9.webp",
+   "0fff422c9cc4419d.webp",
+   "9f75dd6d8e26905e.webp",
+   "ea3c9ab3e00058cc.webp",
+   "a4d0a62d363b0291.webp",
+   "33afef9d147e74dd.webp",
+   "74f7ca33fabba012.webp",
+   "8cae291b4a1598c8.webp",
+   "6870606a3f106ee5.webp",
+   "6595b592ea9cbf95.webp",
+   "f355976243a3746c.webp",
+   "0d19bdd5197c8e68.webp",
+   "658a77e4736c2401.webp",
+   "8de12077dbb5c8d8.webp",
+   "a392494716eb2780.webp",
+   "236539421f35c0d4.webp",
+   "aea29a0b02dc968f.webp",
+   "af11f70a9ad39b53.webp",
+   "808c895d0ff1ade4.webp",
+   "7ee4e2cea2ec020f.webp",
+   "1ce1178becf2f02f.webp",
+   "4dc7fed9f84a5cfe.webp",
+   "b0fb4ea54855531f.webp",
+   "e1a96c98fbde695f.webp",
+   "1a4fc38c4d2839f9.webp",
+   "44d16c9ed42376c9.webp",
+   "b2a0e088a5199316.webp",
+   "2aebb147b1d7e99f.webp",
+   "e18b8093a644168a.webp",
+   "a016cb567190cab5.webp",
+   "d1076e3f0fb19ab2.webp",
+   "9b6483e3d253d24b.webp",
+   "a17c24dd59661d5d.webp",
+   "126339c18c124d54.webp",
+   "9b4b55c25e7c3fc4.webp",
+   "3bbd9b4d590ff3e7.webp",
+   "bf39bd5d08c6e60b.webp",
+   "d345df591ca90339.webp",
+   "23f35724f41525e6.webp",
+   "b5d705f7b43fdf12.webp",
+   "269a518a24c7529c.webp",
+   "8c01a7ae8bed4de9.webp",
+   "acfdd03e0fbf44e8.webp",
+   "70612835ba60ec9c.webp",
+   "8b5fef84917f4b5f.webp",
+   "b5d0f09babb8e512.webp",
+   "1dd7b65f6f596b0c.webp",
+   "3cddd14e2bc4b1a1.webp",
+   "357a590b9838b152.webp",
+   "336ebf242c28fe67.webp",
+   "23e570c74c0f70a8.webp",
+   "fcc3ef2ff934d888.webp",
+   "cb9609f7e871bc2b.webp",
+   "cfcb735a7792607c.webp",
+   "835b3ca7f9b493e6.webp",
+   "d2e56fac04df7dca.webp",
+   "857ac9a17e8bdb8e.webp",
+   "0fdce91c2cab7723.webp",
+   "1249062cf5a74ef0.webp",
+   "029f1687316695e6.webp",
+   "09eeac97752aabd0.webp",
+   "7f7d69fbca3b6da5.webp",
+   "ddb3aefcf6685c49.webp",
+   "8c4250ccd42c0bfc.webp",
+   "1d3ccede550d7f32.webp",
+   "612fffd08ebccad2.webp",
+   "637b5ac85391f7fd.webp",
+   "517afb830dd66419.webp",
+   "8af67a8fa506fecf.webp",
+   "e34d704abb88f14c.webp",
+   "1a3b01756ea78a6d.webp",
+   "16eaf3d478617942.webp",
+   "0d94fa6379fbbff6.webp",
+   "c461e96508254077.webp",
+   "9bea3a07e24b9321.webp",
+   "757310f6d01e8514.webp",
+   "a54fd724e69a9c46.webp",
+   "281c78e6dd1a403e.webp",
+   "e637f68b3033178a.webp",
+   "fa2da05c5c5232d7.webp",
+   "bd5584ee1a91c90d.webp",
+   "0cd2fd40a03b90f7.webp",
+   "cde7a62e1413e83b.webp",
+   "a93447279dcd14d7.webp",
+   "35622ef497b85806.webp",
+   "55dc92e20d2fe05d.webp"
+  ]
+ },
+ "LOWW": {
+  "authors": [
+   {
+    "name": "Wolfgang Dumhs",
+    "models": [
+     "LOWW Tower - Vienna - Austria"
+    ]
+   },
+   {
+    "name": "Martin Litzenberger",
+    "models": [
+     "LOWW Apronlamp",
+     "LOWW Businesspark North",
+     "LOWW Businesspark South",
+     "LOWW Cargo East",
+     "LOWW Cargo West",
+     "LOWW Fire Station East",
+     "LOWW Fuel Tanks",
+     "LOWW Main Hangars",
+     "LOWW Radar East",
+     "LOWW Radar South",
+     "LOWW Terminal 3",
+     "LOWW Terminals West",
+     "LOWW VDGS Gate F01",
+     "LOWW VDGS Gate F05",
+     "LOWW VDGS Gate F13",
+     "LOWW VDGS Gate F23",
+     "LOWW VDGS Gate F33"
+    ]
+   },
+   {
+    "name": "Dominique Lemesre",
+    "models": [
+     "jetway"
+    ]
+   }
+  ],
+  "textures": [
+   "4259078e2122bca7.webp",
+   "09ade3e73a82f4e6.webp",
+   "95dad6d2f9c37c20.webp",
+   "a7d998e1bdf0c90f.webp",
+   "436864c6a57cd128.webp",
+   "8c4989eacf369ff6.webp",
+   "c39f688b6adfa51a.webp",
+   "df9f8c3a9e734bc8.webp",
+   "aa4d7b45831b7e2d.webp",
+   "5f3c92dd9a69895e.webp",
+   "d10ddc1ec8430cb0.webp",
+   "67fb2129a6cda941.webp",
+   "eec70f727b8270c8.webp",
+   "69fb7f2a9cd54f66.webp",
+   "f35f61644c2fad50.webp"
+  ]
+ },
+ "LSGG": {
+  "authors": [
+   {
+    "name": "Melchior Franz",
+    "models": [
+     "round generic helipad"
+    ]
+   },
+   {
+    "name": "Israel A. Hernandez",
+    "models": [
+     " LSGG_Easy_Hangar1",
+     " LSGG_GA_Hangar",
+     " LSGG_GA_radio",
+     " LSGG_North1",
+     " LSGG_Satt10",
+     "Geneve apron seats",
+     "LSGG_Easy",
+     "LSGG_Easy2",
+     "LSGG_Easy_Hangar2",
+     "LSGG_Easy_Hangar3",
+     "LSGG_Festival",
+     "LSGG_GA",
+     "LSGG_GA_Hangar2",
+     "LSGG_GA_Ruags",
+     "LSGG_GA_Ruags_Fence",
+     "LSGG_GA_Storage",
+     "LSGG_GA_Wall",
+     "LSGG_GA_bistro",
+     "LSGG_GA_bistro_Fence",
+     "LSGG_Global",
+     "LSGG_GrandHangar",
+     "LSGG_North2",
+     "LSGG_North3",
+     "LSGG_Parking1",
+     "LSGG_Parking2",
+     "LSGG_Satt20",
+     "LSGG_Satt30",
+     "LSGG_Satt40",
+     "LSGG_Storage",
+     "LSGG_Tag1",
+     "LSGG_Tag2",
+     "LSGG_Tag3",
+     "LSGG_TerminalA1",
+     "LSGG_TerminalA5",
+     "LSGG_TerminalC",
+     "LSGG_TerminalF",
+     "LSGG_Tower",
+     "LSGG_sixt",
+     "LSGG_solarHangarClosed",
+     "LSGG_solarHangarOpen"
+    ]
+   },
+   {
+    "name": "Isaac Protiva",
+    "models": [
+     " LSGG_15",
+     " LSGG_Cargo1",
+     " LSGG_Cargo5",
+     " LSGG_Cargo7",
+     " LSGG_Jet_Aviation",
+     "LSGG_13",
+     "LSGG_14",
+     "LSGG_Arena",
+     "LSGG_Cargo10",
+     "LSGG_Cargo11",
+     "LSGG_Cargo12",
+     "LSGG_Cargo3",
+     "LSGG_Cargo4",
+     "LSGG_Cargo6",
+     "LSGG_Cargo8",
+     "LSGG_Cargo9",
+     "LSGG_Inn",
+     "LSGG_Movenpick",
+     "LSGG_Palexpo_Automobile",
+     "LSGG_Skyguide"
+    ]
+   },
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "EDDF Apron lightpole"
+    ]
+   },
+   {
+    "name": "Frederic Bouvier",
+    "models": [
+     "Airport Locator Beacon"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "EGKK blastscreen"
+    ]
+   }
+  ],
+  "textures": [
+   "82c4619a2543bf38.webp",
+   "9e0960a783757e73.webp",
+   "edddec0a8f53b2b0.webp",
+   "6c75ba002060dd0d.webp",
+   "e6e6414b49bf03d8.webp",
+   "588e18edfe8f0b1a.webp",
+   "b03abd9bd2d8dfd0.webp",
+   "6cc41c07322eef74.webp",
+   "aa6a96ba7a184e6e.webp",
+   "4e98b1a8b0d796bb.webp",
+   "2bb6c8126c6b3663.webp",
+   "88c97675d3f88e33.webp",
+   "c9d0df38926e7fb9.webp",
+   "1ed4e5f902e2e12e.webp",
+   "f6706553567cffee.webp",
+   "89cae2dfedfad127.webp",
+   "c8965115b0bdae3d.webp",
+   "416d042fa2009620.webp",
+   "0237c344ab164411.webp",
+   "4434c54bd750d651.webp",
+   "18804b5bc51c1ec1.webp",
+   "e9f931d72bb69aad.webp",
+   "4aaebe53e53b250e.webp",
+   "cfbbdac3774e9b42.webp",
+   "74945d125580f609.webp",
+   "bcfc8aed1fae8cf8.webp",
+   "c78c51efc4913af9.webp",
+   "5733c5da7d681900.webp",
+   "ca86bddd4db474f0.webp",
+   "7161419b40404d47.webp",
+   "31de953882930381.webp",
+   "075b4694d5a256f1.webp",
+   "ee3083b1e4a13f88.webp",
+   "cec08d9aa8b080fd.webp",
+   "637cb2930f1fa5bd.webp",
+   "fd1813fd38047a6a.webp",
+   "43b8e37379c0725e.webp",
+   "058d381ebcf9b387.webp",
+   "0818b67ffcc1a28c.webp",
+   "eb25a1016888b0a0.webp",
+   "aceadc0db82815d0.webp",
+   "4d0067c419cc12e7.webp",
+   "132909d7b615eeb2.webp",
+   "e6a2e77c0524ce52.webp",
+   "22c510f3657a31ce.webp",
+   "7a316cb24fe62047.webp",
+   "d46459ccfa233aef.webp",
+   "3441b571116658a1.webp",
+   "fb21eeed35300a06.webp",
+   "1a815661a2fc2082.webp",
+   "ff0e8696071eda6a.webp",
+   "93372bcfc663c852.webp",
+   "260b96a6ce314574.webp",
+   "6478106ac7c5969d.webp",
+   "710e7e849ce2fdff.webp",
+   "8cc70bb8db2ee2c6.webp",
+   "01db9255f61ff2d2.webp",
+   "eec3dde7724d987c.webp",
+   "046dfa08fb8c50e5.webp",
+   "fb4d78d24b37b438.webp",
+   "5748d709e2316838.webp",
+   "8394274c7db2e366.webp",
+   "77beffaec7309ee4.webp",
+   "35beedfb6512e896.webp",
+   "2f4cc9f2af69e622.webp",
+   "40e2dde66d12f3e9.webp",
+   "b9e4d280fe6b1027.webp",
+   "dfa31769dbe676ee.webp",
+   "2e47468a937e8301.webp"
+  ]
+ },
+ "LSZH": {
+  "authors": [
+   {
+    "name": "Herbert Wagner",
+    "models": [
+     "EDDF Apron lightpole"
+    ]
+   },
+   {
+    "name": "Don Lavelle",
+    "models": [
+     "EGKK blastscreen"
+    ]
+   },
+   {
+    "name": "Erik Hofman",
+    "models": [
+     "Small modern office"
+    ]
+   },
+   {
+    "name": "Emmanuel Baranger",
+    "models": [
+     "Embankment used to shelter military locations as well as civilian blast deflectors, 50m"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "zurich terminal B",
+     "zurich-3TW_pruefstand",
+     "zurich-GAC",
+     "zurich-GAC_ost",
+     "zurich-OP_center",
+     "zurich-TW_pruefstand",
+     "zurich-airport-bahnhof",
+     "zurich-airport_hotel",
+     "zurich-airside_center",
+     "zurich-dockA",
+     "zurich-dockB_G1",
+     "zurich-dockE",
+     "zurich-fire_dep",
+     "zurich-flughafengefaengnis",
+     "zurich-fracht_west-ost",
+     "zurich-gate_gourmet",
+     "zurich-gebaeude-x",
+     "zurich-heizzentrale",
+     "zurich-parkhaus5",
+     "zurich-parkhaus6",
+     "zurich-rega_center",
+     "zurich-station",
+     "zurich-tower1",
+     "zurich-tower2",
+     "zurich-transitpost",
+     "zurich-unique-one_servicegebaeude",
+     "zurich-werkhalle_SR-ost",
+     "zurich-werkhof1-5",
+     "zurich-winterdiensthalle",
+     "zurich_ruemlang_TL_buero",
+     "zurich_ruemlang_pumpstation"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Localizer"
+    ]
+   }
+  ],
+  "textures": [
+   "2e47468a937e8301.webp",
+   "e999240dc2089039.webp",
+   "35fc1e1b140151b7.webp",
+   "835b3ca7f9b493e6.webp"
+  ]
+ },
+ "OMDB": {
+  "authors": [
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Emirates Hangar",
+     "Emirates Hangar with open doors",
+     "OMDB Tower",
+     "OMDB concourse A",
+     "OMDB concourse B",
+     "OMDB concourse C",
+     "OMDB jetway building"
+    ]
+   }
+  ],
+  "textures": [
+   "946a0bd53550a74e.webp",
+   "04e89237b3d15311.webp",
+   "9fa2182eca3006c6.webp",
+   "466abcd21081b1d8.webp",
+   "ea1215e5e262be09.webp",
+   "6c71b95f8934b8b7.webp",
+   "84fa4aa6e6a202cd.webp"
+  ]
+ },
+ "PHNL": {
+  "authors": [
+   {
+    "name": "Martin Herweg",
+    "models": [
+     "Generic Skyscraper 3"
+    ]
+   },
+   {
+    "name": "Chris Metzler",
+    "models": [
+     "Generic Skyscraper 2",
+     "Generic Skyscraper 4",
+     "Generic Skyscraper 5",
+     "Generic Skyscraper 6",
+     "Generic Skyscraper 7"
+    ]
+   },
+   {
+    "name": "John Holden",
+    "models": [
+     "PHNL Southeast Airline Hangar",
+     "PHNL Southeast GA Hangar 1",
+     "PHNL Southeast GA Hangar 2",
+     "PHNL Southeast GA Hangar 3",
+     "PHNL Southeast Ramp Small Hangar"
+    ]
+   },
+   {
+    "name": "David Glowsky",
+    "models": [
+     "Tower for small airfields"
+    ]
+   },
+   {
+    "name": "Polar Humenn",
+    "models": [
+     "KSYR Tower"
+    ]
+   },
+   {
+    "name": "Jon Stockill",
+    "models": [
+     "Rishworth Street Multi-Storey Carpark  Wakefield"
+    ]
+   },
+   {
+    "name": "Andre Burkert",
+    "models": [
+     "LKPR_NA_PARKINGC"
+    ]
+   },
+   {
+    "name": "Bertrand Augras",
+    "models": [
+     "AutoGate",
+     "grille"
+    ]
+   },
+   {
+    "name": "Emerson Muller",
+    "models": [
+     "light_pole_sbrj"
+    ]
+   },
+   {
+    "name": "Paul Bohnert",
+    "models": [
+     "50x50 foot, Blue Hanger"
+    ]
+   },
+   {
+    "name": "unknown",
+    "models": [
+     "Usine_150_50"
+    ]
+   },
+   {
+    "name": "Thomas Polzer",
+    "models": [
+     "EDFQ Clubheim"
+    ]
+   },
+   {
+    "name": "Adrià Gomez Andreu",
+    "models": [
+     "phnl10.ac",
+     "phnl11",
+     "phnl12",
+     "phnl12b",
+     "phnl3",
+     "phnl4",
+     "phnl4b",
+     "phnl6",
+     "phnl6b",
+     "phnl7",
+     "phnl7b",
+     "phnl7c",
+     "phnl8",
+     "phnl8b",
+     "phnl8c",
+     "phnl8d",
+     "phnl9",
+     "phnltd1"
+    ]
+   }
+  ],
+  "textures": [
+   "6a090682b32b27c4.webp",
+   "4414d5dd63ff4309.webp",
+   "a4c8b6022a57bee8.webp",
+   "a716b5ce1c7a1f32.webp",
+   "4e9149cbeefebf80.webp",
+   "8893daf97780529d.webp",
+   "b0ba7023619ac0f9.webp",
+   "7f4ac4284baf9289.webp",
+   "70e3e1730b900e68.webp",
+   "be34713bf6bd483f.webp",
+   "9f1d3d808b87272b.webp",
+   "f2a96b92c61cd32a.webp",
+   "1a53d909d34c60f4.webp",
+   "fcc91eb915b7ced1.webp",
+   "b0df00f9203b0198.webp",
+   "31f4dd890836579f.webp",
+   "3bbd9b4d590ff3e7.webp",
+   "bf39bd5d08c6e60b.webp",
+   "d345df591ca90339.webp",
+   "47f6722176037408.webp",
+   "ac1cf8b665375843.webp",
+   "01e402632ad798d6.webp",
+   "ebf298fc1d95e173.webp",
+   "bc38dabea3a1dd5b.webp",
+   "bb9f1a62f88cdc60.webp",
+   "25ffe1c3c3471d1b.webp",
+   "7cc754fd55944404.webp",
+   "90b54bc92b4a9c05.webp",
+   "c9e2c7a3d089a188.webp",
+   "a903c7f2148904d9.webp",
+   "7123354b28d11fe7.webp",
+   "bcca3f830ea87dd7.webp",
+   "d039951d2a25c5b0.webp",
+   "8873f67a70771b76.webp",
+   "ab385402b783a3fe.webp",
+   "3879d812c982f593.webp",
+   "bc140ee0294efc54.webp",
+   "82396a6a9f10d555.webp",
+   "37255b8369b637b2.webp",
+   "48ec10625af938f6.webp",
+   "8b42d4fa7bd37656.webp",
+   "b7be0b1d0fe4aab9.webp",
+   "bfc14faddb8c5509.webp",
+   "3bfacac97c4e5c45.webp",
+   "5628e9cd5e268378.webp",
+   "9ce8dd0fbab4d3b5.webp",
+   "418b55394f9af0f4.webp",
+   "005586ffb2450bb9.webp",
+   "bb9be80f951985a5.webp",
+   "00a216e280f00c35.webp",
+   "59c3345d8372ed6c.webp",
+   "fe1d0d9d9cdacd3f.webp",
+   "bcd54bf44cdcd4a5.webp",
+   "c803c0f2b833e17d.webp",
+   "8a071a19fd2116d8.webp",
+   "6db613267d44e25b.webp",
+   "0f284fa88815f8d4.webp",
+   "25dda1005a25eaf0.webp",
+   "81fd684f61ddc483.webp",
+   "7bebc63861991607.webp",
+   "79b76f471bc51f38.webp",
+   "c22793cab003d8c9.webp",
+   "71cb81c5ad5c6adb.webp",
+   "e2786d147eba612b.webp",
+   "c86c25fdca6d1db8.webp"
+  ]
+ }
+}

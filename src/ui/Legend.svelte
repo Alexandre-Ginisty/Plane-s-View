@@ -2,9 +2,9 @@
   Key and controls.
 
   The app had no legend at all, which made two things unknowable by looking:
-  what the aircraft colours mean, and that the keyboard does anything. Both are
-  the kind of thing a user either learns in five seconds or never learns, so
-  they live behind one key and one always-visible button rather than in a
+  what the aircraft colours mean, and what the mouse or a finger does on the
+  view. Both are the kind of thing a user either learns in five seconds or
+  never learns, so they live behind one button in the dock rather than in a
   README nobody opens.
 
   Deliberately plain English. Everything else on screen is a cockpit readout in
@@ -14,59 +14,31 @@
 <script lang="ts">
   import { app } from '@/state/appStore.svelte';
   import { t, type MessageKey } from '@/i18n/index.svelte';
-  import { CAMERA_MODES } from '@/render/pov';
   import { TRAFFIC_LEGEND } from './palette';
-  import { cameraLabel } from './labels';
+
+  /** A gesture and what it does: both are message keys. */
+  type Entry = { key: string; does: string };
+  const entry = (key: MessageKey, does: MessageKey): Entry => ({ key: t(key), does: t(does) });
 
   /*
-   * Built from `CAMERA_MODES`, not typed out.
-   *
-   * The number keys index that array directly (see `App.svelte`), and the
-   * hand-written version had drifted out of step with it: it promised
-   * "cockpit, wing, chase, tower, free" against the real order — two keys
-   * transposed and two simply wrong. A help panel that misstates the controls
-   * is worse than no help panel, and the only way it stays right is by not
-   * being written down twice.
+   * The mouse, and nothing else: every other control is a button in a dock,
+   * named where it is, so there is no list of keys to learn.
    */
-  const cameraNames = $derived(CAMERA_MODES.map((mode) => cameraLabel(mode.id).toLowerCase()).join(', '));
-
-  /** A key (or gesture) and what it does: both are message keys, except the key name of a plain letter. */
-  type Entry = { key: string; does: string };
-  const entry = (key: MessageKey | string, does: MessageKey, params?: Record<string, string>): Entry => ({
-    key: key.startsWith('key.') ? t(key as MessageKey) : key,
-    does: t(does, params),
-  });
-
   const keys = $derived<Entry[]>([
     entry('key.click', 'ctl.select'),
-    entry('key.enter', 'ctl.stepInside'),
-    entry('key.esc', 'ctl.leave'),
     entry('key.drag', 'ctl.look'),
     entry('key.wheel', 'ctl.zoom'),
     entry('key.click', 'ctl.framed'),
-    entry(`1 – ${CAMERA_MODES.length}`, 'ctl.camera', { cameras: cameraNames }),
-    entry('V', 'ctl.inOut'),
-    entry('C', 'ctl.recentre'),
-    entry('P', 'ctl.pinMode'),
     entry('key.rightClick', 'ctl.rightClickPin'),
-    entry('L', 'ctl.catchLanding'),
-    entry('T', 'ctl.catchTakeoff'),
-    entry('A', 'ctl.autoCamera'),
-    entry('F', 'ctl.fullscreen'),
-    entry('S', 'ctl.photo'),
-    entry('R', 'ctl.record'),
-    entry('D', 'ctl.diagnostics'),
-    entry('H', 'ctl.panel'),
   ]);
 
-  /* The same controls for a finger: every key above has a button somewhere. */
+  /* The same for a finger. */
   const taps = $derived<Entry[]>([
     entry('key.tap', 'ctl.tapSelect'),
     entry('key.drag', 'ctl.touchLook'),
     entry('key.pinch', 'ctl.zoom'),
     entry('key.tap', 'ctl.framed'),
     entry('key.longPress', 'ctl.longPressPin'),
-    entry('←', 'ctl.back'),
   ]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
   const controls = $derived(touch ? taps : keys);

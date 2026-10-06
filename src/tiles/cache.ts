@@ -27,8 +27,26 @@ const DB_VERSION = 1;
 const BLOB_STORE = 'blobs';
 const INDEX_STORE = 'index';
 
-/** Default on-disk budget. Roughly 3000 satellite tiles. */
-const DEFAULT_BUDGET_BYTES = 220 * 1024 * 1024;
+/**
+ * On-disk budget: about 1800 satellite tiles on a computer, 600 on a phone.
+ *
+ * Enough for the ground of a session and the next visit to the same place to
+ * open instantly; not so much that the site becomes the biggest thing in a
+ * phone's storage. A visitor's disk is theirs, not the app's.
+ */
+const DESKTOP_BUDGET_BYTES = 120 * 1024 * 1024;
+const PHONE_BUDGET_BYTES = 40 * 1024 * 1024;
+const DEFAULT_BUDGET_BYTES =
+  typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches
+    ? PHONE_BUDGET_BYTES
+    : DESKTOP_BUDGET_BYTES;
+
+/**
+ * Tiles not looked at for this long are deleted when the app next opens:
+ * whatever was seen a week ago is not worth keeping on someone's disk on the
+ * chance they come back to exactly that place.
+ */
+const MAX_AGE_MS = 5 * 24 * 3600 * 1000;
 
 /** Never fill more than this share of the origin's quota. */
 const QUOTA_SHARE = 0.4;
@@ -136,7 +154,10 @@ export class TileDiskCache {
 
         // Sized in the background: reading every index record of a full cache
         // is not something the first tile should wait for.
-        void this.computeBudget().then(() => this.recomputeTotal());
+        void this.computeBudget()
+          .then(() => this.expire(Date.now() - MAX_AGE_MS))
+          .then(() => this.recomputeTotal())
+          .then(() => this.evict());
         return db;
       } catch {
         this.available = false;
@@ -256,6 +277,32 @@ export class TileDiskCache {
       await txDone(tx);
     } catch {
       // Losing access times only degrades eviction order.
+    }
+  }
+
+  /** Delete every tile last used before `before` (ms since the epoch). */
+  private async expire(before: number): Promise<void> {
+    const db = this.db;
+    if (!db) return;
+    try {
+      const tx = db.transaction([BLOB_STORE, INDEX_STORE], 'readwrite');
+      const blobs = tx.objectStore(BLOB_STORE);
+      const records = tx.objectStore(INDEX_STORE);
+      const cursorReq = records.index('lastAccess').openCursor(IDBKeyRange.upperBound(before));
+      await new Promise<void>((resolve, reject) => {
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) return resolve();
+          const key = (cursor.value as IndexRecord).key;
+          blobs.delete(key);
+          records.delete(key);
+          cursor.continue();
+        };
+        cursorReq.onerror = () => reject(cursorReq.error);
+      });
+      await txDone(tx);
+    } catch {
+      // Expiry is housekeeping: the size budget still holds without it.
     }
   }
 

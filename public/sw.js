@@ -6,9 +6,14 @@
  *  - The page itself: network first, so a deployment is picked up on the next
  *    visit; the last copy when there is no network, so the app still opens on
  *    a plane with no Wi-Fi (the ground it has seen is in IndexedDB already).
- *  - Build output (`/assets/`, hashed, immutable) and the heavy static files
- *    (models, routes, the night map, the map style): from the cache once
- *    fetched, refreshed in the background. A 777 is downloaded once.
+ *  - Build output (`/assets/`, hashed, immutable) and the icons: from the
+ *    cache once fetched. That is the app itself, a few megabytes, and all it
+ *    needs to open with no network.
+ *  - The heavy files (aircraft models, routes, the night map) are left to the
+ *    browser's own HTTP cache, which they are served with long lifetimes for
+ *    and which the browser trims by itself when space runs short. Kept here,
+ *    they were a cache only the app could ever empty — a hundred megabytes of
+ *    airframes on someone's phone for good.
  *  - Live data (`/feeds/`) and everything cross-origin: never touched. Stale
  *    traffic is worse than none, and the tile caches are the app's own.
  *
@@ -17,11 +22,12 @@
  * and the caches are bounded.
  */
 
-const VERSION = 'v1';
+// v2: models and routes are no longer kept here; activating drops v1, which held them.
+const VERSION = 'v2';
 const SHELL = `pv-shell-${VERSION}`;
 const STATIC = `pv-static-${VERSION}`;
-/** Static entries kept; the oldest go first. Models are a few megabytes each. */
-const STATIC_MAX = 160;
+/** Static entries kept; the oldest go first. Build chunks and icons, all small. */
+const STATIC_MAX = 80;
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -36,7 +42,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-const STATIC_PATH = /\/(?:assets|models|routes|night|map)\/|\.(?:webmanifest|png|svg|ico)$/;
+const STATIC_PATH = /\/assets\/|\.(?:webmanifest|png|svg|ico)$/;
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
