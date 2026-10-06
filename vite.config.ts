@@ -36,11 +36,13 @@ function siteHeaders(drop: readonly string[] = []): Record<string, string> {
  */
 const feedProxy = Object.fromEntries(
   Object.entries(relayTargets).map(([target, origin]) => [
-    `/feeds/${target}`,
+    // With the slash: proxies match by prefix, and `/feeds/adsb-lol` would
+    // otherwise also take every `/feeds/adsb-lol-traces/...` request.
+    `/feeds/${target}/`,
     {
       target: origin,
       changeOrigin: true,
-      rewrite: (path: string) => path.replace(new RegExp(`^/feeds/${target}`), ''),
+      rewrite: (path: string) => path.replace(new RegExp(`^/feeds/${target}(?=/)`), ''),
       headers: {
         // MET Norway requires an agent that identifies the project, and
         // browsers forbid scripts from setting User-Agent. The relay is the

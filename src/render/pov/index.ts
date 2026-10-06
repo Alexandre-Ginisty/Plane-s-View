@@ -471,6 +471,21 @@ export class PovController {
   }
 
   /**
+   * Turn the head by an angle, radians, positive left and up: the phone's
+   * gyroscope, where `applyDrag` is a finger. Same views, same limits.
+   */
+  applyLook(dYaw: number, dPitch: number): void {
+    this.recentring = false;
+    if (this.state.mode === 'orbit') {
+      this.state.orbitYaw = wrapAngle(this.state.orbitYaw + dYaw);
+      this.state.orbitPitch = wrapAngle(this.state.orbitPitch + dPitch);
+      return;
+    }
+    this.state.lookYaw = wrapAngle(this.state.lookYaw + dYaw);
+    this.state.lookPitch = Math.max(-1.45, Math.min(1.45, this.state.lookPitch + dPitch));
+  }
+
+  /**
    * The wheel, in every view: nearer and further outside, a narrower lens in
    * the cockpit.
    *

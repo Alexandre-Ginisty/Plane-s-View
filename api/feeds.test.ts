@@ -59,8 +59,8 @@ describe('the allowlist', () => {
   it('sends each target to the origin listed in relay-targets.json', async () => {
     for (const [target, origin] of Object.entries(relayTargets)) {
       captured = [];
-      const path = target === 'metno' ? ['weatherapi', 'locationforecast', '2.0', 'complete'] : target === 'adsb-fi' ? ['api', 'v2', 'hex', '4ca7b5'] : ['v2', 'hex', '4ca7b5'];
-      await GET(contextFor([target, ...path]));
+      const path = target === 'metno' ? ['weatherapi', 'locationforecast', '2.0', 'complete'] : target === 'adsb-fi' ? ['api', 'v2', 'hex', '4ca7b5'] : target === 'awc' ? ['api', 'data', 'metar'] : target === 'adsb-lol-traces' ? ['data', 'traces', 'b5', 'trace_full_4ca7b5.json'] : ['v2', 'hex', '4ca7b5'];
+      await GET(contextFor([target, ...path], target === 'awc' ? '?ids=LFPG&format=json' : ''));
       expect(captured[0]!.url.startsWith(`${origin}/`), target).toBe(true);
     }
   });
@@ -121,12 +121,58 @@ describe('the allowlist', () => {
       'adsb-lol': ['https://api.adsb.lol/', ['v2', 'hex', '4ca7b5']],
       'adsb-fi': ['https://opendata.adsb.fi/', ['api', 'v2', 'hex', '4ca7b5']],
       metno: ['https://api.met.no/', ['weatherapi', 'locationforecast', '2.0', 'complete']],
+      awc: ['https://aviationweather.gov/', ['api', 'data', 'metar']],
+      'adsb-lol-traces': ['https://adsb.lol/', ['data', 'traces', 'b5', 'trace_recent_4ca7b5.json']],
     };
     for (const [target, [origin, path]] of Object.entries(expected)) {
       captured = [];
-      await GET(contextFor([target, ...path]));
+      await GET(contextFor([target, ...path], target === 'awc' ? '?ids=LFPG,LFMN&format=json' : ''));
       expect(captured[0]!.url.startsWith(origin)).toBe(true);
     }
+  });
+});
+
+describe('flight traces', () => {
+  it('relays the full and the recent trace of one aircraft', async () => {
+    for (const file of ['trace_full_4ca7b5.json', 'trace_recent_4ca7b5.json', 'trace_full_~4ca7b5.json']) {
+      const res = await GET(contextFor(['adsb-lol-traces', 'data', 'traces', 'b5', file]));
+      expect(res.status, file).toBe(200);
+    }
+  });
+
+  it('reaches nothing else on that host', async () => {
+    for (const path of [
+      ['data', 'traces', 'b5', 'trace_full_4ca7b5.json.bak'],
+      ['data', 'aircraft.json'],
+      ['data', 'traces', 'b5', '..', '..', 'secret.json'],
+      ['data', 'traces', 'B5X', 'trace_full_4ca7b5.json'],
+    ]) {
+      const res = await GET(contextFor(['adsb-lol-traces', ...path]));
+      expect(res.status, path.join('/')).toBe(404);
+    }
+    expect(captured).toHaveLength(0);
+  });
+});
+
+describe('METAR', () => {
+  it('relays a request for up to four aerodromes', async () => {
+    const res = await GET(contextFor(['awc', 'api', 'data', 'metar'], '?ids=LFPG,LFMN,EGLL,KJFK&format=json'));
+    expect(res.status).toBe(200);
+    expect(captured[0]!.url).toBe('https://aviationweather.gov/api/data/metar?ids=LFPG%2CLFMN%2CEGLL%2CKJFK&format=json');
+    expect(res.headers.get('Cache-Control')).toContain('s-maxage=300');
+  });
+
+  it('refuses anything but ICAO codes, and anything but JSON', async () => {
+    for (const search of ['?ids=LFPG,LFMN,EGLL,KJFK,KLAX&format=json', '?ids=lfpg&format=json', '?ids=LFPG&format=xml', '?ids=../../etc&format=json', '?ids=@KJFK&format=json']) {
+      const res = await GET(contextFor(['awc', 'api', 'data', 'metar'], search));
+      expect(res.status, search).toBe(404);
+    }
+    expect(captured).toHaveLength(0);
+  });
+
+  it('reaches no other endpoint of the service', async () => {
+    const res = await GET(contextFor(['awc', 'api', 'data', 'taf'], '?ids=LFPG&format=json'));
+    expect(res.status).toBe(404);
   });
 });
 

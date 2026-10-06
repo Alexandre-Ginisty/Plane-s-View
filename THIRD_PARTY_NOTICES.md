@@ -2,7 +2,7 @@
 
 Rule for this project: **everything used must be free, and its terms must allow
 a commercial product to use it.** This file records the audit against that
-rule (last checked 2026-10-04), says what each source obliges the project to
+rule (last checked 2026-10-06), says what each source obliges the project to
 do, and lists what was rejected and why. Re-check a source's terms before
 adding it, and again before launch: terms change.
 
@@ -13,6 +13,8 @@ The application code is MIT (`LICENSE`). Everything below is somebody else's.
 | Service | Used for | Licence / terms | Commercial use | Obligation |
 |---|---|---|---|---|
 | [adsb.lol](https://adsb.lol) `api.adsb.lol` | live aircraft positions | ODbL 1.0 | ✅ | credit adsb.lol (shown in *Sources*) |
+| [adsb.lol](https://adsb.lol) `adsb.lol/data/traces` | the selected aircraft's track since takeoff | ODbL 1.0 (the same dataset as the positions) | ✅ | credit adsb.lol (shown) |
+| [NOAA Aviation Weather Center](https://aviationweather.gov/data/api/) METAR API | weather at the departure and arrival aerodromes | US government work, public domain | ✅ | none; credited under every report anyway. Relay caches 5 min (a METAR is issued every 30) |
 | [adsb.fi](https://adsb.fi) `opendata.adsb.fi` — **second feed, first in the chain while the site is a demonstration** | live aircraft positions (adsb.lol answers 429 to most requests from one address) | personal, non-commercial use | ❌ **not for a commercial product** | credit adsb.fi. **Drop before the site earns money:** remove it from `PROVIDERS` in `src/data/adsb/providers.ts`, and `adsb-fi` from `relay-targets.json` and the relay function; then ask adsb.lol for a higher limit or self-host a feed |
 | [MET Norway](https://api.met.no/doc/TermsOfService) Locationforecast | surface weather | CC BY 4.0 / NLOD | ✅ explicitly | credit "Data from MET Norway" (shown); identifying `User-Agent` (set by the relay); respect `Expires` (relay caches 10 min); ≤ 4 decimals (client sends a 0.25° cell centre) |
 | [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) `services.arcgisonline.com` — **default while the site is a demonstration** | satellite imagery, sharp worldwide | licensed to ArcGIS subscribers | ❌ **not for a commercial product** | credit Esri, Maxar, Earthstar Geographics (shown). **Replace before charging anyone or carrying advertising:** switch `DEFAULT_IMAGERY` in `src/tiles/sources.ts` to the Sentinel-2 layer below, which the national orthophotos then sharpen |
@@ -32,9 +34,9 @@ The application code is MIT (`LICENSE`). Everything below is somebody else's.
 | [OpenFreeMap](https://openfreemap.org) `tiles.openfreemap.org` | night-lights map and ground detail (roads, rail, runways, building footprints) | OpenStreetMap data (ODbL) in OpenMapTiles schema (CC BY 4.0); service free incl. commercial | ✅ | "© OpenStreetMap contributors, OpenMapTiles, OpenFreeMap" (shown) |
 | [Wikimedia Commons](https://commons.wikimedia.org) API | aircraft photos | per file; the app keeps only CC BY, CC BY-SA, CC0, public domain | ✅ for those | author + licence + link shown on every photo (`AircraftPhoto.svelte`) |
 
-All of it is reached keyless. Only adsb.lol and MET Norway go through the
-project's relay (`api/feeds.ts`); the rest is called from the visitor's
-browser.
+All of it is reached keyless. Only adsb.lol, MET Norway and the Aviation
+Weather Center go through the project's relay (`api/feeds.ts`); the rest is
+called from the visitor's browser.
 
 ## 2. Data shipped inside the app
 

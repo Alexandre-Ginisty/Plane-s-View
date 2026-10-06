@@ -32,7 +32,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "geolocation=(self), fullscreen=(self), camera=(), microphone=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), xr-spatial-tracking=(), accelerometer=(), gyroscope=(), magnetometer=(), ambient-light-sensor=(), encrypted-media=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(self), idle-detection=(), browsing-topics=(), interest-cohort=()"
+          "value": "geolocation=(self), fullscreen=(self), camera=(), microphone=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), xr-spatial-tracking=(), accelerometer=(self), gyroscope=(self), magnetometer=(), ambient-light-sensor=(), encrypted-media=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(self), idle-detection=(), browsing-topics=(), interest-cohort=()"
         },
         {
           "key": "Cross-Origin-Opener-Policy",
@@ -102,6 +102,19 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=604800"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Content-Type",
+          "value": "text/javascript; charset=utf-8"
         }
       ]
     }

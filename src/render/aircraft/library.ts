@@ -24,10 +24,11 @@
  * that trade they are on.
  */
 
-import { ImageBitmapLoader, SRGBColorSpace, Texture, TextureLoader } from 'three';
+import { SRGBColorSpace, Texture, TextureLoader } from 'three';
 
 import { parsePvm, texturesOf, withLivery, type LoadedModel } from './pvm';
 import { shapeFor } from './shapes';
+import { deviceBudget } from '../deviceBudget';
 import type { AirframeShape } from './typeTable';
 
 type AirframeKind = AirframeShape['kind'];
@@ -142,16 +143,38 @@ async function loadCatalogue(): Promise<Catalogue | null> {
  * moment the view changes. An `ImageBitmap` arrives decoded; flipped at decode
  * time, since the upload's own flip does not apply to it.
  */
-const bitmaps =
-  typeof createImageBitmap === 'function'
-    ? new ImageBitmapLoader().setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none' })
-    : null;
+const decodes = typeof createImageBitmap === 'function';
+
+/**
+ * A sheet no larger than the device can afford. Most airframes ship 2048 px
+ * sheets — 21 MB each on the GPU with mipmaps, several per aircraft — which a
+ * desktop shrugs off and a phone cannot hold for long. Scaled through a
+ * canvas rather than `createImageBitmap`'s resize options, which Safari
+ * ignores.
+ */
+async function decodeSheet(url: string): Promise<ImageBitmap> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const full = await createImageBitmap(await response.blob(), { imageOrientation: 'flipY', premultiplyAlpha: 'none' });
+  const limit = deviceBudget().maxModelTexture;
+  const longest = Math.max(full.width, full.height);
+  if (longest <= limit) return full;
+  const k = limit / longest;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(full.width * k));
+  canvas.height = Math.max(1, Math.round(full.height * k));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return full;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(full, 0, 0, canvas.width, canvas.height);
+  full.close();
+  return createImageBitmap(canvas, { premultiplyAlpha: 'none' });
+}
 
 function loadTexture(name: string): Promise<Texture | null> {
   return new Promise((resolve) => {
-    if (bitmaps) {
-      bitmaps.load(
-        `${BASE}/${name}`,
+    if (decodes) {
+      decodeSheet(`${BASE}/${name}`).then(
         (bitmap) => {
           const texture = new Texture(bitmap);
           // The liveries are authored as colour, not as data.
@@ -160,7 +183,6 @@ function loadTexture(name: string): Promise<Texture | null> {
           texture.needsUpdate = true;
           resolve(texture);
         },
-        undefined,
         () => resolve(null),
       );
       return;

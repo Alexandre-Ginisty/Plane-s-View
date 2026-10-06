@@ -13,6 +13,7 @@
  * |----------------|------------------------------|-------------|
  * | adsb.lol       | ODbL                         | relay       |
  * | MET Norway     | CC BY 4.0 / NLOD             | relay       |
+ * | Aviation Weather Center (METAR) | US government work, public domain | relay |
  * | Wikimedia Commons | per file, filtered to CC BY / CC BY-SA / CC0 / PD | direct |
  * | EOX / NASA / AWS / OpenFreeMap | CC BY 4.0 / public domain / open data | direct |
  *
@@ -53,7 +54,7 @@ const FEED_PREFIX = 'feeds';
  * proxy and the deployed relay function all read the *same* list. Adding a
  * provider means editing one file.
  */
-export type RelayTarget = 'adsb-lol' | 'adsb-fi' | 'metno';
+export type RelayTarget = 'adsb-lol' | 'adsb-lol-traces' | 'adsb-fi' | 'metno' | 'awc';
 
 const UPSTREAM = relayTargets as Record<RelayTarget, string>;
 

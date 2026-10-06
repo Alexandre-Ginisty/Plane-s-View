@@ -1,12 +1,21 @@
 /**
- * People for the cabins: stylised, a little exaggerated, and meant to be funny.
+ * People for the cabins: mannequins, dressed — with the fun in what they wear
+ * and carry, not in their faces.
  *
- * A passenger is a handful of soft solids — a big expressive head, a soft body,
- * limbs stretched between joints — dressed and posed from a short description:
- * skin, hair, a hat, a face, a shirt, a pose, something in the hands. Heads
- * are built about their own centre and tilted as a whole, so a sleeper's
- * head can loll onto a shoulder with its mask, pillow and open mouth turning
- * with it.
+ * The first cast were cartoons: heads a third too big, painted eyes, sausage
+ * limbs. Next to a photographed sky that read as a toy box. These are built
+ * the way a display mannequin is: true proportions (a head an eighth of the
+ * standing height), a face that is sculpted rather than drawn — brow, nose,
+ * cheekbones, lips, closed lids — limbs that taper from joint to joint, and
+ * hands with a thumb. Hair is sculpted in one piece, as on a mannequin. What
+ * stays playful is everything else: the cowboy hat, the headphones, the teddy,
+ * the cat in its carrier, the rubber duck.
+ *
+ * A passenger is dressed and posed from a short description: skin, hair, a
+ * hat, a shirt, a pose, something in the hands. Heads are built about their
+ * own centre and tilted as a whole, so a sleeper's head can loll onto a
+ * shoulder with its mask and pillow turning with it. (Descriptions still
+ * carry the old `face` field; the sculpted face ignores it.)
  *
  * Figures are drawn in a frame of their own: origin at the middle of the seat
  * cushion's top, +X right, +Y up, +Z aft, facing −Z (forward). `detail` says
@@ -14,6 +23,8 @@
  * head and the shoulders (the rows ahead), 1 the face and the upper body, 2
  * the whole person (a neighbour, a standing flight attendant).
  */
+
+import { vec } from './geometry.mjs';
 
 // --- palettes --------------------------------------------------------------------
 
@@ -104,17 +115,40 @@ export function figure(set, paint, s, at, detail = 1, opts = {}) {
 function torso(S, M, s, shirt, skin, build, detail, seg) {
   const w = build;
   const body = M(shirt);
-  const rz = 0.13 * (0.9 + 0.15 * w);
-  // Width and depth of the chest at a height, so decorations sit on the cloth.
-  const slice = (y) => Math.sqrt(Math.max(0.02, 1 - ((y - 0.31) / 0.28) ** 2));
-  const front = (x, y) => 0.1 - rz * Math.sqrt(Math.max(0.02, 1 - ((y - 0.31) / 0.28) ** 2 - (x / (0.2 * w)) ** 2)) - 0.003;
-  // Hips and seat of the trousers are hidden behind the seat; the shirt starts at the belly.
-  body.ellipsoid(0, 0.31, 0.1, 0.2 * w, 0.28, rz, seg);
-  // Shoulders.
-  for (const side of [-1, 1]) body.ellipsoid(side * 0.2 * w, 0.5, 0.11, 0.065, 0.065, 0.075, 7);
-  if (build > 1.1) body.ellipsoid(0, 0.2, -0.015, 0.18 * w, 0.14, 0.12, seg); // belly
-  // Neck skin and a collar.
-  M(skin).ellipsoid(0, 0.615, 0.105, 0.058, 0.085, 0.058, 9);
+  // Half the chest's width, and its depth: a person, not a barrel.
+  const TW = 0.168 * w;
+  const rz = 0.118 * (0.92 + 0.12 * w);
+  // A V, not an egg: the chest broad under the shoulders, the waist narrower
+  // below it. Hips and seat are hidden behind the seat; the shirt starts at the belly.
+  const CHEST = [0.405, 0.2, TW, rz];
+  const WAIST = [0.2, 0.2, TW * 0.84, rz * 0.93];
+  const depth = ([cy, ry, rx, rd], x, y) => rd * Math.sqrt(Math.max(0, 1 - ((y - cy) / ry) ** 2 - (x / rx) ** 2));
+  // How far the cloth stands out at a height, as a fraction, for the stripes.
+  const slice = (y) => Math.max(0.15, depth(CHEST, 0, y) / rz, depth(WAIST, 0, y) / rz);
+  // Where the cloth is at a point of the front, so decorations sit on it.
+  const front = (x, y) => 0.1 - Math.max(0.02 * rz, depth(CHEST, x, y), depth(WAIST, x, y)) - 0.003;
+  body.ellipsoid(0, CHEST[0], 0.1, CHEST[2], CHEST[1], CHEST[3], seg);
+  body.ellipsoid(0, WAIST[0], 0.1, WAIST[2], WAIST[1], WAIST[3], seg);
+  // Shoulders: the deltoid's cap, and the slope of the trapezius up to the neck.
+  for (const side of [-1, 1]) {
+    body.ellipsoid(side * (TW + 0.006), 0.492, 0.11, 0.05, 0.05, 0.058, 8);
+    body.limb([side * 0.045, 0.57, 0.118], [side * (TW - 0.015), 0.515, 0.112], 0.03, 0.04, 7);
+  }
+  if (build > 1.1) body.ellipsoid(0, 0.2, -0.01, 0.16 * w, 0.13, 0.115, seg); // belly
+  if (s.shirt?.kind === 'pilot') {
+    // Epaulettes: navy boards along the top of each shoulder, gold bars across them.
+    const bars = s.shirt.bars ?? 3;
+    for (const side of [-1, 1]) {
+      S.within(() => {
+        S.xf.translate(side * (TW - 0.03), 0.548, 0.112);
+        S.xf.rotateZ(-side * 0.32);
+        M([0.08, 0.1, 0.2]).pillow(0, 0, 0, 0.12, 0.012, 0.05, 0.3, 6);
+        for (let i = 0; i < bars; i++) M(GOLD).box(side * (0.036 - i * 0.017), 0.0065, 0, 0.008, 0.002, 0.046);
+      });
+    }
+  }
+  // The neck, narrowing into the jaw.
+  M(skin).taper([0, 0.55, 0.112], [0, 0.675, 0.1], 0.054, 0.047, 9, 0.04);
   // Patterns are on the front, behind the seat for most of the cabin.
   switch (detail >= 1 ? (s.shirt?.kind ?? 'tee') : 'tee') {
     case 'hawaii': {
@@ -145,12 +179,24 @@ function torso(S, M, s, shirt, skin, build, detail, seg) {
       for (let i = 0; i < 5; i++) {
         const y = 0.13 + i * 0.1;
         const k = slice(y) * 1.02;
-        M(s.shirt.band ?? shade(shirt, 0.78)).ellipsoid(0, y, 0.1, 0.2 * w * k * 1.012, 0.042, rz * k * 1.012, 12);
+        // Painted on rather than wrapped round: a band a hair proud of the cloth.
+        const wide = y > 0.3 ? CHEST[2] : WAIST[2];
+        M(s.shirt.band ?? shade(shirt, 0.78)).ellipsoid(0, y, 0.1, wide * k * 1.006, 0.036, rz * k * 1.006, 14);
       }
       break;
     }
+    case 'pilot': {
+      // A white shirt, the tie, the wings over the left pocket; the bars are on the shoulders.
+      const tie = M(s.shirt.tie ?? [0.08, 0.1, 0.2]);
+      tie.ellipsoid(0, 0.4, front(0, 0.4) - 0.004, 0.016, 0.14, 0.009, 6);
+      tie.ellipsoid(0, 0.548, front(0, 0.548) - 0.004, 0.022, 0.022, 0.011, 6);
+      M(shade(shirt, 0.9)).torus(0, 0.57, 0.11, 0.054, 0.012, 12, 4);
+      for (const side of [-1, 1]) M(shade(shirt, 0.92)).pillow(side * 0.075, 0.4, front(side * 0.075, 0.4) - 0.002, 0.07, 0.075, 0.008, 0.3, 6);
+      M(GOLD).pillow(-0.075, 0.465, front(-0.075, 0.465) - 0.006, 0.07, 0.014, 0.005, 0.4, 6);
+      break;
+    }
     case 'uniform': {
-      M(WHITE).ellipsoid(0, 0.45, front(0, 0.45) + 0.004, 0.055, 0.1, 0.014, 7);
+      M(WHITE).ellipsoid(0, 0.47, front(0, 0.47) + 0.003, 0.034, 0.075, 0.01, 7);
       M([0.8, 0.12, 0.2]).torus(0, 0.575, 0.11, 0.05, 0.016, 10, 4);
       M([0.8, 0.12, 0.2]).ellipsoid(0.02, 0.5, front(0.02, 0.5) - 0.004, 0.03, 0.045, 0.014, 6);
       M(GOLD).ellipsoid(0.1, 0.42, front(0.1, 0.42) - 0.003, 0.016, 0.016, 0.008, 6);
@@ -183,15 +229,38 @@ function arms(S, M, s, shirt, skin, build, detail) {
     if (s.hideLeftArm && side === -1) continue;
     const p = pose(side, s);
     if (!p) continue;
-    const sh = [side * 0.215 * w, 0.5, 0.11];
-    sleeve.limb(sh, p.elbow, 0.058);
+    const sh = [side * (0.168 * w + 0.03), 0.495, 0.11];
+    const dir = vec.norm(vec.sub(p.hand, p.elbow));
+    const wrist = vec.sub(p.hand, vec.mul(dir, 0.062));
     const long = s.longSleeves;
-    (long ? sleeve : bare).limb(p.elbow, p.hand, 0.045);
-    // The hand, with a thumb.
-    bare.ellipsoid(p.hand[0], p.hand[1], p.hand[2], 0.04, 0.032, 0.05, 7);
-    bare.ellipsoid(p.hand[0] - side * 0.035, p.hand[1] + 0.012, p.hand[2] - 0.025, 0.014, 0.014, 0.03, 5);
-    if (s.watch && side === -1) M([0.15, 0.15, 0.17]).ellipsoid(p.elbow[0] * 0.2 + p.hand[0] * 0.8, p.elbow[1] * 0.2 + p.hand[1] * 0.8, p.elbow[2] * 0.2 + p.hand[2] * 0.8, 0.05, 0.016, 0.04, 6);
+    // Upper arm: a sleeve over the shoulder, the arm itself tapering to the elbow.
+    if (long) {
+      sleeve.taper(sh, p.elbow, 0.05, 0.041, 8);
+    } else {
+      sleeve.taper(sh, vec.lerp(sh, p.elbow, 0.45), 0.05, 0.046, 8, 0.05);
+      bare.taper(sh, p.elbow, 0.045, 0.036, 8);
+    }
+    (long ? sleeve : bare).ellipsoid(p.elbow[0], p.elbow[1], p.elbow[2], long ? 0.041 : 0.036, long ? 0.041 : 0.036, long ? 0.041 : 0.036, 8);
+    // Forearm: fuller below the elbow, flatter and thin at the wrist.
+    (long ? sleeve : bare).taper(p.elbow, long ? vec.lerp(p.elbow, wrist, 0.92) : wrist, long ? 0.04 : 0.036, long ? 0.032 : 0.025, 8, 0.14, 0.86);
+    hand(S, bare, p.hand, dir, side);
+    if (s.watch && side === -1) M([0.15, 0.15, 0.17]).taper(vec.sub(wrist, vec.mul(dir, 0.012)), vec.add(wrist, vec.mul(dir, 0.006)), 0.03, 0.029, 8, 0);
   }
+}
+
+/**
+ * A hand: palm and closed fingers in one rounded block, a thumb along its
+ * side. `at` is the middle of the block, `dir` the forearm's direction.
+ */
+function hand(S, M, at, dir, side) {
+  S.within(() => {
+    S.xf.translate(at[0], at[1], at[2]);
+    S.xf.alignY(dir, [1, 0, 0]);
+    M.soft(0, 0.004, 0, 0.037, 0.058, 0.016, 0.62, 9);
+    // Knuckles: the fingers curl a little at the end.
+    M.soft(0, 0.05, -0.006, 0.035, 0.018, 0.017, 0.7, 7);
+    M.limb([-side * 0.03, -0.035, -0.006], [-side * 0.046, 0.012, -0.018], 0.0115, 0.0115, 6);
+  });
 }
 
 /** Joint positions for each pose, per side (−1 left, +1 right), in the figure's frame. */
@@ -241,34 +310,40 @@ const POSES = {
 function legs(S, M, s, pants, build, standing) {
   const w = build;
   const leg = M(pants);
-  const shoe = M(s.shoes ?? SHOES[1]);
+  const shoeKey = s.shoes ?? SHOES[1];
   const sole = M(WHITE);
+  // One leg: thigh to knee to ankle, tapering, the knee a joint of its own; then the shoe.
+  const one = (hip, knee, ankle) => {
+    leg.taper(hip, knee, 0.08 * w, 0.056 * w, 8, 0.1);
+    leg.ellipsoid(knee[0], knee[1], knee[2], 0.056 * w, 0.056 * w, 0.058 * w, 9);
+    leg.taper(knee, ankle, 0.054 * w, 0.038, 8, 0.16, 0.92);
+    S.within(() => {
+      S.xf.translate(ankle[0], ankle[1] - 0.045, ankle[2] - 0.06);
+      M(shoeKey).soft(0, 0, 0, 0.046, 0.036, 0.122, 0.6, 9);
+      sole.soft(0, -0.031, 0, 0.047, 0.009, 0.123, 0.5, 8);
+    });
+  };
   if (standing) {
-    for (const side of [-1, 1]) {
-      leg.limb([side * 0.09, 0.2, 0.08], [side * 0.1, -0.2, 0.04], 0.075 * w, 0.075 * w, 8, 0.6, 0.3);
-      leg.limb([side * 0.1, -0.2, 0.04], [side * 0.1, -0.76, 0.0], 0.06 * w, 0.06 * w, 8, 0.6, 0.2);
-      shoe.ellipsoid(side * 0.1, -0.84, -0.05, 0.055, 0.04, 0.13, 8);
-      sole.ellipsoid(side * 0.1, -0.87, -0.05, 0.056, 0.012, 0.13, 8);
-    }
+    for (const side of [-1, 1]) one([side * 0.09, 0.2, 0.08], [side * 0.1, -0.24, 0.05], [side * 0.1, -0.76, 0.02]);
     return;
   }
   for (const side of [-1, 1]) {
+    const splay = side * (s.sprawl ?? 0) * 0.04;
     const knee = [side * 0.105, 0.17, -0.3 - (s.sprawl ?? 0) * 0.04];
-    leg.limb([side * 0.09, 0.12, 0.08], knee, 0.078 * w, 0.078 * w, 8, 0.6, 0.35);
-    leg.limb(knee, [side * 0.1 + side * (s.sprawl ?? 0) * 0.04, -0.36, -0.33], 0.062 * w, 0.062 * w, 8, 0.6, 0.2);
-    shoe.ellipsoid(side * 0.1 + side * (s.sprawl ?? 0) * 0.04, -0.43, -0.4, 0.055, 0.04, 0.13, 8);
-    sole.ellipsoid(side * 0.1 + side * (s.sprawl ?? 0) * 0.04, -0.46, -0.4, 0.056, 0.012, 0.13, 8);
+    one([side * 0.09, 0.11, 0.08], knee, [side * 0.1 + splay, -0.36, -0.33]);
   }
 }
 
 function neckAndHead(S, M, s, skin, hairRgb, detail, seg) {
   S.within(() => {
     const h = s.head ?? {};
-    S.xf.translate(0, 0.725 + (h.dy ?? 0), 0.1 + (h.dz ?? 0));
+    // Lower than the cartoons' bigger heads sat: the chin just over the collar.
+    S.xf.translate(0, 0.708 + (h.dy ?? 0), 0.1 + (h.dz ?? 0));
     S.xf.rotateY(h.yaw ?? 0);
     S.xf.rotateX(h.pitch ?? 0);
     S.xf.rotateZ(h.roll ?? 0);
-    const size = s.headSize ?? 1.3;
+    // An eighth of the standing height: 0.82 of the modelling size below.
+    const size = (s.headSize ?? 1) * 0.82;
     S.xf.scale(size, size, size);
     // A head is what the eye goes to, and from the window seat it is mostly the
     // back of one, a metre away: finer than the body under it at every distance.
@@ -283,162 +358,55 @@ function neckAndHead(S, M, s, skin, hairRgb, detail, seg) {
 
 function headShape(S, M, s, skin, detail, seg) {
   const k = M(skin);
-  k.ellipsoid(0, 0.01, 0.005, 0.098, 0.108, 0.1, seg + 2);
+  // The skull: longer front to back than it is wide, as one is.
+  k.ellipsoid(0, 0.022, 0.012, 0.09, 0.098, 0.104, seg + 2);
   // From behind, a skull is all there is: no jaw, no ears to add up over a cabin of them.
   if (detail < 0.5) return;
-  k.ellipsoid(0, -0.04, -0.012, 0.084, 0.07, 0.088, seg);
+  // The face under it, narrowing through the jaw to the chin.
+  k.ellipsoid(0, -0.04, -0.03, 0.074, 0.072, 0.075, seg);
+  for (const side of [-1, 1]) k.ellipsoid(side * 0.052, -0.058, -0.02, 0.026, 0.036, 0.042, 8);
+  k.ellipsoid(0, -0.094, -0.064, 0.034, 0.028, 0.03, 8);
+  // Ears, flat to the head.
   for (const side of [-1, 1]) {
-    k.ellipsoid(side * 0.099, -0.004, 0.014, 0.013, 0.034, 0.024, 8);
-    M(shade(skin, 0.86)).ellipsoid(side * 0.104, -0.004, 0.012, 0.006, 0.02, 0.014, 6);
+    k.ellipsoid(side * 0.091, -0.008, 0.014, 0.011, 0.031, 0.021, 8);
+    M(shade(skin, 0.9)).ellipsoid(side * 0.096, -0.008, 0.012, 0.005, 0.019, 0.012, 6);
   }
   if (s.faceHidden) return;
   face(S, M, s, skin, detail);
 }
 
+/**
+ * A sculpted face: what the light finds on a mannequin. Nothing painted —
+ * a brow ridge over closed lids, the nose from its bridge to its wings,
+ * cheekbones, and lips a shade warmer than the skin.
+ */
 function face(S, M, s, skin, detail) {
-  const f = s.face ?? {};
-  const bearded = s.beard;
-  const eyeScale = f.eyes === 'wide' ? 1.55 : f.eyes === 'tiny' ? 0.75 : 1;
-  const ey = 0.018;
-  const ex = 0.037 * (f.eyes === 'wide' ? 1.1 : 1);
-  const ez = -0.084;
-  const white = M(WHITE);
-  const iris = M(s.eyeColor ?? EYES[0]);
-  const pupil = M(DARK);
-  const lash = M(DARK);
-  const gaze = f.gaze ?? [0, 0];
-  const closed = f.eyes === 'closed' || f.eyes === 'sleep';
-  const half = f.eyes === 'sleepy';
-
+  const k = M(skin);
+  const fold = M(shade(skin, 0.95));
+  // The brow ridge, over the eyes.
+  k.ellipsoid(0, 0.04, -0.081, 0.064, 0.012, 0.015, 9);
+  // Rows away, a face is its brow and its nose: the rest is below what shows.
+  if (detail < 1) {
+    k.limb([0, 0.026, -0.091], [0, -0.028, -0.104 - 0.012 * (s.nose ?? 1)], 0.0105, 0.0095, 6);
+    return;
+  }
+  // Lids, set in under it, and the faint line where they close.
   for (const side of [-1, 1]) {
-    if (closed) {
-      // A closed eye: a lid and a lash line, drooping to the outside.
-      S.within(() => {
-        S.xf.translate(side * ex, ey - 0.002, ez - 0.012);
-        S.xf.rotateZ(-side * 0.18);
-        lash.ellipsoid(0, 0, 0, 0.022, 0.0042, 0.006, 6);
-      });
-      continue;
-    }
-    const es = detail >= 2 ? 16 : 12;
-    white.ellipsoid(side * ex, ey, ez, 0.022 * eyeScale, 0.026 * eyeScale, 0.014, es);
-    const gx = gaze[0] * 0.007 * eyeScale;
-    const gy = gaze[1] * 0.007 * eyeScale;
-    iris.ellipsoid(side * ex + gx + (f.eyes === 'cross' ? -side * 0.009 : 0), ey + gy, ez - 0.0125, 0.0125 * eyeScale, 0.0145 * eyeScale, 0.006, es - 2);
-    pupil.ellipsoid(side * ex + gx + (f.eyes === 'cross' ? -side * 0.009 : 0), ey + gy, ez - 0.0165, 0.0068 * eyeScale, 0.0078 * eyeScale, 0.004, es - 4);
-    // A catch-light: the difference between a doll and somebody home.
-    if (detail >= 1 && f.eyes !== 'cross') {
-      white.ellipsoid(side * ex + gx + 0.0045 * eyeScale, ey + gy + 0.0055 * eyeScale, ez - 0.0185, 0.0036 * eyeScale, 0.0036 * eyeScale, 0.003, 6);
-    }
-    if (half) {
-      // A heavy lid over the top half.
-      M(shade(skin, 0.94)).ellipsoid(side * ex, ey + 0.012 * eyeScale, ez - 0.004, 0.0245, 0.016, 0.015, 7);
-    }
+    k.ellipsoid(side * 0.035, 0.017, -0.08, 0.019, 0.01, 0.008, 8);
+    fold.ellipsoid(side * 0.035, 0.012, -0.0815, 0.017, 0.0022, 0.007, 7);
   }
-
-  // Brows: where the mood is.
-  const brow = M(s.browColor ?? shade(HAIRS[s.hair?.color ?? 'brown'] ?? HAIRS.brown, 0.8));
-  const tilt = { angry: 0.38, worried: -0.4, flat: 0, up: -0.16, down: 0.14, none: null }[f.brows ?? 'flat'];
-  if (tilt !== null && tilt !== undefined) {
-    for (const side of [-1, 1]) {
-      S.within(() => {
-        S.xf.translate(side * ex, ey + 0.045 * (f.eyes === 'wide' ? 1.3 : 1) + (f.brows === 'up' ? 0.012 : 0), ez - 0.004);
-        S.xf.rotateZ(side * tilt);
-        brow.ellipsoid(0, 0, 0, 0.026, 0.0065, 0.008, 6);
-      });
-    }
-  }
-
-  // Nose.
+  // Nose: the bridge, the tip and the wings either side of it.
   const nose = s.nose ?? 1;
-  M(shade(skin, 0.94)).ellipsoid(0, -0.01, -0.099, 0.017 * nose, 0.022 * nose, 0.02 * nose, 7);
-  M(shade(skin, 0.9)).ellipsoid(0, -0.024, -0.108 - (nose - 1) * 0.012, 0.015 * nose, 0.013 * nose, 0.014 * nose, 6);
-  if (s.noseColor) M(s.noseColor).ellipsoid(0, -0.024, -0.113 - (nose - 1) * 0.012, 0.013 * nose, 0.012 * nose, 0.011 * nose, 6);
-
-  // Cheeks.
-  if (detail >= 1) {
-    const blush = skin.map((c, i) => Math.round((c * 0.62 + [0.95, 0.45, 0.45][i] * 0.38) * 24) / 24);
-    for (const side of [-1, 1]) M(blush).ellipsoid(side * 0.062, -0.028, -0.07, 0.019, 0.015, 0.012, 5);
-  }
-
-  // Mouth.
-  const mz = bearded ? -0.112 : -0.087;
-  const mouth = M(MOUTH);
-  const my = -0.058;
-  const m = f.mouth ?? 'smile';
-  const teeth = M(WHITE);
-  switch (m) {
-    case 'grin': {
-      mouth.ellipsoid(0, my, mz, 0.036, 0.02, 0.012, 8);
-      teeth.ellipsoid(0, my + 0.009, mz - 0.007, 0.032, 0.0072, 0.007, 6);
-      break;
-    }
-    case 'open': {
-      mouth.ellipsoid(0, my - 0.008, mz, 0.027, 0.032, 0.014, 8);
-      M(TONGUE).ellipsoid(0, my - 0.021, mz - 0.006, 0.017, 0.011, 0.009, 6);
-      teeth.ellipsoid(0, my + 0.016, mz - 0.007, 0.02, 0.006, 0.006, 6);
-      break;
-    }
-    case 'snore': {
-      // Slack, lopsided and open.
-      mouth.ellipsoid(0.006, my - 0.006, mz, 0.022, 0.026, 0.013, 8);
-      M(TONGUE).ellipsoid(0.004, my - 0.016, mz - 0.006, 0.013, 0.008, 0.008, 6);
-      M([0.75, 0.88, 0.95]).ellipsoid(0.018, my - 0.034, mz - 0.006, 0.006, 0.011, 0.006, 5); // drool
-      break;
-    }
-    case 'shock': {
-      mouth.ellipsoid(0, my - 0.004, mz, 0.016, 0.022, 0.012, 7);
-      break;
-    }
-    case 'tongue': {
-      mouth.ellipsoid(0, my, mz, 0.03, 0.012, 0.01, 7);
-      M(TONGUE).ellipsoid(0.004, my - 0.016, mz - 0.01, 0.014, 0.018, 0.01, 6);
-      break;
-    }
-    case 'flat': {
-      mouth.ellipsoid(0, my - 0.004, mz, 0.022, 0.0038, 0.006, 6);
-      break;
-    }
-    case 'smirk': {
-      for (let i = 0; i < 6; i++) {
-        const t = i / 5 - 0.5;
-        mouth.ellipsoid(t * 0.06, my - 0.002 + (t > 0 ? t * 0.03 : t * 0.005), mz, 0.0054, 0.0048, 0.006, 5);
-      }
-      break;
-    }
-    case 'duck': {
-      // Pursed lips for the selfie.
-      M([0.82, 0.3, 0.38]).ellipsoid(0, my, mz - 0.012, 0.022, 0.014, 0.016, 7);
-      break;
-    }
-    case 'chew': {
-      mouth.ellipsoid(0, my, mz, 0.022, 0.016, 0.01, 7);
-      M(shade(skin, 0.97)).ellipsoid(0.04, -0.03, -0.075, 0.032, 0.03, 0.026, 6);
-      break;
-    }
-    case 'scared': {
-      mouth.ellipsoid(0, my - 0.002, mz, 0.03, 0.017, 0.011, 7);
-      teeth.ellipsoid(0, my + 0.006, mz - 0.007, 0.026, 0.0065, 0.006, 6);
-      teeth.ellipsoid(0, my - 0.011, mz - 0.007, 0.022, 0.005, 0.006, 6);
-      break;
-    }
-    default: {
-      // A smile: a row of beads along an upturned curve.
-      for (let i = 0; i < 7; i++) {
-        const t = i / 6 - 0.5;
-        mouth.ellipsoid(t * 0.07, my - 0.01 + t * t * 0.14, mz, 0.0058, 0.0055, 0.007, 5);
-      }
-    }
-  }
-  if (f.sweat) {
-    const d = M([0.7, 0.88, 1]);
-    d.ellipsoid(0.07, 0.07, -0.07, 0.011, 0.02, 0.011, 6);
-    d.ellipsoid(-0.075, 0.03, -0.06, 0.008, 0.015, 0.008, 6);
-  }
-  if (f.freckles) {
-    const fr = M(shade(skin, 0.84));
-    for (let i = 0; i < 8; i++) fr.ellipsoid((i % 2 ? 1 : -1) * (0.034 + (i % 3) * 0.013), -0.032 + (i % 4) * 0.004, -0.091 + (i % 3) * 0.003, 0.0042, 0.0042, 0.003, 4);
-  }
+  k.limb([0, 0.026, -0.091], [0, -0.028, -0.104 - 0.012 * nose], 0.0105, 0.0095, 8);
+  k.ellipsoid(0, -0.032, -0.104 - 0.01 * nose, 0.012 * nose, 0.011, 0.012, 7);
+  for (const side of [-1, 1]) k.ellipsoid(side * 0.013, -0.035, -0.1, 0.009, 0.0085, 0.009, 6);
+  // Cheekbones.
+  for (const side of [-1, 1]) k.ellipsoid(side * 0.05, -0.014, -0.06, 0.024, 0.017, 0.017, 7);
+  // Lips: upper and lower, and the crease of the mouth between them.
+  const lip = M(skin.map((c, i) => Math.round((c * 0.82 + [0.66, 0.34, 0.34][i] * 0.18) * 0.96 * 24) / 24));
+  lip.ellipsoid(0, -0.059, -0.098, 0.021, 0.0062, 0.0085, 8);
+  lip.ellipsoid(0, -0.07, -0.096, 0.019, 0.0075, 0.0095, 8);
+  fold.ellipsoid(0, -0.0645, -0.1, 0.019, 0.0015, 0.0035, 6);
 }
 
 function hair(S, M, s, rgb, skin) {
@@ -669,6 +637,34 @@ function gear(S, M, s, hairRgb, skin, detail) {
           hp.ellipsoid(side * 0.11, -0.005, 0.01, 0.03, 0.05, 0.05, 8);
           M(DARK).ellipsoid(side * 0.14, -0.005, 0.01, 0.01, 0.04, 0.04, 6);
         }
+        break;
+      }
+      case 'headset': {
+        // A pilot's headset: the band over the crown, padded cups, and the boom to the mouth.
+        const dark = M(c ?? [0.12, 0.12, 0.13]);
+        S.within(() => {
+          S.xf.translate(0, 0.0, 0.012);
+          S.xf.rotateX(-Math.PI / 2);
+          dark.torus(0, 0, 0, 0.112, 0.008, 18, 5, 0.5, 0.012);
+        });
+        for (const side of [-1, 1]) {
+          dark.soft(side * 0.1, -0.012, 0.012, 0.022, 0.048, 0.042, 0.7, 9);
+          M([0.3, 0.3, 0.32]).soft(side * 0.118, -0.012, 0.012, 0.008, 0.032, 0.028, 0.7, 7);
+        }
+        dark.limb([-0.1, -0.03, -0.01], [-0.075, -0.068, -0.075], 0.005, 0.005, 5);
+        dark.limb([-0.075, -0.068, -0.075], [-0.03, -0.07, -0.105], 0.005, 0.005, 5);
+        M(DARK).ellipsoid(-0.024, -0.07, -0.107, 0.012, 0.009, 0.009, 6);
+        break;
+      }
+      case 'aviators': {
+        // Sunglasses pushed up onto the hair, for later.
+        const fr = M([0.75, 0.62, 0.3]);
+        const lens = M([0.12, 0.16, 0.2]);
+        for (const side of [-1, 1]) {
+          lens.ellipsoid(side * 0.04, 0.105, -0.078, 0.03, 0.022, 0.006, 8);
+          fr.limb([side * 0.07, 0.108, -0.07], [side * 0.098, 0.07, 0.0], 0.0025, 0.0025, 4);
+        }
+        fr.limb([-0.012, 0.113, -0.085], [0.012, 0.113, -0.085], 0.0025, 0.0025, 4);
         break;
       }
       case 'eyemask': {
@@ -1007,7 +1003,9 @@ export const CHARACTERS = {
       pose: 'cheer',
       prop: { kind: 'teddy', x: 0, y: 0.2, z: -0.15 },
       face: { eyes: 'wide', mouth: 'grin', brows: 'up', freckles: true, gaze: [0, 0.4] },
-      headSize: 1.35,
+      headSize: 1.22,
+      mustache: undefined,
+      beard: undefined,
       build: 0.72,
       shirt: { color: pick(rand, [[0.95, 0.3, 0.3], [0.3, 0.7, 0.95], [0.95, 0.8, 0.2]]), kind: 'stripes' },
       gear: [{ kind: 'pilot' }],
@@ -1074,6 +1072,28 @@ export const CHARACTERS = {
   duckHead(rand) {
     const s = ordinary(rand);
     return { ...s, pose: 'rest', prop: null, face: { eyes: 'open', mouth: 'smile', brows: 'flat', gaze: [0.5, 0] }, gear: [{ kind: 'duck' }] };
+  },
+  /** The first officer, in the right seat of the flight deck. */
+  firstOfficer(rand) {
+    const s = ordinary(rand);
+    return {
+      ...s,
+      shirt: { color: [0.94, 0.95, 0.96], kind: 'pilot', bars: 3, tie: [0.08, 0.1, 0.2] },
+      longSleeves: false,
+      pants: [0.08, 0.09, 0.14],
+      shoes: [0.06, 0.06, 0.07],
+      pose: 'lap',
+      prop: null,
+      build: 1,
+      // Glancing across at the captain.
+      head: { yaw: 0.28, pitch: -0.04, roll: 0 },
+      gear: [{ kind: 'headset' }, { kind: 'aviators' }],
+      hair: { style: pick(rand, ['short', 'quiff', 'short']), color: pick(rand, ['brown', 'black', 'chestnut', 'blond']) },
+      mustache: undefined,
+      beard: undefined,
+      neckPillow: undefined,
+      lean: 0,
+    };
   },
   /** The flight attendant. */
   attendant(rand) {

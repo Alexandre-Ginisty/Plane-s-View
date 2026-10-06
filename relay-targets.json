@@ -1,5 +1,7 @@
 {
   "adsb-lol": "https://api.adsb.lol",
   "adsb-fi": "https://opendata.adsb.fi",
-  "metno": "https://api.met.no"
+  "metno": "https://api.met.no",
+  "awc": "https://aviationweather.gov",
+  "adsb-lol-traces": "https://adsb.lol"
 }

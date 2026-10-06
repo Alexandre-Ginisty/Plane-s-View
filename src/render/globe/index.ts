@@ -263,7 +263,11 @@ export class Globe {
     for (const node of this.nodes.values()) {
       if (!node.texture) continue;
       node.texture.anisotropy = this.maxAnisotropy;
-      node.texture.needsUpdate = true;
+      // Only where the picture is still there to upload again: an uploaded
+      // tile's bitmap is closed (see `tileFetch`) and reads as 0 wide, and
+      // re-uploading that would blank the tile. Those keep their filtering
+      // until they are next replaced.
+      if ((node.texture.image as { width?: number } | null)?.width) node.texture.needsUpdate = true;
     }
   }
 

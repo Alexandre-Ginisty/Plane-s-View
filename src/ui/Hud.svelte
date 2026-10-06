@@ -24,6 +24,10 @@
   import FlightCard from './hud/FlightCard.svelte';
   import Tapes from './hud/Tapes.svelte';
   import Icon, { type IconName } from './Icon.svelte';
+  import { shareView } from '@/app/share';
+  import { hasGyro } from '@/app/gyro';
+
+  const gyroAvailable = hasGyro();
 
   let { orchestrator }: { orchestrator: Orchestrator } = $props();
 
@@ -105,6 +109,19 @@
       }
     }
     lastMode = mode;
+  });
+
+  /* The running clip's length, ticking once a second while it records. */
+  let now = $state(performance.now());
+  $effect(() => {
+    if (app.recordingSince === null) return;
+    const timer = setInterval(() => (now = performance.now()), 500);
+    return () => clearInterval(timer);
+  });
+  const clipTime = $derived.by(() => {
+    if (app.recordingSince === null) return null;
+    const s = Math.max(0, Math.floor((now - app.recordingSince) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   });
 
   const degraded = $derived(
@@ -211,13 +228,43 @@
           aria-pressed={app.sound}
         ><Icon name={app.sound ? 'sound' : 'mute'} size={17} /></button>
         <button
-          class="round"
+          class="round optional"
           class:active={app.autoCamera}
           onclick={() => app.setAutoCamera(!app.autoCamera)}
           title={t('hud.autoCameraTitle')}
           aria-label={t('hud.autoCamera')}
           aria-pressed={app.autoCamera}
         ><Icon name="auto" size={17} /></button>
+        {#if gyroAvailable}
+          <button
+            class="round"
+            class:active={app.gyro}
+            onclick={() => void orchestrator.setGyro(!app.gyro)}
+            title={t('hud.gyro')}
+            aria-label={t('hud.gyro')}
+            aria-pressed={app.gyro}
+          ><Icon name="gyro" size={17} /></button>
+        {/if}
+        <button
+          class="round"
+          onclick={() => void orchestrator.takePhoto()}
+          title={t('capture.photoTitle')}
+          aria-label={t('capture.photo')}
+        ><Icon name="camera" size={17} /></button>
+        <button
+          class="round roomy"
+          class:recording={clipTime !== null}
+          onclick={() => void orchestrator.toggleRecording()}
+          title={t(clipTime !== null ? 'capture.stopTitle' : 'capture.recordTitle')}
+          aria-label={t('capture.record')}
+          aria-pressed={clipTime !== null}
+        ><Icon name={clipTime !== null ? 'stop' : 'record'} size={17} /></button>
+        <button
+          class="round"
+          onclick={() => void shareView()}
+          title={t('share.title')}
+          aria-label={t('share.button')}
+        ><Icon name="share" size={17} /></button>
         <button
           class="round"
           onclick={() => (app.cinema = true)}
@@ -226,6 +273,10 @@
         ><Icon name="fullscreen" size={17} /></button>
       </div>
     </div>
+
+    {#if clipTime !== null}
+      <p class="rec" role="status"><span class="dot" aria-hidden="true"></span>{t('capture.recording', { time: clipTime })}</p>
+    {/if}
 
     <button class="exit" onclick={() => orchestrator.exitPov()}>
       <Icon name="back" size={15} />
@@ -469,6 +520,34 @@
   .round:hover { color: var(--hud-accent); border-color: var(--hud-accent); transform: translateY(-2px); }
   .round.active { color: var(--hud-accent); border-color: var(--hud-accent); box-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.35); }
 
+  .round.recording { color: #ff5a4f; border-color: #ff5a4f; box-shadow: 0 0 14px rgb(255 90 79 / 0.4); }
+
+  .rec {
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--hud-text);
+    background: var(--hud-bg);
+    border: 1px solid rgb(255 90 79 / 0.6);
+  }
+  .rec .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ff5a4f;
+    animation: blink 1s steps(2, start) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+
   .mode-toast {
     position: absolute;
     left: 50%;
@@ -545,11 +624,23 @@
     .group { padding: 0 8px; font-size: 9px; }
     .mode { padding: 9px 4px; }
     .mode span { display: none; }
-    .bottom { gap: 6px; bottom: calc(12px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); }
+    /* Two rows: the switches above, the views under the thumb. */
+    .bottom {
+      flex-wrap: wrap-reverse;
+      justify-content: center;
+      gap: 8px 6px;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      width: calc(100vw - 16px);
+    }
     .round { width: 40px; height: 40px; }
   }
+  @media (max-width: 520px) {
+    /* Recording steps aside first (unless running): the photo and the link stay. */
+    .utility .roomy:not(.recording) { display: none; }
+    .rec { top: calc(60px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); }
+  }
   @media (max-width: 380px) {
-    .utility .round:nth-child(2) { display: none; }
+    .utility .optional { display: none; }
   }
   /* A phone on its side: no room for anything stacked. */
   @media (max-height: 480px) {

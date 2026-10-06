@@ -176,6 +176,22 @@ const fragmentShader = /* glsl */ `
     vec3 sunTint = (1.0 - ambient * skyTint) / (1.0 - ambient);
     vec3 lit = albedo * (ambient * atmo[4].w * skyTint + (1.0 - ambient) * lambert * atmo[4].rgb * sunTint);
 
+    /*
+     * Night: what is not lit by a town is close to black, and what little the
+     * eye makes of it has no colour — below a fraction of a lux vision is the
+     * rods', which see in grey-blue (the Purkinje shift). A daytime photograph
+     * merely dimmed kept every field its own brown and green and, worse, kept
+     * its focus visible: the imagery's softness, which daylight forgives, was
+     * the most legible thing on the ground. Coasts, rivers and the larger
+     * fields still read, as they do from a real window on a clear night.
+     */
+    float dark = atmo[5].w;
+    if (dark > 0.0) {
+      float y = dot(lit, vec3(0.2126, 0.7152, 0.0722));
+      vec3 scotopic = y * vec3(0.62, 0.74, 1.0);
+      lit = mix(lit, scotopic, dark * 0.85) * mix(1.0, 0.32, dark);
+    }
+
     // Aerial perspective, shared with every other material and with the sky
     // itself: see @/render/sky. This is also what removes the ring of colour
     // around the aircraft, where the imagery provider switches from recent

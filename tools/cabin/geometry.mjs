@@ -234,6 +234,37 @@ export class Mesh {
     this.xf.pop();
   }
 
+  /**
+   * A limb that narrows: radius `r0` at joint `a` to `r1` at joint `b`, its
+   * sides bulging a little (`swell`, a fraction of the mean radius) the way a
+   * muscle does, and open at the ends — the joints are drawn as their own
+   * spheres, so a knee or an elbow reads as one. `flat` squashes the section
+   * front to back (a forearm, a shin).
+   */
+  taper(a, b, r0, r1, seg = 10, swell = 0.12, flat = 1) {
+    const d = vec.sub(b, a);
+    const l = vec.len(d);
+    if (l < 1e-6) return;
+    const sides = Math.max(6, Math.round(seg * this.xf.quality));
+    const rings = Math.max(3, Math.round(sides / 2));
+    this.xf.push();
+    this.xf.translate(a[0], a[1], a[2]);
+    this.xf.alignY(d);
+    const mean = (r0 + r1) / 2;
+    this.surface(
+      (u, v) => {
+        const th = u * Math.PI * 2;
+        const r = r0 + (r1 - r0) * v + Math.sin(v * Math.PI) * mean * swell;
+        const dr = (r1 - r0) / l + (Math.cos(v * Math.PI) * Math.PI * mean * swell) / l;
+        const c = Math.cos(th), s = Math.sin(th);
+        return { p: [c * r, v * l, s * r * flat], n: vec.norm([c / 1, -dr, s / flat]) };
+      },
+      sides,
+      rings,
+    );
+    this.xf.pop();
+  }
+
   /** A ring: `R` from the centre to the middle of the tube, `r` the tube. In the XZ plane about the origin; use the transform to orient it. `arc` is the fraction of the circle drawn. */
   torus(cx, cy, cz, R, r, seg = 14, side = 5, arc = 1, ry = r) {
     this.surface(

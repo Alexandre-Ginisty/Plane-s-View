@@ -53,6 +53,8 @@
     entry('T', 'ctl.catchTakeoff'),
     entry('A', 'ctl.autoCamera'),
     entry('F', 'ctl.fullscreen'),
+    entry('S', 'ctl.photo'),
+    entry('R', 'ctl.record'),
     entry('D', 'ctl.diagnostics'),
     entry('H', 'ctl.panel'),
   ]);

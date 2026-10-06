@@ -32,7 +32,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
-  Permissions-Policy: geolocation=(self), fullscreen=(self), camera=(), microphone=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), xr-spatial-tracking=(), accelerometer=(), gyroscope=(), magnetometer=(), ambient-light-sensor=(), encrypted-media=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(self), idle-detection=(), browsing-topics=(), interest-cohort=()
+  Permissions-Policy: geolocation=(self), fullscreen=(self), camera=(), microphone=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), xr-spatial-tracking=(), accelerometer=(self), gyroscope=(self), magnetometer=(), ambient-light-sensor=(), encrypted-media=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(self), idle-detection=(), browsing-topics=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Origin-Agent-Cluster: ?1
@@ -59,3 +59,6 @@
 # Converted airframes: large, and replaced only by a new deploy.
 /models/*
   Cache-Control: public, max-age=604800
+
+/sw.js
+  Cache-Control: no-cache

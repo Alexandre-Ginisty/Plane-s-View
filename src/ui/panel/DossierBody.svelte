@@ -35,6 +35,7 @@
   import { routelessReason } from '@/data/meta/callsign';
   import AircraftPhoto from './AircraftPhoto.svelte';
   import RouteStrip from './RouteStrip.svelte';
+  import AerodromeWeather from './AerodromeWeather.svelte';
 
   let { sample, dense = false }: { sample: SampledAircraft; dense?: boolean } = $props();
 
@@ -79,6 +80,7 @@
 
   {#if route && (route.origin || route.destination)}
     <RouteStrip {route} />
+    <AerodromeWeather origin={route.origin} destination={route.destination} {dense} />
   {:else}
     <!--
       The slot is never left empty.

@@ -56,7 +56,9 @@ const LEAD_S = 12;
  * [1] x: region weight (0 none … 1 in), y: brightness
  */
 const data = new Float32Array(8);
-data[5] = 1.25;
+// Brightness of the lights. Raised with the darker night ground: the lamps
+// carry the picture now, and their peaks must reach the bloom threshold.
+data[5] = 2.1;
 
 /** Per level: west, south, 1/width, 1/height of the square (degrees). Width 0 means "not drawn yet". */
 const levelBox = new Float32Array(NIGHT_LEVELS.length * 4);
@@ -73,6 +75,12 @@ function makeTexture(name: string): Texture {
   // glow they make, instead of shimmering as single texels switch on and off.
   t.minFilter = LinearMipmapLinearFilter;
   t.magFilter = LinearFilter;
+  // From a cockpit the ground is seen at a grazing angle, where plain
+  // mipmapping picks a level for the long axis of the pixel's footprint and
+  // smears every street into a streak. The terrain's imagery has had
+  // anisotropy from the start; the lights went without, which is most of why
+  // the night looked out of focus when the day did not.
+  t.anisotropy = 8;
   t.name = name;
   return t;
 }
@@ -125,6 +133,42 @@ float nightHash(vec2 p) {
 float nightEdge(vec2 r) {
   if (r.x <= 0.0 || r.y <= 0.0 || r.x >= 1.0 || r.y >= 1.0) return 0.0;
   return smoothstep(0.0, 0.07, min(min(r.x, 1.0 - r.x), min(r.y, 1.0 - r.y)));
+}
+
+/*
+ * A city from the air is points, not lines: lamps every thirty metres or so,
+ * each far brighter than the street between them. The map's streets are
+ * lines a texel wide, so up close they are broken into lamps here — a random
+ * point in each cell of a world-fixed grid, sharp while the pixel is small
+ * against the spacing — and from far off, where a pixel covers several
+ * lamps, the pattern averages to exactly 1 and the street keeps the
+ * brightness it had. A lamp that lands off a street lights nothing, so a
+ * street shows as a dotted thread with the irregular rhythm of real ones.
+ *
+ * q: Mercator metres (stable as the camera moves); footprint: metres a pixel
+ * covers there.
+ */
+float nightLamps(vec2 q, float footprint) {
+  const float cell = 32.0;
+  float far = smoothstep(cell * 0.35, cell * 1.4, footprint);
+  if (far >= 1.0) return 1.0;
+  vec2 g = q / cell;
+  vec2 id = floor(g);
+  vec2 f = fract(g);
+  float lamps = 0.0;
+  // This cell and its neighbours: a lamp near an edge lights across it.
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 o = vec2(float(x), float(y));
+      vec2 at = o + vec2(nightHash(id + o), nightHash(id + o + 37.1)) * 0.8 + 0.1;
+      vec2 d = f - at;
+      // A lamp's pool is a few metres; never sharper than the pixel can show.
+      float r = max(3.0, footprint * 0.6) / cell;
+      lamps += exp(-dot(d, d) / (r * r)) / (3.14159 * r * r);
+    }
+  }
+  // Each lamp's integral over the plane is 1 per cell, so the mean is 1.
+  return mix(min(lamps, 14.0), 1.0, far);
 }
 
 // How much a finer level should be used at this pixel size: all of it while a
@@ -184,8 +228,19 @@ vec3 cityLights(vec3 worldPos, vec2 q, float footprint, vec3 albedo) {
   // brightens the streets where it saw more, and is the only light beyond the
   // map. On its own it would flood a whole city in one flat colour — it is
   // saturated across the whole of an urban area — so it never stands in for them.
-  m *= 1.0 + glow * 1.1;
-  m += vec3(glow * 0.30, glow * 0.14, 0.0) * (1.0 - c0);
+  // Roads between towns are dark: in most of the world only built-up streets,
+  // junctions and airports are lit. The satellite knows where light really
+  // is, so a road it saw no light on keeps a trace of headlights and no more —
+  // which is what turns a road map into a night: islands of towns in the dark.
+  float urban = smoothstep(0.0, 0.3, glow);
+  m *= mix(0.18, 1.0, urban) * (1.0 + glow * 1.1);
+  // The lamps, but not on the finest level, which draws every lamp itself.
+  m *= mix(nightLamps(q * cos(radians(lat)), ground), 1.0, c3);
+  // The satellite's glow is the light a town throws up: from low down a faint
+  // halo round the streets, from high up most of what a town is — a pool of
+  // orange whose streets are too fine to tell apart.
+  float aloft = smoothstep(60.0, 450.0, ground);
+  m += vec3(glow * 0.62, glow * 0.29, glow * 0.04) * mix(0.12, 1.6, aloft);
 
   vec3 sodium = vec3(1.0, 0.50, 0.16);
   vec3 warm = vec3(1.0, 0.80, 0.56);

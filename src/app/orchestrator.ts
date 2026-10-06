@@ -48,6 +48,8 @@ import {
   type PhaseInput,
 } from '@/state/phase';
 import { TrafficStore, type SampledAircraft } from '@/state/traffic';
+import type { TrailPoint } from '@/state/track';
+import { fetchFlightTrace } from '@/data/adsb/trace';
 import { app } from '@/state/appStore.svelte';
 import { ConnectionSupervisor } from './connection';
 import { FALLBACK_VIEW, initialView } from './geolocate';
@@ -67,6 +69,11 @@ import { shapeFor } from '@/render/aircraft';
 import { loadModelFor, operatorOf } from '@/render/aircraft/library';
 import { fillContacts, readingsFromSample } from './cockpitReadings';
 import { WindField } from '@/data/weather/wind';
+import type { DeepLink } from './deepLink';
+import { armCrashCheck, recordMemoryLoss } from '@/render/deviceBudget';
+import { ClipRecorder, canRecord, captionPhoto, toJpeg } from './capture';
+import { captureName, deliverFile, describeFlight } from './share';
+import { GyroLook } from './gyro';
 import { fetchCurrentWeather } from '@/data/weather/metno';
 
 /** Terrain tiles still loading above which decoration (night map, ground detail) holds off. */
@@ -177,6 +184,10 @@ export class Orchestrator {
 
   private lastSamples: SampledAircraft[] = [];
 
+  /** The selected aircraft's flight so far, from before this page saw it. See `@/data/adsb/trace`. */
+  private history: { hex: string; points: readonly TrailPoint[] } | null = null;
+  private historyAbort: AbortController | null = null;
+
   /** Held-fix state for the cockpit view, across feed gaps. */
   private readonly povSession = new PovSession();
 
@@ -262,7 +273,12 @@ export class Orchestrator {
   // Boot
   // -------------------------------------------------------------------------
 
-  async start(mapContainer: HTMLElement, canvas: HTMLCanvasElement, pinOverlay: HTMLCanvasElement): Promise<void> {
+  async start(
+    mapContainer: HTMLElement,
+    canvas: HTMLCanvasElement,
+    pinOverlay: HTMLCanvasElement,
+    link: DeepLink | null = null,
+  ): Promise<void> {
     // Boot blocks on nothing that can be deferred.
     //
     // Previously this awaited geolocation (up to 4 s) and then the map's
@@ -270,7 +286,9 @@ export class Orchestrator {
     // never fire if a single tile stalls. Both are now fire-and-forget: the
     // map opens immediately over a sensible default and re-centres if and
     // when the browser grants a position.
-    this.query = { ...FALLBACK_VIEW, radiusNm: 120 };
+    const linkedPlace = link?.kind === 'map' ? link : null;
+    const opening = linkedPlace ?? FALLBACK_VIEW;
+    this.query = { lat: opening.lat, lon: opening.lon, radiusNm: 120 };
 
     this.map = new SelectionMap(mapContainer, {
       onSelect: (hex) => void this.select(hex),
@@ -279,6 +297,7 @@ export class Orchestrator {
       },
       onMoveEnd: (center, radiusNm, bounds: ViewBounds) => {
         this.query = { lat: center.lat, lon: center.lon, radiusNm, bounds };
+        app.mapView = { lat: center.lat, lon: center.lon, zoom: this.map?.zoom ?? 8 };
       },
       onError: (message) => app.notify(tr('notice.mapError', { message }), 'warn'),
       onPlacePin: (lat, lon, name) => app.addPin(lat, lon, name),
@@ -286,9 +305,10 @@ export class Orchestrator {
       onRenamePin: (id, name) => app.renamePin(id, name),
     });
     this.map.setPins(app.pins);
-    this.map.init(FALLBACK_VIEW, 8);
+    this.map.init(opening, linkedPlace?.zoom ?? 8);
 
-    void initialView().then((where) => {
+    // A link says where to look; the visitor's own position does not override it.
+    if (!link) void initialView().then((where) => {
       // Only move if the user is somewhere else; re-centring on the fallback
       // would yank a map they may already be panning.
       if (where === FALLBACK_VIEW) return;
@@ -296,7 +316,7 @@ export class Orchestrator {
       this.map?.flyTo(where.lat, where.lon, 8);
     });
 
-    const surfaces = createSurfaces(canvas, this.origin, pinOverlay);
+    const surfaces = createSurfaces(canvas, this.origin, pinOverlay, () => this.onContextLost());
     this.engine = surfaces.engine;
     this.engine.origin = this.origin;
     this.engine.overlay = this.cockpit;
@@ -325,6 +345,8 @@ export class Orchestrator {
 
     this.client.start(this.feedSource(), 4000);
     this.engine.start((ctx) => this.frame(ctx.dt));
+
+    if (link?.kind === 'aircraft') void this.openAircraftLink(link.hex, link.cam);
 
     if (import.meta.env.DEV) {
       // Debug handle. Dev-only: nothing in the production bundle reaches it.
@@ -757,7 +779,7 @@ export class Orchestrator {
       this.map?.updateAircraft(this.lastSamples);
       if (selected) {
         const track = this.traffic.get(selected.hex);
-        if (track) this.map?.updateTrail(track.trailPoints);
+        if (track) this.map?.updateTrail(this.flownSoFar(selected.hex, track.trailPoints));
       }
     }
   }
@@ -774,6 +796,7 @@ export class Orchestrator {
   async select(hex: string | null): Promise<void> {
     app.selectedHex = hex;
     this.map?.setSelected(hex);
+    this.loadHistory(hex);
 
     if (!hex) {
       clearSelection(this.map);
@@ -787,10 +810,35 @@ export class Orchestrator {
     await loadSelection(hex, sample, ++this.dossierToken, () => this.dossierToken);
   }
 
+  /** Fetch the selected aircraft's flight so far; drawn on the map once it lands. */
+  private loadHistory(hex: string | null): void {
+    if (hex && this.history?.hex === hex) return;
+    this.historyAbort?.abort();
+    this.historyAbort = null;
+    this.history = null;
+    if (!hex) return;
+    const controller = new AbortController();
+    this.historyAbort = controller;
+    void fetchFlightTrace(hex, controller.signal).then((points) => {
+      if (controller.signal.aborted || app.selectedHex !== hex) return;
+      this.history = { hex, points };
+    });
+  }
+
+  /** The leg flown so far: the fetched history up to where this page's own trail begins, then the trail. */
+  private flownSoFar(hex: string, trail: readonly TrailPoint[]): readonly TrailPoint[] {
+    const history = this.history?.hex === hex ? this.history.points : null;
+    if (!history?.length) return trail;
+    const from = trail[0]?.t ?? Infinity;
+    const before = history.filter((p) => p.t < from);
+    return before.length ? [...before, ...trail] : trail;
+  }
+
   enterPov(): void {
     const hex = app.selectedHex;
     if (!hex) return;
     this.povEnteredAt = performance.now();
+    armCrashCheck();
 
     const sample = this.traffic.sampleOne(hex);
     if (!sample) {
@@ -830,6 +878,141 @@ export class Orchestrator {
     app.cameraMode = this.pov?.state.mode ?? 'cockpit';
     this.userCameraMode = app.cameraMode;
     this.query = { lat: sample.lat, lon: sample.lon, radiusNm: 80 };
+  }
+
+  /**
+   * A link opened in a tab the app is already running in: the address bar's
+   * fragment changed under it (someone pasted one, or pressed Back to one).
+   */
+  openLink(link: DeepLink): void {
+    if (link.kind === 'map') {
+      if (app.view === 'pov') this.exitPov();
+      void this.select(null);
+      this.query = { lat: link.lat, lon: link.lon, radiusNm: this.query.radiusNm };
+      this.map?.flyTo(link.lat, link.lon, link.zoom);
+      return;
+    }
+    if (link.hex === app.selectedHex) {
+      if (link.cam && app.view !== 'pov') this.enterPov();
+      if (link.cam) this.setCameraMode(link.cam);
+      return;
+    }
+    if (app.view === 'pov') this.exitPov();
+    void this.openAircraftLink(link.hex, link.cam);
+  }
+
+  /**
+   * Open a shared link to an aircraft: find it anywhere in the world, show it
+   * on the map, and step into the seat the link names.
+   *
+   * The lookup shares the feed's politeness floor with the poll that has just
+   * started, so the first try is often turned away unasked; it is retried a
+   * few times before the aircraft is declared gone. A link to a flight that
+   * has since landed is common and not an error — it says so and leaves the
+   * visitor on the map.
+   */
+  private async openAircraftLink(hex: string, cam: CameraMode | null): Promise<void> {
+    const token = ++this.shuffleToken;
+    app.linkPending = true;
+    try {
+      let found: Awaited<ReturnType<TrafficClient['fetchAircraft']>> = null;
+      for (let attempt = 0; attempt < 6 && !found; attempt++) {
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (token !== this.shuffleToken) return;
+        found = await this.client.fetchAircraft(hex).catch(() => null);
+      }
+      if (token !== this.shuffleToken) return;
+      if (!found) {
+        app.notify(tr('link.gone'), 'warn', 6000);
+        return;
+      }
+      this.traffic.ingestOne(found);
+      this.query = { lat: found.lat, lon: found.lon, radiusNm: 80 };
+      this.map?.flyTo(found.lat, found.lon, 9);
+      void this.select(hex);
+      if (!cam) return;
+      this.enterPov();
+      this.setCameraMode(cam);
+    } finally {
+      app.linkPending = false;
+    }
+  }
+
+  /**
+   * The GPU took its memory back. The view cannot be rebuilt in place, so
+   * the page comes back a step lighter, at the same aircraft and seat — the
+   * address bar already holds the link to them.
+   */
+  private onContextLost(): void {
+    recordMemoryLoss();
+    app.notify(tr('notice.gpuReset'), 'warn', 0);
+    setTimeout(() => location.reload(), 1800);
+  }
+
+  // -------------------------------------------------------------------------
+  // Photos and clips
+  // -------------------------------------------------------------------------
+
+  private clip: ClipRecorder | null = null;
+
+  /** The phone's gyroscope, turning the head in the 3D view. Off until asked for. */
+  private readonly gyro = new GyroLook((dYaw, dPitch) => {
+    if (app.view === 'pov') this.pov?.applyLook(dYaw, dPitch);
+  });
+
+  /** Must be called from a tap: iOS asks for permission, and only then. */
+  async setGyro(on: boolean): Promise<void> {
+    if (!on) {
+      this.gyro.disable();
+      app.gyro = false;
+      return;
+    }
+    app.gyro = await this.gyro.enable();
+    if (!app.gyro) app.notify(tr('hud.gyroDenied'), 'warn', 6000);
+  }
+
+  /** Save the view as a photo, captioned with the flight. Only the 3D view is drawn by the engine. */
+  async takePhoto(): Promise<void> {
+    const engine = this.engine;
+    if (!engine || app.view !== 'pov') return;
+    const flight = describeFlight(app.selected, app.dossier);
+    const frame = await engine.captureFrame();
+    const when = new Date();
+    const stamp = `${when.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    const altitude = app.selected ? `${Math.round(app.selected.altFt / 100) * 100} ft` : null;
+    captionPhoto(frame, [flight, ['PlanesView', altitude, stamp].filter(Boolean).join(' · ')]);
+    const blob = await toJpeg(frame);
+    if (!blob) return;
+    if (await deliverFile(blob, captureName(flight, 'jpg', when))) app.notify(tr('capture.saved'), 'info', 2500);
+  }
+
+  /** Start a clip, or stop the one running and save it. */
+  async toggleRecording(): Promise<void> {
+    const engine = this.engine;
+    if (!engine) return;
+    if (this.clip) {
+      const clip = this.clip;
+      this.clip = null;
+      app.recordingSince = null;
+      const blob = await clip.stop();
+      const flight = describeFlight(app.selected, app.dossier);
+      if (blob.size > 0 && (await deliverFile(blob, captureName(flight, clip.extension)))) {
+        app.notify(tr('capture.clipSaved'), 'info', 2500);
+      }
+      return;
+    }
+    if (app.view !== 'pov') return;
+    if (!canRecord()) {
+      app.notify(tr('capture.unsupported'), 'warn', 4000);
+      return;
+    }
+    try {
+      this.clip = new ClipRecorder(engine.renderer.domElement, () => void this.toggleRecording());
+      app.recordingSince = this.clip.startedAt;
+    } catch {
+      this.clip = null;
+      app.notify(tr('capture.unsupported'), 'warn', 4000);
+    }
   }
 
   /**
@@ -970,6 +1153,8 @@ export class Orchestrator {
     // Abandon any search in flight: landing in a random aircraft several
     // seconds after the user asked to go back to the map is not a feature.
     this.shuffleToken++;
+    // A clip ends with the view it was recording, and is kept.
+    if (this.clip) void this.toggleRecording();
     app.view = 'map';
     // Give back the view the user chose, not the one the auto camera held.
     if (this.directing) this.applyCameraMode(this.userCameraMode);
@@ -1187,6 +1372,7 @@ export class Orchestrator {
     this.pins3d?.dispose();
     this.overlay?.dispose();
     this.audio.dispose();
+    this.gyro.disable();
     this.map?.dispose();
   }
 }

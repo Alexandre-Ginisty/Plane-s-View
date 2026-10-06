@@ -123,6 +123,7 @@ export default {
   'notice.nowOver': 'Now over {place}.',
   'notice.noneFound': 'No {what} found in the busy airspaces right now — try again in a minute.',
   'notice.caught': 'Caught a {what} over {place}.',
+  'notice.gpuReset': 'The device ran short of graphics memory — reopening this view with lighter settings.',
   'notice.otherTab':
     'PlanesView is open in another tab too. Only the tab in front streams live traffic.',
   'feed.noResponse': 'no response',
@@ -197,6 +198,8 @@ export default {
   'hud.fullscreenTitle': 'Fullscreen, nothing but the view (F)',
   'hud.fullscreen': 'Fullscreen',
   'hud.backToMap': 'Back to map',
+  'hud.gyro': 'Look around by moving the phone',
+  'hud.gyroDenied': 'Motion access was refused — allow it in the browser’s settings to look around by moving the phone.',
   'card.hideDetails': 'Hide details',
   'card.details': 'Details',
   'card.finding': 'Finding one…',
@@ -290,6 +293,8 @@ export default {
   'ctl.catchTakeoff': 'Catch a takeoff: step into an aircraft on the runway or climbing out',
   'ctl.autoCamera': 'Auto camera: pick the view for takeoffs and landings',
   'ctl.fullscreen': 'Fullscreen, with nothing but the view',
+  'ctl.photo': 'Save a photo of the view, captioned with the flight',
+  'ctl.record': 'Record a clip of the view; press again to save it',
   'ctl.diagnostics': 'Show the performance and connection counters',
   'ctl.panel': 'Show or hide this panel',
   'ctl.tapSelect': 'Select an aircraft on the map, then “Step inside”',
@@ -334,6 +339,31 @@ export default {
   'net.poor.advice': 'Low detail — the terrain will be soft but complete and smooth.',
   'net.offline.label': 'Link: offline',
   'net.offline.advice': 'No connection — showing terrain already stored on this device.',
+
+  // -- Links, photos and clips ---------------------------------------------
+  'link.gone': 'That flight is no longer being received — it may have landed. Here is the map instead.',
+  'share.button': 'Share',
+  'share.title': 'Copy a link to exactly this view',
+  'share.copied': 'Link copied — whoever opens it lands right here.',
+  'share.failed': 'Could not copy the link: {url}',
+  'share.text': '{flight}, live on PlanesView',
+  'capture.photoTitle': 'Save a photo of the view (S)',
+  'capture.photo': 'Photo',
+  'capture.saved': 'Photo saved.',
+  'capture.recordTitle': 'Record a clip of the view (R)',
+  'capture.record': 'Record',
+  'capture.stopTitle': 'Stop recording and save the clip (R)',
+  'capture.recording': 'Recording {time}',
+  'capture.clipSaved': 'Clip saved.',
+  'capture.unsupported': 'This browser cannot record the view.',
+
+  // -- Aerodrome weather -----------------------------------------------------
+  'metar.title': 'Weather at departure and arrival',
+  'metar.calm': 'calm',
+  'metar.ceiling': 'ceiling {ft} ft',
+  'metar.ago': '{min} min ago',
+  'metar.showRaw': 'Show the full METAR',
+  'metar.source': 'METAR · NOAA Aviation Weather Center',
 
   // -- Theme -----------------------------------------------------------------
   'theme.toLight': 'Switch to light theme',

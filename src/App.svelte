@@ -27,6 +27,8 @@
   import StatusBar from '@/ui/StatusBar.svelte';
   import Icon from '@/ui/Icon.svelte';
   import SearchBox from '@/ui/SearchBox.svelte';
+  import { parseDeepLink, writeDeepLink } from '@/app/deepLink';
+  import { currentLink, shareView } from '@/app/share';
 
   let mapContainer: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -48,7 +50,9 @@
    * that.
    */
   const ENTERED_KEY = 'pv.entered';
-  let showLanding = $state(!new URLSearchParams(location.search).has('go') && !hasEntered());
+  /** A link to an aircraft or a place: see `@/app/deepLink`. It skips the front page too. */
+  const openingLink = parseDeepLink(location.hash);
+  let showLanding = $state(!new URLSearchParams(location.search).has('go') && !openingLink && !hasEntered());
 
   /*
    * A reload — a tab the browser discarded under memory pressure, a crashed GPU
@@ -186,7 +190,7 @@
   onMount(() => {
     const instance = new Orchestrator();
     instance
-      .start(mapContainer, canvas, pinOverlay)
+      .start(mapContainer, canvas, pinOverlay, openingLink)
       .then(() => {
         orchestrator = instance;
         booting = false;
@@ -263,6 +267,14 @@
       case 't':
       case 'T':
         void o.catchAircraft('takeoff');
+        break;
+      case 's':
+      case 'S':
+        if (app.view === 'pov') void o.takePhoto();
+        break;
+      case 'r':
+      case 'R':
+        if (app.view === 'pov' || app.recordingSince !== null) void o.toggleRecording();
         break;
       case 'v':
       case 'V':
@@ -364,6 +376,32 @@
     orchestrator?.handleZoom(event.deltaY);
   }
 
+  /*
+   * The address bar follows the view, so copying it at any moment gives a
+   * link to exactly what is on screen. Not while the front page is up (a
+   * reload there should come back to it), and not while a shared link is
+   * still being looked up, or the map's first move would overwrite it.
+   */
+  $effect(() => {
+    if (showLanding || booting || app.linkPending) return;
+    writeDeepLink(currentLink());
+  });
+  // Our own writes replace the entry and fire nothing; this is a link
+  // pasted into the address bar, or Back to one.
+  onMount(() => {
+    const onHash = (): void => {
+      const link = parseDeepLink(location.hash);
+      if (!link || !orchestrator) return;
+      if (showLanding) {
+        rememberEntered(true);
+        showLanding = false;
+      }
+      orchestrator.openLink(link);
+    };
+    addEventListener('hashchange', onHash);
+    return () => removeEventListener('hashchange', onHash);
+  });
+
   // The store owns the pins; the map's markers follow it. `$state.snapshot`
   // hands the map plain objects rather than reactive proxies.
   $effect(() => {
@@ -452,6 +490,9 @@
           >
             <Icon name="pin" /><span class="text">{t('app.pin')}</span>
             {#if app.pins.length > 0}<span class="count">{app.pins.length}</span>{/if}
+          </button>
+          <button class="tool" onclick={() => void shareView()} title={t('share.title')}>
+            <Icon name="share" /><span class="text">{t('share.button')}</span>
           </button>
           <button class="tool" class:on={app.showLegend} onclick={() => (app.showLegend = !app.showLegend)} title={t('app.keyTitle')}>
             <Icon name="key" /><span class="text">{t('app.key')}</span>

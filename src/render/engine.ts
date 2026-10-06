@@ -51,6 +51,12 @@ export interface EngineOptions {
   /** Bounds on the adaptive pixel ratio. */
   minPixelRatio?: number;
   maxPixelRatio?: number;
+  /** MSAA samples for the offscreen scene. */
+  msaaSamples?: number;
+  /** False keeps the post pipeline off even where the device has it. */
+  post?: boolean;
+  /** The context was lost (the GPU ran out of memory, usually). */
+  onContextLost?: () => void;
 }
 
 export interface FrameContext {
@@ -118,7 +124,8 @@ export class Engine {
     private readonly canvas: HTMLCanvasElement,
     options: EngineOptions = {},
   ) {
-    const caps = probePost();
+    const probed = probePost();
+    const caps = { ...probed, post: probed.post && options.post !== false };
     const contextAttributes: WebGLContextAttributes = {
       alpha: false,
       // With the post pipeline the scene is multisampled offscreen and the
@@ -138,7 +145,19 @@ export class Engine {
       logarithmicDepthBuffer: !caps.reversedDepth,
       reversedDepthBuffer: caps.reversedDepth,
     });
-    this.post = caps.post ? new PostPipeline(this.renderer) : null;
+    this.post = caps.post ? new PostPipeline(this.renderer, { samples: options.msaaSamples ?? 4 }) : null;
+
+    /*
+     * A lost context is the GPU taking its memory back. Nothing drawn after it
+     * would show, and three's resources cannot all be rebuilt in place, so the
+     * owner is told and decides — the app reloads lighter rather than leave a
+     * frozen black view.
+     */
+    canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      this.renderEnabled = false;
+      options.onContextLost?.();
+    });
 
     const gl = this.renderer.getContext() as WebGL2RenderingContext;
     const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
@@ -147,6 +166,7 @@ export class Engine {
     // A phone starts at 1.5 rather than its 3: a 390 px screen at 1.5 is
     // already sharper than the imagery, and the other half of the fill rate is
     // battery and heat. The adaptive loop below lowers it further if needed.
+    // (The device budget usually sets this; see `@/render/deviceBudget`.)
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     this.maxPixelRatio = options.maxPixelRatio ?? Math.min(window.devicePixelRatio, coarse ? 1.5 : 2);
     // Down to 0.8, not lower: below it the whole picture goes visibly soft, and a
@@ -285,6 +305,33 @@ export class Engine {
    */
   renderEnabled = true;
 
+  /** Callers waiting for the next drawn frame. See `captureFrame`. */
+  private captureWaiters: ((frame: HTMLCanvasElement) => void)[] = [];
+
+  /**
+   * A copy of the next frame drawn, for a photo.
+   *
+   * The drawing buffer is not preserved (that would cost every frame for the
+   * sake of an occasional photo), so it is only readable in the same task
+   * that drew it. The copy is taken there, straight after the frame is
+   * finished, into a 2D canvas the caller owns.
+   */
+  captureFrame(): Promise<HTMLCanvasElement> {
+    return new Promise((resolve) => this.captureWaiters.push(resolve));
+  }
+
+  private deliverCaptures(): void {
+    if (this.captureWaiters.length === 0) return;
+    const source = this.renderer.domElement;
+    const copy = document.createElement('canvas');
+    copy.width = source.width;
+    copy.height = source.height;
+    copy.getContext('2d')?.drawImage(source, 0, 0);
+    const waiters = this.captureWaiters;
+    this.captureWaiters = [];
+    for (const resolve of waiters) resolve(copy);
+  }
+
   start(onFrame: (ctx: FrameContext) => void): void {
     if (this.running) return;
     this.onFrame = onFrame;
@@ -343,6 +390,7 @@ export class Engine {
         this.post.finish(this.camera, this.sunDirection, light.sunColor, light.sunStrength);
       }
       if (timing) this.endGpuTimer();
+      this.deliverCaptures();
     }
 
     this.adaptQuality(performance.now() - frameStart, dt);

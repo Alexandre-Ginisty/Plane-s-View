@@ -149,6 +149,51 @@ const CABIN_BY_MODEL: Record<string, Entry> = {
   ec35: LEFT_SEAT_HELI, bo05: LEFT_SEAT_HELI, s76c: LEFT_SEAT_HELI, as32: LEFT_SEAT_HELI,
 };
 
+/**
+ * How far left of the centreline the captain's eye is in each two-crew deck,
+ * metres: the first officer sits as far to the right. From each simulator's
+ * own view 0 (see `tools/fgmodel/cockpit.mjs`).
+ */
+const CREW_SEAT: Record<string, number> = {
+  'c750-cockpit': 0.375,
+  'b738-cockpit': 0.51,
+  'a320-cockpit': 0.45,
+  'at72-cockpit': 0.6,
+  'crj7-cockpit': 0.528,
+  'e145-cockpit': 0.54,
+  'b748-cockpit': 0.53,
+  'b77w-cockpit': 0.57,
+  'md80-cockpit': 0.5,
+};
+
+/**
+ * The first officer, in the right seat, written about their own eye
+ * (`tools/cabin/generate.mjs`). The seat beside you on a flight deck is never
+ * empty, and an empty one is the quickest tell that the view is a model.
+ */
+/** How far aft of the design eye a pilot sitting back in the seat has their eye, metres. */
+const CREW_AFT_M = 0.12;
+
+async function firstOfficer(deckFile: string): Promise<Group | null> {
+  const half = CREW_SEAT[deckFile];
+  if (half === undefined) return null;
+  const model = await loadModelById('crew-fo');
+  if (!model) return null;
+  const crew = new Group();
+  crew.name = 'first-officer';
+  for (const part of model.parts) {
+    const mesh = new Mesh(part.geometry, part.material);
+    mesh.matrixAutoUpdate = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    crew.add(mesh);
+  }
+  // A simulator's design eye sits forward of a pilot at rest — leaning in to
+  // the panel — so the first officer, sitting back in the seat, is further aft.
+  crew.position.set(half * 2, -0.04, CREW_AFT_M);
+  return crew;
+}
+
 /** By kind, for a type with no model at all. */
 const BY_KIND: Record<CockpitKind, Entry> = {
   fighter: F16,
@@ -197,7 +242,10 @@ function entryFor(id: string | null, kind: CockpitKind, seat: Seat, freighter: b
 export async function loadModelledCockpit(typeCode: string | null, kind: CockpitKind, seat: Seat = 'cockpit', freighter = false): Promise<Modelled | null> {
   const id = await modelIdFor(typeCode);
   const entry = entryFor(id, kind, seat, freighter);
-  const model = await loadModelById(entry.file);
+  const [model, crew] = await Promise.all([
+    loadModelById(entry.file),
+    seat === 'cockpit' && entry.kind === 'airliner' ? firstOfficer(entry.file).catch(() => null) : null,
+  ]);
   if (!model) return null;
 
   const group = new Group();
@@ -217,6 +265,7 @@ export async function loadModelledCockpit(typeCode: string | null, kind: Cockpit
     }
     group.add(mesh);
   }
+  if (crew) group.add(crew);
   // Display faces measured by the converter, where the entry does not place its own.
   const fit: CockpitFit = entry.fit.screens.length || entry.fit.hud ? entry.fit : { hud: null, screens: model.displays.map((d) => ({ ...d })) };
   return {

@@ -99,6 +99,14 @@ class AppStore {
   transitioning = $state(false);
 
   selectedHex = $state<string | null>(null);
+  /** A shared link to an aircraft is still being looked up; the address bar keeps it meanwhile. */
+  linkPending = $state(false);
+  /** Looking around by moving the phone. See `@/app/gyro`. */
+  gyro = $state(false);
+  /** When the clip being recorded started (`performance.now()`), or null. */
+  recordingSince = $state<number | null>(null);
+  /** Where the map last came to rest, for the link in the address bar. */
+  mapView = $state<{ lat: number; lon: number; zoom: number } | null>(null);
   hoveredHex = $state<string | null>(null);
   dossier = $state<AircraftDossier | null>(null);
   dossierLoading = $state(false);

@@ -504,6 +504,10 @@ export class SelectionMap {
     return c ? { lat: c.lat, lon: c.lng } : { lat: 0, lon: 0 };
   }
 
+  get zoom(): number {
+    return this.map?.getZoom() ?? 0;
+  }
+
   resize(): void {
     this.map?.resize();
   }

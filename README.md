@@ -26,6 +26,7 @@ services:
 | adsb.lol (traffic) | ODbL | *absent* | ❌ — relay |
 | adsb.fi (traffic, demo only — non-commercial) | personal use | *absent* | ❌ — relay |
 | MET Norway (weather) | CC BY 4.0 | `*`, but demands a custom `User-Agent`, which browsers forbid scripts from setting | ❌ — relay |
+| NOAA Aviation Weather Center (METAR) | public domain | *absent* | ❌ — relay |
 | Wikimedia Commons (photos) | per file, filtered to CC BY / CC BY-SA / CC0 / PD | `*` | ✅ |
 | **Esri World Imagery** (default while the site is a demonstration; not for commercial use) | ArcGIS subscribers only | `*` | ⚠️ demo only |
 | Sentinel-2 cloudless 2016 (EOX), NASA GIBS, AWS Terrain Tiles, OpenFreeMap | CC BY 4.0 / public domain / open data | `*` | ✅ |
@@ -34,8 +35,8 @@ services:
 Routes and airline names are not fetched from anyone: they ship with the app,
 built from the CC0 Virtual Radar Server standing data (`tools/routes`).
 
-So imagery, terrain, photos and routes are genuinely backend-free. Traffic and
-weather need a relay, which keeps every constraint that actually mattered —
+So imagery, terrain, photos and routes are genuinely backend-free. Traffic,
+traces and weather need a relay, which keeps every constraint that actually mattered —
 free, no key, no account, no card:
 
 - **Development** — Vite's dev server proxies `/feeds/*`. No extra process.
@@ -129,11 +130,42 @@ forecast. Helicopters fly as helicopters: nose down to go fast, flared to slow.
 | `1`–`4` | Cockpit / Chase / Wing / Orbit |
 | drag | look around |
 | `C` | recentre the view |
+| `S` | save a photo of the view, captioned with the flight |
+| `R` | record a clip of the view (again to stop and save) |
 | `D` | diagnostics (fps, render ms, tiles, queue) |
 | `H` | key and controls |
 
 Append `?go` to the URL to skip the landing page and open straight into the
-map — useful for a bookmark, and for anything sharing a specific view.
+map — useful for a bookmark.
+
+### Links to a view
+
+The address bar follows the app, so it is always a link to what is on screen
+(`src/app/deepLink.ts`), and **Share** copies it (or opens the phone's share
+sheet):
+
+| Fragment | Opens |
+|---|---|
+| `#ac=3c6444` | that aircraft, found wherever it is, on the map |
+| `#ac=3c6444&cam=wing` | the same, from that seat (`cockpit`, `cabin`, `chase`, `wing`, `orbit`) |
+| `#map=8/48.857/2.352` | the map at that zoom and place |
+
+`?utc=21:30` puts the sun where it is at that hour (UTC) today, for a night
+flight in the middle of the afternoon; traffic stays live.
+
+### On a phone
+
+The 3D view sizes itself to the device (`src/render/deviceBudget.ts`): a
+phone keeps far fewer terrain tiles, smaller aircraft textures and a lower
+pixel ratio than a desktop, because iOS and Android kill a tab that outgrows
+them rather than warn it. A run that ends without the page closing normally —
+the tell of a killed tab — makes the next one a step lighter, and a lost GPU
+context reloads the view lighter at the same aircraft. `?tier=low` forces a
+budget (`high`, `mid`, `low`, `minimal`) for testing.
+
+The site installs as an app and opens without a network (`public/sw.js`):
+the page and the static files it has used are cached; live data never is.
+On a phone, the gyroscope button turns the head as the phone turns.
 
 ---
 

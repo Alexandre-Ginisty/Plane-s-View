@@ -16,6 +16,8 @@
   import { t } from '@/i18n/index.svelte';
   import type { Orchestrator } from '@/app/orchestrator';
   import DossierBody from './panel/DossierBody.svelte';
+  import Icon from './Icon.svelte';
+  import { shareView } from '@/app/share';
 
   let { orchestrator }: { orchestrator: Orchestrator } = $props();
 
@@ -34,10 +36,15 @@
       <DossierBody {sample} />
     </div>
 
-    <button class="chip primary enter" onclick={() => orchestrator.enterPov()}>
-      {t('panel.stepInside')}
-      <span class="kbd">↵</span>
-    </button>
+    <div class="actions">
+      <button class="chip primary enter" onclick={() => orchestrator.enterPov()}>
+        {t('panel.stepInside')}
+        <span class="kbd">↵</span>
+      </button>
+      <button class="chip share" onclick={() => void shareView()} title={t('share.title')} aria-label={t('share.button')}>
+        <Icon name="share" size={15} />
+      </button>
+    </div>
   </aside>
 {/if}
 
@@ -87,11 +94,12 @@
   }
   .close:hover { color: var(--text); background: var(--hover-bg); }
 
+  .actions { flex: 0 0 auto; display: flex; gap: 6px; margin-top: 14px; }
+  .share { flex: 0 0 auto; padding: 0 12px; justify-content: center; }
+
   /* The one primary action on this surface, so it gets the one amber button. */
   .enter {
-    flex: 0 0 auto;
-    width: 100%;
-    margin-top: 14px;
+    flex: 1 1 auto;
     padding: 11px;
     justify-content: center;
     font-size: 12px;
@@ -116,7 +124,8 @@
       padding: 14px 14px 12px;
       animation: sheet-up 0.32s var(--ease) both;
     }
-    .enter { margin-top: 10px; padding: 13px; }
+    .actions { margin-top: 10px; }
+    .enter { padding: 13px; }
   }
   @keyframes sheet-up {
     from { transform: translateY(24px); opacity: 0; }

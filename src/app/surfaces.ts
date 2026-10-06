@@ -11,6 +11,7 @@
 import type { FloatingOrigin } from '@/core/frame';
 import { networkMonitor } from '@/net/quality';
 import { Engine } from '@/render/engine';
+import { deviceBudget } from '@/render/deviceBudget';
 import { Globe } from '@/render/globe';
 import { OwnAircraft } from '@/render/ownAircraft';
 import { PovController } from '@/render/pov';
@@ -32,7 +33,15 @@ export function createSurfaces(
   canvas: HTMLCanvasElement,
   origin: FloatingOrigin,
   pinOverlay: HTMLCanvasElement,
+  onContextLost?: () => void,
 ): Surfaces {
+  /*
+   * What this device can hold. A desktop gets the full picture; a phone a
+   * tile cache, a pixel ratio and a sample count it can keep in memory for an
+   * hour of flying, instead of a crash a few minutes in. See `deviceBudget`.
+   */
+  const budget = deviceBudget();
+
   /*
    * Vertical field of view, degrees.
    *
@@ -51,7 +60,13 @@ export function createSurfaces(
    * sooner. Detail follows altitude through the screen-space error either
    * way; this just stops the periphery spending it.
    */
-  const engine = new Engine(canvas, { fov: 50 });
+  const engine = new Engine(canvas, {
+    fov: 50,
+    maxPixelRatio: budget.maxPixelRatio,
+    msaaSamples: budget.msaaSamples,
+    post: budget.post,
+    ...(onContextLost ? { onContextLost } : {}),
+  });
 
   /*
    * The ceiling, not the operating point.
@@ -71,14 +86,14 @@ export function createSurfaces(
    * own deepest zoom (see `Globe.maxZoom`), so this only matters if a layer
    * with finer imagery is ever added.
    */
-  const globe = new Globe(origin, { maxScreenSpaceError: 1, maxZoom: 19 });
+  const globe = new Globe(origin, { maxScreenSpaceError: 1, maxZoom: 19, maxResidentTiles: budget.maxResidentTiles });
 
   // Terrain is almost always seen at a grazing angle from a cockpit, which is
   // the exact case trilinear filtering smears into a band a few hundred metres
   // ahead. This is the cheapest single improvement available to the ground's
   // appearance, and the renderer's own maximum is the right value because the
   // cost is per-texel, not per-frame.
-  globe.setAnisotropy(engine.renderer.capabilities.getMaxAnisotropy());
+  globe.setAnisotropy(Math.min(budget.maxAnisotropy, engine.renderer.capabilities.getMaxAnisotropy()));
   globe.applyProfile(networkMonitor.profile);
 
   const traffic3d = new Traffic3D(origin);

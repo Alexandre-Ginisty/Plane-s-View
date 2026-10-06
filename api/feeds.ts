@@ -11,7 +11,9 @@
  *   2. MET Norway requires a descriptive `User-Agent` identifying the project,
  *      and `User-Agent` is a forbidden header for `fetch` in a page.
  *
- * adsb.lol and MET Norway allow commercial use (ODbL; CC BY 4.0 / NLOD).
+ * adsb.lol and MET Norway allow commercial use (ODbL; CC BY 4.0 / NLOD), and
+ * the Aviation Weather Center's METARs are US government work (public domain);
+ * it sends no `Access-Control-Allow-Origin` either.
  * adsb.fi is here as a second traffic feed because adsb.lol rate-limits hard,
  * and its terms are personal / non-commercial: fine for a demonstration, the
  * first thing to drop before the site earns money.
@@ -52,6 +54,8 @@ const UPSTREAM: Record<string, string> = {
   'adsb-lol': 'https://api.adsb.lol',
   'adsb-fi': 'https://opendata.adsb.fi',
   metno: 'https://api.met.no',
+  awc: 'https://aviationweather.gov',
+  'adsb-lol-traces': 'https://adsb.lol',
 };
 
 /** Identifies the project to upstream operators, as their terms ask. */
@@ -63,11 +67,19 @@ const USER_AGENT = 'PlanesView/1.0 (+https://github.com/Alexandre-Ginisty/Plane-
  * from becoming a burden on services that are donating their bandwidth.
  */
 const CACHE_SECONDS: Record<string, number> = {
-  'adsb-lol': 1,
-  'adsb-fi': 1,
+  // Two seconds, not one: the client polls every two to three, so a one
+  // second entry had usually expired before the next visitor asked. The
+  // reply carries the feed's own clock, and the client dead-reckons from it,
+  // so an answer a second older is drawn exactly where it should be.
+  'adsb-lol': 2,
+  'adsb-fi': 2,
   // MET Norway asks that a forecast not be re-requested before its `Expires`,
   // which is usually the better part of an hour; ten minutes is well inside it.
   metno: 600,
+  // A METAR is issued every half hour; five minutes keeps a new one prompt.
+  awc: 300,
+  // A flight's track so far: rewritten upstream every minute or so.
+  'adsb-lol-traces': 30,
 };
 
 /**
@@ -78,13 +90,23 @@ const CACHE_SECONDS: Record<string, number> = {
 const NUM = String.raw`-?\d{1,3}(?:\.\d{1,6})?`;
 const HEX = '~?[0-9a-f]{6}';
 const READSB = new RegExp(`^v2/(?:point/${NUM}/${NUM}/\\d{1,3}|hex/${HEX}|type/[0-9a-z]{2,4})$`, 'i');
-const ROUTES: Record<string, { path: RegExp; query: readonly string[] }> = {
+const ROUTES: Record<string, { path: RegExp; query: readonly string[]; values?: Record<string, RegExp> }> = {
   'adsb-lol': { path: READSB, query: [] },
   'adsb-fi': { path: new RegExp(`^api/v2/(?:lat/${NUM}/lon/${NUM}/dist/\\d{1,3}|hex/${HEX})/?$`, 'i'), query: [] },
   // `complete` rather than `compact`: only it carries the cloud layers and
   // the dew point. Coordinates are the client's business (MET Norway asks for
   // at most four decimals); the relay only fixes which endpoint is reachable.
   metno: { path: /^weatherapi\/locationforecast\/2\.0\/complete$/, query: ['lat', 'lon'] },
+  // Up to four ICAO aerodromes, as JSON: the departure and arrival of the
+  // aircraft being looked at. The values are checked too — this is someone
+  // else's service and the relay asks only what the app asks.
+  // The day's track of one aircraft, and its last minutes: readsb's own files.
+  'adsb-lol-traces': { path: new RegExp(`^data/traces/[0-9a-f]{2}/trace_(?:full|recent)_${HEX}\\.json$`), query: [] },
+  awc: {
+    path: /^api\/data\/metar$/,
+    query: ['ids', 'format'],
+    values: { ids: /^[A-Z0-9]{4}(?:,[A-Z0-9]{4}){0,3}$/, format: /^json$/ },
+  },
 };
 
 /** Longest URL the client ever builds, with room to spare. */
@@ -192,8 +214,9 @@ export async function GET(request: Request): Promise<Response> {
   if (!route || !route.path.test(rest) || incoming.href.length > MAX_URL_LENGTH) {
     return json({ error: 'Unknown relay path' }, 404);
   }
-  for (const key of params.keys()) {
+  for (const [key, value] of params) {
     if (!route.query.includes(key)) return json({ error: 'Unknown relay path' }, 404);
+    if (route.values?.[key] && !route.values[key]!.test(value)) return json({ error: 'Unknown relay path' }, 404);
   }
 
   const origin = UPSTREAM[target]!;
@@ -230,7 +253,14 @@ export async function GET(request: Request): Promise<Response> {
       // visitor collapse into one upstream call.
       // Only a success is cached: a 429 or 503 stored for ten minutes would
       // keep an outage alive long after the upstream recovered.
-      'Cache-Control': upstream.ok ? `public, max-age=${ttl}, s-maxage=${ttl}` : 'no-store',
+      //
+      // `stale-while-revalidate` lets the CDN answer from the entry it has
+      // while one request refreshes it, so a crowd arriving as an entry
+      // expires costs the upstream one request, not one each. The browser
+      // keeps it a second at most: its own next poll must reach the CDN.
+      'Cache-Control': upstream.ok
+        ? `public, max-age=${Math.min(ttl, 1)}, s-maxage=${ttl}, stale-while-revalidate=${ttl}`
+        : 'no-store',
     });
 
     return new Response(upstream.body, { status: upstream.status, headers });

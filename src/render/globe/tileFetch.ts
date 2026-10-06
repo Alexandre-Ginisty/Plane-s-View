@@ -245,6 +245,17 @@ export async function loadTexture(node: TileNode, ctx: LoadContext): Promise<voi
     }
 
     const texture = new Texture(bitmap as unknown as HTMLImageElement);
+    /*
+     * Once on the GPU the decoded picture is a second copy of the tile, held
+     * until the garbage collector gets round to it — a quarter-megabyte per
+     * tile, thousands of tiles, and on a phone the difference between flying
+     * and the tab being killed. It is closed the moment it has been uploaded.
+     */
+    const uploaded = bitmap;
+    texture.onUpdate = () => {
+      uploaded.close();
+      texture.onUpdate = null;
+    };
     texture.needsUpdate = true;
     texture.anisotropy = ctx.maxAnisotropy;
     texture.generateMipmaps = true;

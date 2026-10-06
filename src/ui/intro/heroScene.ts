@@ -364,6 +364,9 @@ export function mountHeroScene(canvas: HTMLCanvasElement, theme: 'dark' | 'light
       // The library's geometries and materials are cached and shared with the
       // app, which will want them when the visitor steps into a 787. Disposing
       // them here would be disposing someone else's.
+      // Hand the context back now rather than whenever it is collected: a
+      // phone allows a page few of them, and the app is about to want its own.
+      renderer.forceContextLoss();
       renderer.dispose();
     },
   };

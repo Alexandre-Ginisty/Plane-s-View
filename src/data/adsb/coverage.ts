@@ -13,6 +13,16 @@
  * gaps. Cells are ordered nearest-first from the centre, capped, and served
  * round-robin: each request takes the next one, and the tracker's dead
  * reckoning carries each aircraft between visits.
+ *
+ * ## Shared by every visitor
+ *
+ * The relay caches each reply at the CDN for a second or two, keyed by URL.
+ * A circle centred on the exact middle of one visitor's screen is a URL no
+ * other visitor will ever ask for, so that cache never hit and every visitor
+ * cost the donated feed its own request. Every circle is therefore laid on a
+ * grid fixed to the world, not to the view, and its radius taken from a short
+ * ladder: two people looking at Paris ask for the same URL, and the feed
+ * answers it once for both.
  */
 
 import { clamp, haversineMetres, wrapLongitude } from '@/core/math/geo';
@@ -40,18 +50,56 @@ const POLAR_LIMIT_DEG = 84;
 /** Into [-180, 180], leaving values already there exactly as they were. */
 const wrap = (lon: number) => (lon >= -180 && lon <= 180 ? lon : wrapLongitude(lon));
 
+/** Fixed to the decimals the providers send, so equal cells spell equal URLs. */
+const fix = (deg: number) => Number(deg.toFixed(5));
+
+/**
+ * Radii a single circle is rounded up to, nm. Each step is at most half again
+ * the one below, so rounding up never asks for much more than was needed.
+ */
+const RADIUS_LADDER = [10, 15, 20, 30, 40, 60, 80, 120, 160, 200, 250] as const;
+
+/** Grid spacing as a fraction of the radius: the centre moves at most ~12 % of it. */
+const SNAP_DIVISIONS = 6;
+
+/** Longitude step of a grid row at `lat` whose latitude step is `dLat`. */
+const rowStep = (lat: number, dLat: number) =>
+  dLat / Math.max(0.05, Math.cos((Math.min(POLAR_LIMIT_DEG, Math.abs(lat)) * Math.PI) / 180));
+
+/**
+ * The shared circle that contains `query`: centre on the world grid of its
+ * radius step, radius from the ladder, and never smaller than the original
+ * circle plus the distance the centre moved — so snapping only ever adds
+ * aircraft at the edge, never loses one.
+ *
+ * Left as it was when no step up to `capNm` can contain it: a circle already
+ * at the cap is one the sweep tiles anyway.
+ */
+export function shareableQuery(query: TrafficQuery, capNm: number): TrafficQuery {
+  const ladder = [...RADIUS_LADDER.filter((r) => r < capNm), capNm];
+  for (const radius of ladder) {
+    if (radius < query.radiusNm) continue;
+    const dLat = radius / SNAP_DIVISIONS / 60;
+    const lat = clamp(Math.round(query.lat / dLat) * dLat, -90, 90);
+    const dLon = rowStep(lat, dLat);
+    const lon = wrap(Math.round(query.lon / dLon) * dLon);
+    const movedNm = haversineMetres(query.lat, query.lon, lat, lon) / 1852;
+    if (query.radiusNm + movedNm <= radius) return { lat: fix(lat), lon: fix(lon), radiusNm: radius };
+  }
+  return query;
+}
+
 /**
  * The circles that cover `view`, nearest the centre first.
  *
- * A view that fits inside one circle gets exactly one, at the centre, with the
- * view's own radius — so a zoomed-in map costs what it always did.
+ * A view that fits inside one circle gets exactly one, around the centre and
+ * about the view's own radius — so a zoomed-in map costs what it always did.
  */
 export function planCells(view: ViewWindow, cellRadiusNm: number, maxCells: number): TrafficQuery[] {
-  const centre: TrafficQuery = {
-    lat: view.lat,
-    lon: wrap(view.lon),
-    radiusNm: Math.min(view.radiusNm, cellRadiusNm),
-  };
+  const centre = shareableQuery(
+    { lat: view.lat, lon: wrap(view.lon), radiusNm: Math.min(view.radiusNm, cellRadiusNm) },
+    cellRadiusNm,
+  );
   if (!view.bounds || view.radiusNm <= cellRadiusNm || maxCells <= 1) return [centre];
 
   const spacingNm = cellRadiusNm * Math.SQRT2;
@@ -68,19 +116,20 @@ export function planCells(view: ViewWindow, cellRadiusNm: number, maxCells: numb
     east = view.lon + 180;
   }
 
+  // Rows and columns count from the equator and the prime meridian, not from
+  // the view, so every visitor's sweep asks for the same circles.
   const cells: TrafficQuery[] = [];
-  const kMin = Math.floor((south - view.lat) / dLat - 0.5) + 1;
-  const kMax = Math.ceil((north - view.lat) / dLat + 0.5) - 1;
+  const kMin = Math.floor(south / dLat - 0.5) + 1;
+  const kMax = Math.ceil(north / dLat + 0.5) - 1;
 
   for (let k = kMin; k <= kMax; k++) {
-    const lat = view.lat + k * dLat;
+    const lat = k * dLat;
     // The row is only as wide as its poleward edge allows.
-    const edge = Math.min(POLAR_LIMIT_DEG, Math.abs(lat) + dLat / 2);
-    const dLon = spacingNm / (60 * Math.max(0.05, Math.cos((edge * Math.PI) / 180)));
-    const jMin = Math.floor((west - view.lon) / dLon - 0.5) + 1;
-    const jMax = Math.ceil((east - view.lon) / dLon + 0.5) - 1;
+    const dLon = rowStep(Math.abs(lat) + dLat / 2, dLat);
+    const jMin = Math.floor(west / dLon - 0.5) + 1;
+    const jMax = Math.ceil(east / dLon + 0.5) - 1;
     for (let j = jMin; j <= jMax; j++) {
-      cells.push({ lat, lon: wrap(view.lon + j * dLon), radiusNm: cellRadiusNm });
+      cells.push({ lat: fix(lat), lon: fix(wrap(j * dLon)), radiusNm: cellRadiusNm });
     }
   }
 

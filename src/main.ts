@@ -45,6 +45,16 @@ if (!target) throw new Error('#app mount point missing from index.html');
  * is built in and costs nothing, any other is one small file, and a failed
  * download falls back to English rather than holding the page up.
  */
+/*
+ * Installable, and openable without a network (see `public/sw.js`). Production
+ * only: in development it would serve yesterday's modules over today's edits.
+ */
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+  });
+}
+
 void initI18n().finally(() => {
   if (!webgl2Available()) {
     const box = document.createElement('div');
