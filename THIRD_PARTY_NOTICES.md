@@ -160,7 +160,9 @@ limit, so they should not come as a surprise.
 6. **Keep the credits visible.** CC BY and ODbL are conditions of use, not
    courtesy; the in-app *Sources* panel and the map attribution are how they are
    met.
-7. **Privacy.** The app has no analytics, no cookies and no account. It asks
+7. **Privacy.** The app has no cookies and no account. Page views are counted
+   with Vercel Web Analytics (`@vercel/analytics`, MIT), which sets no cookie,
+   keeps no personal data and talks only to this site's own origin. It asks
    for the visitor's location only if they allow it; position is never sent
    anywhere except as the area queried from adsb.lol and MET Norway through
    the relay.

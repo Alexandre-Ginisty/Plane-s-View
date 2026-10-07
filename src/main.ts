@@ -8,6 +8,7 @@
  */
 
 import { mount } from 'svelte';
+import { inject } from '@vercel/analytics';
 import App from './App.svelte';
 import './ui/theme.css';
 import { applyTheme, resolveTheme } from './ui/theme';
@@ -54,6 +55,14 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
   });
 }
+
+/*
+ * Vercel Web Analytics: page views, no cookies, nothing personal. Its script
+ * and its beacons are both on this origin (`/_vercel/insights/…`), so the
+ * content security policy needs nothing added. Production only: the dev
+ * server has no such path to answer it.
+ */
+if (import.meta.env.PROD) inject({ mode: 'production' });
 
 void initI18n().finally(() => {
   if (!webgl2Available()) {
